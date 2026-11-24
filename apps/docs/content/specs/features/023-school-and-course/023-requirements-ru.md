@@ -2,7 +2,7 @@
 title: "023 — Школа и курс (требования)"
 description: "Требования к школе, которую врач выбирает на doctor.school, и к странице курса вокруг пути 024: описательные данные школы поверх строк школы, курса и модуля из 024, экран школы с карточками курсов, состояние «скоро» и список интереса к школе, полоса о верификации и блок документа, шапка страницы курса со сводкой правил словами, курс из одного модуля без уровня модуля, настройка награды модуля (очки, документ или оба), отзывы выпускников с модерацией сотрудниками, наставничество и стажировка, события-клубы и сообщество школы, маркировка партнёров и редактор структуры школ, курсов и модулей в админке."
 slug: 023-school-and-course-ru
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "School and course are doctor-storefront products (apps/doctor); the Academy has no school or course route and answers them with its not-found page (EARS-24), a school there being a project result behind the scenes (ADR-0016 §4); the admin screens of EARS-26…28 are staff screens in apps/admin."

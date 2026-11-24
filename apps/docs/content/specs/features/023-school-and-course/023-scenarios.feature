@@ -58,7 +58,7 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     When the doctor uses «Сообщить об открытии» and the interest write fails
     Then the courses section says the doctor was not added to the list and still shows «Сообщить об открытии»
 
-  @EARS-7
+  @EARS-7 @rule @proof:api
   Scenario: Interested doctors hear once when the school's first course opens
     Given two doctors have an active interest in "cardio" and a third withdrew it
     When a staff member reads "cardio" through the admin school API

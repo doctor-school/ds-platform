@@ -358,8 +358,8 @@ export interface SchoolOpenedContent {
  * 023 EARS-7 — the one letter a doctor with an active interest in a «скоро»
  * school gets when its first course is published. A product notice: the
  * school, the course that opened it, one action to the school screen and why
- * the doctor gets it. DRAFT copy (variant B) — the copy and look are the
- * owner's Stage A pick in 023 slice 3 (023-design §6).
+ * the doctor gets it. Copy and look are variant B, the owner's Stage A pick
+ * in 023 slice 3 (PR #4225, 023-design §6).
  */
 export function schoolOpenedMessage(
   content: SchoolOpenedContent,

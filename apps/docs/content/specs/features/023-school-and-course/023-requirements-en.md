@@ -2,7 +2,7 @@
 title: "023 — The school and the course (Requirements)"
 description: "Requirements for the school a doctor chooses on doctor.school and the course page around the 024 path: the school's descriptive data over the 024 school, course and module rows, the school screen with its course cards, the «скоро» state and the school interest list, the verification band and the document block, the course page header with the rules summary in words, a single-module course without a module level, the module reward setting (points, a document or both), graduate reviews with staff moderation, mentoring and internship, the school's club events and community, partner labelling, and the admin structure editor for schools, courses and modules."
 slug: 023-school-and-course
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "School and course are doctor-storefront products (apps/doctor); the Academy has no school or course route and answers them with its not-found page (EARS-24), a school there being a project result behind the scenes (ADR-0016 §4); the admin screens of EARS-26…28 are staff screens in apps/admin."

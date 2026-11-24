@@ -159,7 +159,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await admin(h, "GET", `/schools/${randomUUID()}`)).status).toBe(404);
     });
 
-    it("EARS-7: the school's first course publication sends one notice to each active interest; a later publication sends none", async () => {
+    it("023 EARS-7: the school's first course publication sends one notice to each active interest; a later publication sends none", async () => {
       const school = await buildCourse(h, { publish: false });
       await publishSchool(school.schoolId);
       const slug = `school-${school.f.suffix}`;
@@ -198,7 +198,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(lettersFor(slug)).toHaveLength(1);
     });
 
-    it("EARS-7: a school that goes soon again and reopens never re-sends a doctor's notice", async () => {
+    it("023 EARS-7: a school that goes soon again and reopens never re-sends a doctor's notice", async () => {
       const school = await buildCourse(h, { publish: false });
       await publishSchool(school.schoolId);
       const slug = `school-${school.f.suffix}`;

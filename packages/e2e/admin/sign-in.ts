@@ -13,6 +13,14 @@ const NAVIGATION_TIMEOUT = 20_000;
 /** A TOTP step; a burnt code cannot be replayed before the next one begins. */
 const STEP_MS = 30_000;
 
+/**
+ * The last code each factor submitted in this worker, across sign-ins. The
+ * server refuses a code already used (011 EARS-6) no matter which session used
+ * it, so consecutive tests signing the same stage staff account in within one
+ * step must not reuse it (#4197).
+ */
+const burntCodes = new Map<string, string>();
+
 /** `/login` redirects pending and active sessions without mounting the form (#4125). */
 async function waitForLoginScreen(page: Page) {
   const screen = await page.waitForFunction(
@@ -63,8 +71,6 @@ export async function signInAsAdmin(
 
   /** The enrollment secret, once a `/mfa/enroll` card has surfaced it. */
   let secret = credentials?.totpSecret;
-  /** The last code submitted — never replayed within its own step. */
-  let burntCode: string | undefined;
   let submittedPassword = false;
   let submittedMfa = false;
 
@@ -127,8 +133,8 @@ export async function signInAsAdmin(
       }
 
       phase = "answering the MFA prompt";
-      const code = await freshCode(page, secret, burntCode);
-      burntCode = code;
+      const code = await freshCode(page, secret, burntCodes.get(secret));
+      burntCodes.set(secret, code);
       const codeInput = page
         .getByTestId(enrolling ? "mfa-enroll-form" : "mfa-challenge-form")
         .getByRole("textbox");

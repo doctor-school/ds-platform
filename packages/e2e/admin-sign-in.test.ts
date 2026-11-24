@@ -1,6 +1,7 @@
 import { errors, type Page } from "@playwright/test";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { signInAsAdmin } from "./admin/sign-in";
+import { inputSecret } from "./lib/owned-registration";
 
 vi.mock("./lib/owned-registration", () => ({ inputSecret: vi.fn() }));
 
@@ -40,7 +41,10 @@ function signInPage(entries: AuthPath[], transitions: (AuthPath | null)[]) {
       if (!state) throw new errors.TimeoutError("No admin form or destination");
       return { jsonValue: async () => state, dispose: async () => {} };
     }),
-    waitForTimeout: vi.fn(async () => {}),
+    // Waiting moves the clock the TOTP generator reads, as a real wait would.
+    waitForTimeout: vi.fn(async (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    }),
     waitForURL: vi.fn(async (match: RegExp | ((url: URL) => boolean)) => {
       const next = transitions.shift();
       if (!next) throw new errors.TimeoutError("Transition arrived late");
@@ -54,7 +58,42 @@ function signInPage(entries: AuthPath[], transitions: (AuthPath | null)[]) {
   return { page: page as unknown as Page, fillEmail, submit, codeInput };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+/** The start of a 30-second TOTP step, so one test's sign-ins share it. */
+const STEP_START = Date.UTC(2026, 10, 24, 10, 54, 30);
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(STEP_START);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.mocked(inputSecret).mockClear();
+});
+
+/** The codes the helper typed into an MFA prompt, in order. */
+function submittedCodes(): string[] {
+  return vi
+    .mocked(inputSecret)
+    .mock.calls.map(([, value]) => value)
+    .filter((value) => value !== credentials.password);
+}
+
+it("never replays the code an earlier sign-in of the same account already used", async () => {
+  // Two tests of one worker sign the same staff account in within one TOTP
+  // step; the server refuses the replayed code (011 EARS-6), as stage did (#4197).
+  vi.setSystemTime(STEP_START + 9_000);
+  const first = signInPage(["/login"], ["/mfa/challenge", "/events"]);
+  await signInAsAdmin(first.page, credentials);
+  vi.setSystemTime(STEP_START + 28_000);
+  const second = signInPage(["/login"], ["/mfa/challenge", "/events"]);
+  await signInAsAdmin(second.page, credentials);
+
+  const [firstCode, secondCode] = submittedCodes();
+  expect(secondCode).toBeDefined();
+  expect(secondCode).not.toBe(firstCode);
+});
 
 it("continues the pending MFA step when the retry's login page redirects", async () => {
   const { page, fillEmail, submit, codeInput } = signInPage(

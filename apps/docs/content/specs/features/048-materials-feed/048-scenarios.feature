@@ -456,7 +456,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the poller fetches a text post 1212 of "bbmacademy" signed by its author
     Then no stored row and no log line carries the bot token, the raw update or the author signature
 
-  @EARS-37
+  @EARS-37 @material-academy-journeys
   Scenario: The source pages work on a phone
     Given the viewport is 390 px wide
     And a platform administrator is signed in to the admin with a second factor

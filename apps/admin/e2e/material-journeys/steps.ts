@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   type Browser,
@@ -10,6 +11,10 @@ import {
 import { createBdd } from "playwright-bdd";
 
 import { adminWrite, expectNoPageSideScroll } from "../support/admin-write";
+import {
+  removeTelegramRailSources,
+  seedTelegramRailSource,
+} from "../support/feed-posts";
 import { test, type AdminWorld } from "../support/fixtures";
 import {
   ensurePublishedExpert,
@@ -63,6 +68,10 @@ type State = {
   organisationId?: string;
   viewport?: { width: number; height: number };
   visitor?: Page;
+  /** Telegram sources this scenario stored, removed with their entries after it. */
+  telegramSources: string[];
+  /** «Источники» and the opened «Публикации», as the administrator reached them. */
+  sourcePages?: string[];
 };
 const states = new WeakMap<AdminWorld, State>();
 function state(world: AdminWorld): State {
@@ -84,7 +93,8 @@ function remember(world: AdminWorld, written: Material): Material {
 }
 function portal(): string {
   const origin = process.env.E2E_PORTAL_URL;
-  if (!origin) throw new Error("E2E_PORTAL_URL must name the Academy storefront");
+  if (!origin)
+    throw new Error("E2E_PORTAL_URL must name the Academy storefront");
   return origin.replace(/\/$/u, "");
 }
 /** The card date rule of 048 (Lead decision 10): day + month in Moscow time. */
@@ -100,13 +110,19 @@ Before(
   { tags: "@material-academy-journeys" },
   async ({ page, browser, world }) => {
     portal();
-    states.set(world, { browser, contexts: [], materials: new Map() });
+    states.set(world, {
+      browser,
+      contexts: [],
+      materials: new Map(),
+      telegramSources: [],
+    });
     await rows("SELECT 1");
     observe(page);
   },
 );
 After({ tags: "@material-academy-journeys" }, async ({ world }) => {
   for (const context of state(world).contexts) await context.close();
+  await removeTelegramRailSources(state(world).telegramSources);
 });
 
 /** The signed-out visitor, in its own browser context (no Admin cookies). */
@@ -232,9 +248,7 @@ async function saveAndPublish(
   expect(response.status()).toBe(201);
   const written = (await response.json()) as { id: string; slug: string };
   await page.waitForURL(new RegExp(`/materials/${written.id}$`, "u"));
-  await expect(page.getByTestId("material-heading")).toHaveText(
-    current.title!,
-  );
+  await expect(page.getByTestId("material-heading")).toHaveText(current.title!);
   if (beforePublish) {
     await beforePublish(written.id);
     await page.reload();
@@ -256,7 +270,9 @@ async function publishFromAdmin(page: Page): Promise<void> {
   const published = page.waitForResponse(
     (r) =>
       r.request().method() === "POST" &&
-      /\/v1\/admin\/materials\/[^/]+\/publish$/u.test(new URL(r.url()).pathname),
+      /\/v1\/admin\/materials\/[^/]+\/publish$/u.test(
+        new URL(r.url()).pathname,
+      ),
   );
   await page.getByTestId("material-publish").click();
   expect((await published).status()).toBe(200);
@@ -337,17 +353,14 @@ Then("the material is published", async ({ page, world }) => {
   expect(stored!.body).toContain('"bulletList"');
   expect(stored!.body).toContain('"bold"');
 });
-When(
-  "chooses the expert {string}",
-  async ({ page }, name: string) => {
-    await selectRelationshipCombobox(
-      page,
-      "material-expert",
-      name.split(" ")[0]!,
-      name,
-    );
-  },
-);
+When("chooses the expert {string}", async ({ page }, name: string) => {
+  await selectRelationshipCombobox(
+    page,
+    "material-expert",
+    name.split(" ")[0]!,
+    name,
+  );
+});
 
 // ── The visitor on the Academy ─────────────────────────────────────────────
 
@@ -449,7 +462,11 @@ Then(
 
 // ── The partner (EARS-19) ──────────────────────────────────────────────────
 
-type Organisation = { id: string; status: string; public_name_visible: boolean };
+type Organisation = {
+  id: string;
+  status: string;
+  public_name_visible: boolean;
+};
 Given(
   "the published organisation {string} with its name shown publicly is in the organisation registry",
   async ({ page, world }, title: string) => {
@@ -480,7 +497,9 @@ Given(
           [found.id],
         ),
       )
-      .toEqual([{ id: found.id, status: "published", public_name_visible: true }]);
+      .toEqual([
+        { id: found.id, status: "published", public_name_visible: true },
+      ]);
   },
 );
 async function setPublicName(
@@ -525,10 +544,9 @@ Given(
   async ({ page, world }, title: string) => {
     await publishNews(page, world, title);
     expect(
-      await rows(
-        "SELECT partner_organisation_id FROM materials WHERE id=$1",
-        [material(world, title).id],
-      ),
+      await rows("SELECT partner_organisation_id FROM materials WHERE id=$1", [
+        material(world, title).id,
+      ]),
     ).toEqual([{ partner_organisation_id: null }]);
   },
 );
@@ -639,22 +657,19 @@ Then(
     expect(stored).toEqual({ status: "draft", body: current.body });
   },
 );
-Then(
-  "the rail has no card {string}",
-  async ({ world }, title: string) => {
-    const current = material(world, title);
-    const page = await visitor(world);
-    await openHome(page);
-    expect(await seekCard(page, current.slug)).toBeNull();
-    await expect(page.getByRole("button", { name: NEXT })).toBeDisabled();
-    expect(
-      await rows(
-        "SELECT id FROM feed_entries WHERE source_platform='academy' AND source_ref=$1",
-        [current.id],
-      ),
-    ).toEqual([]);
-  },
-);
+Then("the rail has no card {string}", async ({ world }, title: string) => {
+  const current = material(world, title);
+  const page = await visitor(world);
+  await openHome(page);
+  expect(await seekCard(page, current.slug)).toBeNull();
+  await expect(page.getByRole("button", { name: NEXT })).toBeDisabled();
+  expect(
+    await rows(
+      "SELECT id FROM feed_entries WHERE source_platform='academy' AND source_ref=$1",
+      [current.id],
+    ),
+  ).toEqual([]);
+});
 Then(
   "its reading page address shows the Academy not-found page",
   async ({ world }) => {
@@ -743,7 +758,9 @@ Then(
   "the visitor lands on its reading page showing {string}",
   async ({ world }, title: string) => {
     const page = await visitor(world);
-    await page.waitForURL(`${portal()}/materials/${state(world).current!.slug}`);
+    await page.waitForURL(
+      `${portal()}/materials/${state(world).current!.slug}`,
+    );
     await expect(
       page.getByRole("article").getByRole("heading", { level: 1 }),
     ).toHaveText(title);
@@ -918,5 +935,116 @@ Then(
     await page.goto("/materials/create");
     await expect(editorOf(page)).toBeVisible();
     await expectNoPageSideScroll(page);
+  },
+);
+
+// ── The source pages on a phone (EARS-37) ──────────────────────────────────
+
+/** The admin's axe scope — the same WCAG 2 A/AA tags as `a11y/a11y-axe.e2e.spec.ts`. */
+const ADMIN_WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+
+/**
+ * axe samples a settled frame: the DS controls and dialogs fade, and a
+ * mid-fade frame is not what the operator sees (the reason is recorded on
+ * `settle` in `a11y/a11y-axe.e2e.spec.ts`).
+ */
+async function expectNoAxeViolation(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (a) =>
+          a.playState !== "running" ||
+          a.effect?.getTiming().iterations === Infinity,
+      ),
+  );
+  const results = await new AxeBuilder({ page })
+    .withTags(ADMIN_WCAG_TAGS)
+    .analyze();
+  expect(
+    results.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.flatMap((n) => n.target),
+    })),
+    `axe violations on ${page.url()}`,
+  ).toEqual([]);
+}
+
+When(
+  "the administrator opens «Источники» and the «Публикации» of {string}",
+  async ({ page, world }, address: string) => {
+    const username = address.replace(/^t\.me\//u, "");
+    const [{ listed }] = await rows<{ listed: number }>(
+      "SELECT count(*)::int AS listed FROM feed_sources WHERE platform='telegram' AND address=$1",
+      [username],
+    );
+    expect(
+      listed,
+      `${address} is already listed on this database (an aborted earlier run?)`,
+    ).toBe(0);
+    // A post in the feed and a hidden one, so «Публикации» carries both
+    // «Скрыть из ленты» and «Вернуть в ленту» (048 EARS-32).
+    const { sourceId } = await seedTelegramRailSource(
+      username,
+      { enabled: true, failing: false },
+      [
+        {
+          messageId: 1201,
+          text: "Сегодня в 19:00 МСК — эфир о показаниях к PRP",
+          at: "2026-11-10T09:00:00Z",
+        },
+        {
+          messageId: 1202,
+          text: "PRP при гонартрозе — фрагмент эфира",
+          at: "2026-11-12T15:30:00Z",
+          hidden: true,
+        },
+      ],
+    );
+    const current = state(world);
+    current.telegramSources.push(sourceId);
+    operation("owned feed source", { sourceId, address });
+
+    await page.goto("/materials/sources");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Источники" }),
+    ).toBeVisible();
+    const posts = page
+      .getByTestId(`feed-source-posts-${username}`)
+      .filter({ visible: true });
+    await expect(posts).toBeVisible();
+    const sources = page.url();
+    await posts.click();
+    await page.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/u);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: `Публикации · ${address}`,
+      }),
+    ).toBeVisible();
+    current.sourcePages = [sources, page.url()];
+  },
+);
+Then(
+  "neither page scrolls horizontally and both pass the accessibility check",
+  async ({ page, world }) => {
+    expect(page.viewportSize()?.width).toBe(390);
+    const pages = state(world).sourcePages;
+    expect(pages).toHaveLength(2);
+    for (const url of pages!) {
+      await page.goto(url);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // The list has answered: its first row (or card) is on the screen.
+      await expect(
+        page
+          .locator(
+            '[data-testid^="feed-source-row-"], [data-testid^="feed-post-text-"]',
+          )
+          .filter({ visible: true })
+          .first(),
+      ).toBeVisible();
+      await expectNoPageSideScroll(page);
+      await expectNoAxeViolation(page);
+    }
   },
 );

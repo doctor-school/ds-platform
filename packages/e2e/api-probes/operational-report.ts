@@ -110,5 +110,6 @@ export const operationalOriginals = {
     "An unpublished material leaves the Academy at once",
     "A visitor reads a material on its own page",
     "The rail, the page and the admin work on a phone",
+    "The source pages work on a phone",
   ],
 } as const;

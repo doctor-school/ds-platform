@@ -232,6 +232,38 @@ test.describe("048 EARS-33 / EARS-34 / EARS-35 — Telegram cards in the Academy
     }
   });
 
+  for (const [width, size] of [
+    ["desktop", WIDE],
+    ["mobile", NARROW],
+  ] as const) {
+    test(`048 EARS-37: the whole Academy home carrying Telegram cards has no axe violation, light and dark (${width})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      await openRail(page);
+      for (const palette of ["light", "dark"] as const) {
+        await setPalette(page, palette);
+        const results = await new AxeBuilder({ page })
+          .withTags(WCAG_TAGS)
+          // The two leaf exclusions every full-page Academy scan carries
+          // (`materials-reading-page.spec.ts`): #2189 — the shared shell's BBM
+          // topbar keeps the owner-accepted canvas contrast; #1692 — open
+          // defect, the Academy footer wordmark contrast. Every other node of
+          // the home stays in the scan.
+          .exclude('[data-testid="shell-topbar"]')
+          .exclude('[data-testid="academy-footer-wordmark"]')
+          .analyze();
+        expect(
+          results.violations.map((violation) => ({
+            id: violation.id,
+            nodes: violation.nodes.flatMap((node) => node.target),
+          })),
+          `axe violations on the Academy home (${width}, ${palette})`,
+        ).toEqual([]);
+      }
+    });
+  }
+
   test("048 EARS-34: the card is one keyboard-reachable link that opens t.me in a new tab", async ({
     page,
     context,

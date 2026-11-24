@@ -47,7 +47,7 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     When the doctor uses the interest capture again
     Then the doctor still has one interest in "cardio"
 
-  @EARS-6 @EARS-7 @school-doctor-journeys
+  @EARS-6 @EARS-7 @rule @proof:app-e2e
   Scenario: A signed-in doctor joins a «скоро» school's list, withdraws, and a failed write says so
     Given the published school "cardio" has no published course
     And a signed-in doctor

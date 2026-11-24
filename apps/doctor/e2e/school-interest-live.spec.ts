@@ -15,7 +15,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * A guest opens a published school with no published course: the badge
  * «Скоро», «Школа готовится» with the school's note, the empty events and
  * reviews sections, and «Сообщить об открытии». The capture leads to
- * registration (021) with the school screen as the return target; the new
+ * the doctor registration with the school screen as the return target; the new
  * doctor lands back on the school in «Вы в списке» (the capture completed on
  * return) and withdraws it. A signed-in doctor whose interest write fails sees
  * the danger alert and keeps the capture. Axe clean, no side scroll, 1280 / 390.
@@ -126,7 +126,7 @@ function freshDoctor(tag: string) {
   };
 }
 
-test.describe("023 — the «скоро» school and the doctor's interest", () => {
+test.describe("023 EARS-6/7 — the «скоро» school and the doctor's interest", () => {
   test.beforeEach(async ({ context }) => {
     if (DARK) await context.addInitScript(DARK_INIT);
   });

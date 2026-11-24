@@ -396,7 +396,9 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
     await cell(admin, `feed-source-disable-${moved}`).click();
     const confirm = admin.getByTestId("feed-source-disable-dialog");
     await expect(confirm).toContainText(`Выключить t.me/${moved}?`);
-    await expect(confirm).toContainText("уйдут из ленты Академии");
+    await expect(confirm).toContainText(
+      "Посты этого канала уйдут из ленты Академии и перестанут поступать. Сами посты сохранятся.",
+    );
     await shot(admin, "sources-disable-confirm");
 
     // Cancel changes nothing.
@@ -726,6 +728,28 @@ test.describe("048 EARS-38, EARS-44, EARS-47, EARS-52 — VK on «Источни
     expect(await storedAddresses(admin)).toEqual(before);
   });
 
+  test("048 EARS-38: switching «Площадка» clears the address refusal of the other platform; the typed value stays and is checked on submit", async () => {
+    await admin.goto("/materials/sources/create");
+    const field = admin.getByTestId("feed-source-address");
+    const platform = admin.getByTestId("feed-source-platform");
+    await submitAddress(admin, "https://example.com/bbmacademy");
+    await expect(admin.getByText(FEED_SOURCE_ADDRESS_ERROR)).toBeVisible();
+
+    await platform.selectOption("vk");
+    await expect(admin.getByText("Адрес сообщества")).toBeVisible();
+    await expect(admin.getByText(FEED_SOURCE_ADDRESS_ERROR)).toBeHidden();
+    await expect(admin.getByText("Например, vk.com/bbm.academy")).toBeVisible();
+    await expect(field).toHaveValue("https://example.com/bbmacademy");
+
+    await admin.getByTestId("submit-feed-source").click();
+    await expect(admin.getByText(FEED_VK_SOURCE_ADDRESS_ERROR)).toBeVisible();
+    await platform.selectOption("telegram");
+    await expect(admin.getByText("Адрес канала")).toBeVisible();
+    await expect(admin.getByText(FEED_VK_SOURCE_ADDRESS_ERROR)).toBeHidden();
+    await expect(field).toHaveValue("https://example.com/bbmacademy");
+    await expect(admin).toHaveURL(/\/materials\/sources\/create$/);
+  });
+
   test("048 EARS-38, EARS-44: vk.ru/bbm.academy is listed as vk.com/bbm.academy, checked at once, with the month's calls; the same community again is refused", async () => {
     await admin.goto("/materials/sources/create");
     await admin.getByTestId("feed-source-platform").selectOption("vk");
@@ -799,6 +823,23 @@ test.describe("048 EARS-38, EARS-44, EARS-47, EARS-52 — VK on «Источни
     const stored = await storedAddresses(admin);
     expect(stored).toContain(vkMoved);
     expect(stored).not.toContain(VK_OFFICIAL);
+  });
+
+  test("048 EARS-38: «Выключить» of a VK source names the community, not a channel", async () => {
+    await openSources(admin);
+    await cell(admin, `feed-source-disable-${vkMoved}`).click();
+    const confirm = admin.getByTestId("feed-source-disable-dialog");
+    await expect(confirm).toContainText(`Выключить vk.com/${vkMoved}?`);
+    await expect(confirm).toContainText(
+      "Посты этого сообщества уйдут из ленты Академии и перестанут поступать. Сами посты сохранятся.",
+    );
+    await expect(confirm).not.toContainText("канала");
+    await shot(admin, "vk-disable-confirm");
+    await confirm.getByRole("button", { name: "Отмена" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(cell(admin, `feed-source-state-${vkMoved}`)).toHaveText(
+      "Включён",
+    );
   });
 
   test("048 EARS-44: each of the six VK reasons reads «Ошибка: <reason>»; the month's line warns from 8 000", async () => {

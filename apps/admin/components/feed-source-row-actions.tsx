@@ -237,7 +237,7 @@ export function FeedSourceRowActions({
               {t("feedSources.disableConfirm.title", { address: label })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("feedSources.disableConfirm.description")}
+              {t(`feedSources.disableConfirm.description.${source.platform}`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

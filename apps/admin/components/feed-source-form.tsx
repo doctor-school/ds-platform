@@ -36,7 +36,9 @@ export interface FeedSourceFormFields {
  * the field before any request; what only the server knows (the address is
  * already listed) comes back as a `VALIDATION_FAILED` on `address` and is
  * marked on the same field (`addressRefusal`). The typed value stays in the
- * input either way — the form is never reset by a refusal.
+ * input either way — the form is never reset by a refusal. Switching the
+ * platform clears the address refusal (it named the other platform's form);
+ * the value stays and is checked against the new platform on submit.
  */
 export function FeedSourceForm({
   mode,
@@ -108,6 +110,13 @@ export function FeedSourceForm({
                     id="feed-source-platform"
                     data-testid="feed-source-platform"
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      // A refusal was worded for the platform it was checked
+                      // against; the typed value stays and is re-checked
+                      // against the new platform's rule on submit.
+                      form.clearErrors("address");
+                    }}
                   >
                     {FeedSourceNetworkSchema.options.map((value) => (
                       <option key={value} value={value}>

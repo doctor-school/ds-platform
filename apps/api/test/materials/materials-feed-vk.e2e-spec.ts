@@ -16,10 +16,18 @@ import {
 } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
-import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
+import { and, eq } from "drizzle-orm";
+import { feedEntries, type DrizzleHandle } from "@ds/db";
+import {
+  DRIZZLE_DB,
+  DRIZZLE_POOL,
+} from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import { FeedEntriesRepository } from "../../src/materials/feed-entries.repository.js";
+import {
+  FeedEntriesRepository,
+  feedEntryRowVisible,
+} from "../../src/materials/feed-entries.repository.js";
 import { FakeVkApi } from "../../src/materials/vk/vk-api.fake.js";
 import { VK_API } from "../../src/materials/vk/vk-api.types.js";
 import { VK_CONFIG, type VkConfig } from "../../src/materials/vk/vk-config.js";
@@ -456,6 +464,59 @@ describe.skipIf(!process.env.DATABASE_URL)("048 VK connector (e2e)", () => {
       }),
       expect.objectContaining({ vk_object_id: "502" }),
     ]);
+  });
+
+  it("048 EARS-43: when the post that attaches a hidden video entry arrives, the post entry shall take the video entry's hidden mark, the video entry go and the feed not show it; a post with its own mark keeps it", async () => {
+    const src = await source();
+    const withVideo = (id: number, vid: number, over: object = {}) =>
+      wallPost(src, id, {
+        attachments: [{ type: "video", video: videoObj(src.gid, vid) }],
+        ...over,
+      });
+    const hide = (id: string, at: string) =>
+      pool.query("UPDATE feed_entries SET hidden_at = $2 WHERE id = $1", [
+        id,
+        at,
+      ]);
+    const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+    const visible = async () =>
+      (
+        await db
+          .select({ id: feedEntries.id })
+          .from(feedEntries)
+          .where(and(eq(feedEntries.feedSourceId, src.id), feedEntryRowVisible))
+      ).map((r) => r.id);
+    // The video first, hidden by the administrator; then its post (Callback).
+    await callback(event(src.gid, "video_new", videoObj(src.gid, 601)));
+    const [video] = await entries(src.id);
+    await hide(video!.id, "2026-11-01T10:00:00Z");
+    await callback(event(src.gid, "wall_post_new", withVideo(61, 601)));
+    let rows = await entries(src.id);
+    expect(rows.map((r) => r.kind)).toEqual(["post"]);
+    const post61 = rows[0]!;
+    expect(post61.hidden_at).toEqual(new Date("2026-11-01T10:00:00Z"));
+    expect(rows.find((r) => r.id === video!.id)).toBeUndefined();
+    expect(await visible()).toEqual([]);
+    // A held post with its own hide is edited to attach a hidden video
+    // (reconcile): it keeps its own mark and absorbs the video entry.
+    await callback(event(src.gid, "wall_post_new", wallPost(src, 62)));
+    await callback(event(src.gid, "video_new", videoObj(src.gid, 602)));
+    rows = await entries(src.id);
+    const post62 = rows.find((r) => r.title === "Пост 62")!;
+    const video602 = rows.find((r) => r.kind === "video")!;
+    await hide(post62.id, "2026-11-02T10:00:00Z");
+    await hide(video602.id, "2026-11-03T10:00:00Z");
+    vk.walls.set(src.gid, [withVideo(62, 602), withVideo(61, 601)]);
+    await reconcile.reconcile(src.id);
+    rows = await entries(src.id);
+    expect(rows.map((r) => [r.kind, r.title])).toEqual([
+      ["post", "Пост 61"],
+      ["post", "Пост 62"],
+    ]);
+    expect(rows.find((r) => r.id === post62.id)!.hidden_at).toEqual(
+      new Date("2026-11-02T10:00:00Z"),
+    );
+    expect(await visible()).toEqual([]);
   });
 
   it("048 EARS-51: the stored rows carry no secret, raw event or author field", async () => {

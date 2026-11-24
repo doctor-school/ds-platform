@@ -110,6 +110,11 @@ export const learningCourses = pgTable(
     slug: text("slug").notNull().unique(),
     title: text("title").notNull(),
     state: learningState("state").notNull().default("draft"),
+    // 024 EARS-30, EARS-31 — when the course was first published; never
+    // cleared. A course once published keeps doctors' progress, so its rules
+    // stay governed as published (the rules editor, the rule-change record)
+    // whatever its current state; only a never-published draft has no learners.
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
     // 023 EARS-1 — the course's descriptive data (ownership `doctor`).
     description: text("description").notNull().default(""),
     academicHours: integer("academic_hours").notNull().default(0),
@@ -324,6 +329,9 @@ export const learningRuleChanges = pgTable(
     earnedProgress: text("earned_progress").notNull(),
     actorSub: text("actor_sub"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    // EARS-31 — set when the after-commit recompute of the affected doctors
+    // finished; a change left NULL (an interrupted run) is resumed on boot.
+    recomputedAt: timestamp("recomputed_at", { withTimezone: true }),
   },
   (t) => [
     check(
@@ -407,6 +415,14 @@ export const learningNodeStatus = pgTable(
     since: timestamp("since", { withTimezone: true }).notNull().defaultNow(),
     causeKind: text("cause_kind").notNull(),
     causeId: text("cause_id"),
+    // EARS-24 — the rule change that moved this item: written by the save
+    // that records the change (not by its recompute). An item it moved off
+    // done keeps it through every later transition until done again; an item
+    // it only locked again (`reason_while_locked`) keeps it while locked.
+    reasonRuleChangeId: uuid("reason_rule_change_id").references(
+      () => learningRuleChanges.id,
+    ),
+    reasonWhileLocked: boolean("reason_while_locked").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.personId, t.itemId] }),

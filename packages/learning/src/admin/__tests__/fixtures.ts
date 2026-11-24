@@ -165,6 +165,7 @@ export function rules(
     scopeKind: "course",
     scopeId: AID.course,
     layerVersion: 0,
+    authority: "course-editor",
     appliedPreset: null,
     values: {},
     effective: [
@@ -196,6 +197,13 @@ export function fakeTransport(
     applyPreset: vi.fn(async () =>
       rules({ appliedPreset: "Путь (Duolingo)", layerVersion: 1 }),
     ),
+    setRules: vi.fn(async () => rules({ layerVersion: 3 })),
+    previewRules: vi.fn(async () => ({
+      affectedDoctors: 0,
+      toDone: 0,
+      toNotDone: 0,
+    })),
+    updatePreset: vi.fn(async () => PRESETS[0]),
     ...over,
   };
   return t as never;

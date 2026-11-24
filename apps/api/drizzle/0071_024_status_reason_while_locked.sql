@@ -1,0 +1,1 @@
+ALTER TABLE "learning_node_status" ADD COLUMN "reason_while_locked" boolean DEFAULT false NOT NULL;

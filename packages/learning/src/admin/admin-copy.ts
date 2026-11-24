@@ -1,6 +1,7 @@
 import type {
   LearningConditionType,
   LearningRuleNode,
+  LearningScopeKind,
   LearningSettingKey,
   LearningState,
 } from "@ds/schemas";
@@ -220,7 +221,183 @@ export const ADMIN_COPY = {
     "Пресет задаёт правила курса одним выбором. Настройки, заданные в модулях, уроках и шагах, остаются.",
   presetApplied: (name: string) => `Применён: ${name}`,
   applyPreset: "Применить пресет",
-  presetDone: (name: string) =>
-    `Пресет «${name}» применён к курсу. Настройки, заданные в модулях, уроках и шагах, сохранены.`,
+  presetDone: (name: string, scope: "school" | "course" = "course") =>
+    scope === "school"
+      ? `Пресет «${name}» применён к школе. Настройки, заданные в курсах, модулях, уроках и шагах, сохранены.`
+      : `Пресет «${name}» применён к курсу. Настройки, заданные в модулях, уроках и шагах, сохранены.`,
   presetEmpty: "Пресеты не найдены.",
+} as const;
+
+/** EARS-5 — a scope level in words («Унаследовано от: курс»). */
+export const LEVEL_LABEL: Record<LearningScopeKind, string> = {
+  platform: "платформа",
+  school: "школа",
+  course: "курс",
+  module: "модуль",
+  lesson: "урок",
+  step: "шаг",
+};
+
+/** EARS-6…8 — the editor's sections, each with its settings in reading order. */
+export const SETTING_SECTIONS: readonly {
+  title: string;
+  keys: readonly LearningSettingKey[];
+}[] = [
+  {
+    title: "Прохождение",
+    keys: [
+      "completion.step",
+      "completion.lesson",
+      "completion.module",
+      "completion.course",
+      "viewed.video.percent",
+      "viewed.podcast.percent",
+    ],
+  },
+  {
+    title: "Открытие и порядок",
+    keys: ["unlock", "order", "lockedVisibility"],
+  },
+  {
+    title: "Тесты",
+    keys: [
+      "test.threshold",
+      "test.attempts",
+      "test.pauseMin",
+      "test.questions",
+      "test.exitRequired",
+      "test.entryRequired",
+      "test.entryCounts",
+      "testOut.allowed",
+      "testOut.pauseMin",
+      "repeat.allowed",
+    ],
+  },
+  {
+    title: "Засчитывание просмотра",
+    keys: ["progress.maxPlaybackRate", "progress.slackSec"],
+  },
+  {
+    title: "Курс",
+    keys: [
+      "course.deliveryMode",
+      "course.moduleSize",
+      "course.closingClub",
+      "course.clubInCompletion",
+    ],
+  },
+];
+
+/** The words of one enum setting's options, for its select. */
+export const SETTING_OPTIONS: Partial<
+  Record<LearningSettingKey, Record<string, string>>
+> = {
+  order: { strict: "строго по порядку", free: "в любом порядке" },
+  lockedVisibility: { hidden: "скрыты", locked: "видны закрытыми" },
+  "course.deliveryMode": {
+    online: "онлайн",
+    offline: "очно",
+    open: "открытый",
+  },
+};
+
+export const UNLOCK_KIND_LABEL: Record<string, string> = {
+  immediate: "сразу",
+  "after-previous": "после предыдущего",
+  "from-date": "с даты",
+  expression: "по условию",
+};
+
+const doctorsGenitive = (n: number) =>
+  n % 10 === 1 && n % 100 !== 11 ? "врача" : "врачей";
+
+export const RULES_COPY = {
+  heading: (kind: LearningScopeKind) =>
+    ({
+      platform: "Правила платформы",
+      school: "Правила школы",
+      course: "Правила курса",
+      module: "Правила модуля",
+      lesson: "Правила урока",
+      step: "Правила шага",
+    })[kind],
+  hint: "Каждая настройка действует от ближайшего уровня, где она задана: шаг → урок → модуль → курс → школа → платформа.",
+  setHere: "Задано здесь",
+  inherited: (level: LearningScopeKind, preset: string | null) =>
+    `Унаследовано от: ${LEVEL_LABEL[level]}${preset ? ` · пресет «${preset}»` : ""}`,
+  willInherit: "Станет унаследованным после сохранения",
+  edit: (label: string) => `Изменить: ${label}`,
+  revert: (label: string) => `Вернуть унаследованное: ${label}`,
+  editShort: "Изменить",
+  revertShort: "Вернуть унаследованное",
+  save: "Сохранить правила",
+  discard: "Отменить изменения",
+  presetHeldByDraft:
+    "Сохраните или отмените изменения настроек, чтобы применить пресет.",
+  saved: "Правила сохранены.",
+  refused: "Правила не сохранены:",
+  // A refused setting in words: the validator's own text is for API clients.
+  invalidRule: "правило составлено неверно — проверьте условия.",
+  invalidNumber: (min: number, max: number, integer: boolean) =>
+    `укажите ${integer ? "целое " : ""}число от ${min} до ${max}.`,
+  invalidValue: "такое значение не подходит.",
+  stale: "Правила изменили в другом окне — показана текущая версия.",
+  readOnly: {
+    platform:
+      "Правила платформы и пресеты меняет только редактор правил обучения.",
+    published:
+      "Правила опубликованного курса меняет только редактор правил обучения.",
+    draft:
+      "Правила курса-черновика меняют сотрудники, которые редактируют курс.",
+  },
+  unlimited: "без ограничений",
+  allQuestions: "все",
+  date: "Дата открытия",
+  unlockKind: "Как открывается",
+  // The completion-rule builder (EARS-6).
+  ruleKind: "Вид правила",
+  ruleKinds: {
+    condition: "одно условие",
+    all: "все условия",
+    any: "любое из условий",
+    nOf: "N из M",
+  } as Record<string, string>,
+  nOfN: "Сколько условий",
+  condition: (path: string) => `Условие ${path}`,
+  conditionPercent: (path: string) => `Условие ${path}, процент`,
+  conditionTest: (path: string) => `Условие ${path}, тест`,
+  groupKind: (path: string) => `Группа ${path}, вид`,
+  removeCondition: (path: string) => `Убрать условие ${path}`,
+  addCondition: "Добавить условие",
+  addGroup: "Добавить группу",
+  testKinds: { exit: "итоговый", entry: "входной" } as Record<string, string>,
+  // The change dialog (EARS-31, owner D16).
+  dialogTitle: "Изменение правил опубликованного курса",
+  impact: (n: number) =>
+    n === 0
+      ? "Статус врачей не изменится."
+      : `Изменится статус у ${n} ${doctorsGenitive(n)}.`,
+  impactDetail: (toDone: number, toNotDone: number) =>
+    `Станут пройденными: ${toDone} · перестанут быть пройденными: ${toNotDone}.`,
+  earnedLegend: "Что сделать с уже пройденным",
+  keep: "Сохранить заработанные зачёты",
+  keepHint: "Врачи, уже прошедшие элемент, сохраняют зачёт.",
+  requireAgain: "Потребовать заново",
+  requireAgainHint:
+    "Зачёт решают новые правила: врачу может понадобиться пройти элемент снова.",
+  apply: "Применить изменение",
+  cancel: "Отмена",
+  previewFailed:
+    "Не удалось посчитать, кого затронет изменение. Попробуйте ещё раз.",
+  // Presets on the platform scope (EARS-9, EARS-29).
+  presetsHeading: "Пресеты",
+  presetsHint:
+    "Изменение пресета действует на следующие применения; курсы и школы, где он уже применён, не меняются.",
+  editPreset: (name: string) => `Изменить пресет «${name}»`,
+  savePreset: "Сохранить пресет",
+  presetSaved: (name: string) => `Пресет «${name}» сохранён.`,
+  removeFromPreset: (label: string) => `Убрать из пресета: ${label}`,
+  addToPreset: "Добавить настройку",
+  addToPresetNone: "Выберите настройку",
+  stepRules: (no: number) => `Правила шага ${no}`,
 } as const;

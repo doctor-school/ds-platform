@@ -46,11 +46,14 @@ import {
 import { users } from "../../schema/users.js";
 import {
   learningCourses,
+  learningAttempts,
   learningFacts,
   learningLessons,
   learningModules,
+  learningNodeStatus,
   learningOptions,
   learningQuestions,
+  learningRuleChanges,
   learningRuleLayers,
   learningSchools,
   learningSteps,
@@ -98,6 +101,13 @@ export interface GoldenSeedStep {
   rows: Record<string, unknown>[];
   conflictKeys: string[];
   updateKeys: string[];
+  /**
+   * Set-once publication instants ({@link SET_ONCE_KEYS}) the step writes: a
+   * re-run leaves a written instant alone but fills one still NULL — a
+   * database seeded before the seed stamped the column (024 EARS-30) converges
+   * in place. The set-once triggers allow NULL → value.
+   */
+  fillKeys: string[];
   /**
    * Id group ({@link GOLDEN_GROUP}) whose VOLUME ordinal namespace this step
    * owns outright and replaces on every run.
@@ -199,8 +209,14 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "learning_questions",
   "learning_options",
   "learning_rule_layers",
+  // #4012 — the past rule change on a long path's layer (024 EARS-31).
+  "learning_rule_changes",
   // 023 EARS-5 (#4017) — the golden doctor's facts, after the steps and users.
   "learning_facts",
+  // #4012 — the long paths' submitted attempts, then the status projection
+  // their facts leave (after the facts its cause ids name).
+  "learning_attempts",
+  "learning_node_status",
   // #4172 — the doctors' 025 accruals: accounts, then each fact's posting keys
   // and journal row, then the postings that reference both.
   "points_accounts",
@@ -317,7 +333,7 @@ export function resolveLearningRuleLayerRows(
         scopeId: layer.scopeId,
         values: structuredClone(layer.values),
         appliedPresetId: null,
-        version: 1,
+        version: layer.version ?? 1,
         createdAt: layer.createdAt,
         updatedAt: layer.updatedAt,
       };
@@ -496,6 +512,15 @@ export function buildGoldenSeedPlan(
       ),
       ["scopeKind", "scopeId"],
     ),
+    // #4012 (024 EARS-31) — a rule change is a record of a save that happened:
+    // a re-run inserts it once and never rewrites it.
+    step(
+      "learning_rule_changes",
+      learningRuleChanges,
+      dataset.learningRuleChanges,
+      ["id"],
+      { appendOnly: true },
+    ),
     // 023 EARS-5 (#4017) — `learning_facts` is append-only (a trigger refuses
     // UPDATE): a re-run meets a fact on its client event key and leaves it.
     step(
@@ -503,6 +528,23 @@ export function buildGoldenSeedPlan(
       learningFacts,
       dataset.learningFacts,
       ["personId", "eventId"],
+      { appendOnly: true },
+    ),
+    // #4012 — a submitted attempt is never edited, and the projection belongs
+    // to the doctor's next real fact or rule change once written: a re-run
+    // inserts what is missing and leaves a row a slot has since moved.
+    step(
+      "learning_attempts",
+      learningAttempts,
+      dataset.learningAttempts,
+      ["id"],
+      { appendOnly: true },
+    ),
+    step(
+      "learning_node_status",
+      learningNodeStatus,
+      dataset.learningNodeStatus,
+      ["personId", "itemId"],
       { appendOnly: true },
     ),
     // #4172 — the 025 ledger is append-only (triggers refuse UPDATE/DELETE):
@@ -598,6 +640,9 @@ function step(
       : [...keys].filter(
           (key) => !conflictKeys.includes(key) && !setOnce.has(key),
         ),
+    fillKeys: options.appendOnly
+      ? []
+      : SET_ONCE_KEYS.filter((key) => keys.has(key)),
   };
 }
 
@@ -836,6 +881,12 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     courseIds,
   );
   check(
+    "learning_rule_changes",
+    dataset.learningRuleChanges,
+    "scopeId",
+    courseIds,
+  );
+  check(
     "learning_facts",
     dataset.learningFacts,
     "stepId",
@@ -846,6 +897,30 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     dataset.learningFacts,
     "personId",
     idSet(dataset.users),
+  );
+  check(
+    "learning_attempts",
+    dataset.learningAttempts,
+    "testId",
+    new Set(dataset.learningTests.map((row) => row.stepId)),
+  );
+  check(
+    "learning_attempts",
+    dataset.learningAttempts,
+    "personId",
+    idSet(dataset.users),
+  );
+  check(
+    "learning_node_status",
+    dataset.learningNodeStatus,
+    "personId",
+    idSet(dataset.users),
+  );
+  check(
+    "learning_node_status",
+    dataset.learningNodeStatus,
+    "causeId",
+    idSet(dataset.learningFacts),
   );
 
   return issues;

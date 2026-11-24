@@ -36,6 +36,7 @@ export const ROLES = [
   // claim and `users.role` only mirrors them.
   "superadmin",
   "broadcast_director",
+  "learning_rules_editor",
 ] as const;
 export type Role = (typeof ROLES)[number];
 

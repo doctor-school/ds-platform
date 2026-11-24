@@ -10,6 +10,7 @@ import type {
   LearningAttemptResult,
   LearningCoursePath,
   LearningLessonRead,
+  LearningStatusReason,
   LearningNodeState,
   LearningPathAuthor,
   LearningPathStep,
@@ -36,7 +37,10 @@ import {
   type LearningCourseEvaluator,
   type LearningEvaluation,
 } from "../evaluator/evaluator.js";
-import { courseProgress, nextLessonNumber } from "../evaluator/course-progress.js";
+import {
+  courseProgress,
+  nextLessonNumber,
+} from "../evaluator/course-progress.js";
 import {
   LearningServerError,
   SERVER_EVENT_PREFIX,
@@ -67,6 +71,7 @@ import {
   scopesOf,
   type LoadedCourse,
 } from "./repository.js";
+import { lessonStatusReasons } from "./rule-change.js";
 
 // 024 EARS-10, EARS-11, EARS-13, EARS-15, EARS-17, EARS-18 — the doctor-side
 // reads and writes, served alike to the website and the mobile app (EARS-25).
@@ -76,7 +81,9 @@ import {
 type Handle = LearningServerDeps["db"] | LearningTx;
 
 /** The leading expert as `coursePlaces` reads it (null unless public). */
-type PlacesExpert = NonNullable<Awaited<ReturnType<typeof coursePlaces>>>["expert"];
+type PlacesExpert = NonNullable<
+  Awaited<ReturnType<typeof coursePlaces>>
+>["expert"];
 
 interface Evaluated {
   loaded: LoadedCourse;
@@ -123,6 +130,23 @@ export class LearningDoctorService {
       now: this.now(),
     });
     return { loaded, evaluator, evaluation };
+  }
+
+  /** EARS-24 — the status reasons of a doctor's lessons (none for a guest). */
+  private async reasons(
+    db: Handle,
+    e: Evaluated,
+    personId: string | null,
+    lessonIds: readonly string[],
+  ): Promise<Map<string, LearningStatusReason>> {
+    if (!personId) return new Map();
+    return lessonStatusReasons(
+      db,
+      personId,
+      lessonIds,
+      e.evaluator,
+      e.evaluation,
+    );
   }
 
   /** The published course a published step belongs to, or 404. */
@@ -198,7 +222,10 @@ export class LearningDoctorService {
       if (step.type === "download") {
         // A published download always carries its file (EARS-4); without one there is no fact to show.
         const format = row.mediaRef
-          ? fileFormatLabel(row.mediaContentType, String(step.payload["fileName"] ?? ""))
+          ? fileFormatLabel(
+              row.mediaContentType,
+              String(step.payload["fileName"] ?? ""),
+            )
           : null;
         return {
           test: null,
@@ -213,9 +240,7 @@ export class LearningDoctorService {
   }
 
   /** EARS-14 — the school's leading expert as the public author; null unless public and named. */
-  private async author(
-    x: PlacesExpert,
-  ): Promise<LearningPathAuthor | null> {
+  private async author(x: PlacesExpert): Promise<LearningPathAuthor | null> {
     const name = x ? expertDisplayName(x) : null;
     if (!x || !name) return null;
     return {
@@ -268,7 +293,9 @@ export class LearningDoctorService {
     const rows = await publishedCoursesOfSchool(db, school.id);
     const partners = await publicPartnerNames(
       db,
-      rows.flatMap((r) => (r.partnerOrganisationId ? [r.partnerOrganisationId] : [])),
+      rows.flatMap((r) =>
+        r.partnerOrganisationId ? [r.partnerOrganisationId] : [],
+      ),
     );
     // 023-design §4 «One batched read»: every course's tree, the rule layers
     // of all their items and the doctor's facts are loaded once; each course
@@ -333,6 +360,12 @@ export class LearningDoctorService {
     const e = await this.evaluate(this.deps.db, course, personId);
     const facts = await this.kickerFacts(this.deps.db, e);
     const numbers = this.lessonNumbers(e);
+    const reasons = await this.reasons(
+      this.deps.db,
+      e,
+      personId,
+      e.loaded.lessons.map((l) => l.id),
+    );
     const modules = e.loaded.model.modules
       .filter((m) => !this.hidden(e, "module", m.id))
       .map((m) => {
@@ -352,6 +385,7 @@ export class LearningDoctorService {
               durationMin: l.steps.reduce((sum, s) => sum + s.durationMin, 0),
               stepCount: l.steps.length,
               state: this.stateOf(e, l.id),
+              ...withReason(reasons.get(l.id)),
               steps: l.steps
                 .filter((s) => !this.hidden(e, "step", s.id))
                 .map((s) => ({
@@ -380,7 +414,10 @@ export class LearningDoctorService {
         state: this.stateOf(e, course.id),
         ...this.courseData(course, e.loaded.lessons.length, partners),
         // 023 EARS-11, EARS-13 — the 024 builder over resolved values; no preset name.
-        rulesSummary: e.evaluator.rulesSummary({ kind: "course", id: course.id }),
+        rulesSummary: e.evaluator.rulesSummary({
+          kind: "course",
+          id: course.id,
+        }),
       },
       direction: places.direction,
       school: places.school,
@@ -430,6 +467,11 @@ export class LearningDoctorService {
         durationMin: model.steps.reduce((sum, s) => sum + s.durationMin, 0),
         stepCount: model.steps.length,
         state: this.stateOf(e, lessonId),
+        ...withReason(
+          (await this.reasons(this.deps.db, e, personId, [lessonId])).get(
+            lessonId,
+          ),
+        ),
         completionSentence: e.evaluator.sentence({
           kind: "lesson",
           id: lessonId,
@@ -927,4 +969,11 @@ function shuffle<T>(items: readonly T[]): T[] {
     [out[i], out[j]] = [out[j]!, out[i]!];
   }
   return out;
+}
+
+/** EARS-24 — the optional `statusReason` field, absent when there is none. */
+function withReason(reason: LearningStatusReason | undefined): {
+  statusReason?: LearningStatusReason;
+} {
+  return reason ? { statusReason: reason } : {};
 }

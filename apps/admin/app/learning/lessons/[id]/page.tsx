@@ -33,6 +33,7 @@ export default function LearningLessonPage() {
             lessonId={id}
             transport={learningAdminTransport}
             providerLabels={providerLabels}
+            rulesHref={(kind, scopeId) => `/learning/rules/${kind}/${scopeId}`}
           />
         </div>
       </AppShell>

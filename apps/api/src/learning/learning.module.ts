@@ -1,16 +1,26 @@
-import { Inject, Module, type OnModuleInit } from "@nestjs/common";
+import {
+  Inject,
+  Logger,
+  Module,
+  type OnApplicationBootstrap,
+  type OnModuleInit,
+} from "@nestjs/common";
 import { type DrizzleHandle, learningSteps } from "@ds/db";
 import {
   LearningAdminService,
   LearningDoctorService,
   LearningEventBus,
+  resumeRuleChanges,
   type LearningServerDeps,
 } from "@ds/learning/server";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { PointsEngine } from "../points/engine/points-engine.service.js";
 import { PointsModule } from "../points/points.module.js";
-import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage.types.js";
+import {
+  OBJECT_STORAGE,
+  type ObjectStorage,
+} from "../storage/storage.types.js";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { LearningAdminController } from "./learning.admin.controller.js";
@@ -66,13 +76,39 @@ export const LEARNING_DEPS = Symbol("LEARNING_DEPS");
   ],
   exports: [LearningDoctorService],
 })
-export class LearningModule implements OnModuleInit {
+export class LearningModule implements OnModuleInit, OnApplicationBootstrap {
+  private readonly logger = new Logger(LearningModule.name);
+
   constructor(
     @Inject(MediaSlotRegistry) private readonly slots: MediaSlotRegistry,
+    @Inject(LEARNING_DEPS) private readonly deps: LearningServerDeps,
   ) {}
 
   /** `learning_steps.media_ref` is a 012 media slot: both sweeps must see it before any cron runs (#3572). */
   onModuleInit(): void {
     this.slots.register(learningSteps.mediaRef);
+  }
+
+  /**
+   * 024 EARS-31 — resume every rule change whose after-commit recompute was
+   * interrupted (`recomputed_at` NULL). The recompute is the idempotent
+   * projection diff; reads compute live meanwhile, so it runs in the
+   * background and never delays boot.
+   */
+  onApplicationBootstrap(): void {
+    void resumeRuleChanges(this.deps, undefined, (id, err) =>
+      this.logger.error(
+        `learning rule change ${id} recompute failed, left for the next resume: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    ).then(
+      (n) => {
+        if (n > 0)
+          this.logger.log(`resumed ${n} learning rule change recompute(s)`);
+      },
+      (err: unknown) =>
+        this.logger.error(
+          `learning rule change resume failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+    );
   }
 }

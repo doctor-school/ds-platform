@@ -102,6 +102,10 @@ export const GOLDEN_GROUP = Object.freeze({
   pointsAccounts: 0x0021,
   pointsPostings: 0x0022,
   pointsRuns: 0x0023,
+  // 024 EARS-24, EARS-29–31 (#4012) — the submitted attempts on the long paths.
+  learningAttempts: 0x0024,
+  // 024 EARS-31 (#4012) — the past rule change on the 30-module path.
+  learningRuleChanges: 0x0025,
 });
 
 /**

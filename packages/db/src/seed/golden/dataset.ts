@@ -62,6 +62,7 @@ import {
   type GoldenCongressVolume,
 } from "./congress-volume.js";
 import { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
+import { buildGoldenLearners } from "./learning-results.js";
 import {
   buildGoldenPointsLedger,
   type GoldenPointsLedger,
@@ -171,6 +172,11 @@ export interface GoldenDataset {
   learningOptions: GoldenLearning["learningOptions"];
   learningRuleLayers: (GoldenLearningPresetLayer | GoldenLearningOwnLayer)[];
   learningFacts: GoldenLearningVolume["learningFacts"];
+  /** #4012 — the long paths' submitted attempts and their status projection. */
+  learningAttempts: GoldenLearningVolume["learningAttempts"];
+  learningNodeStatus: GoldenLearningVolume["learningNodeStatus"];
+  /** #4012 — the past rule change on the 30-module path (024 EARS-31). */
+  learningRuleChanges: GoldenLearningVolume["learningRuleChanges"];
   /** #4172 — the golden doctors' attention-points accruals (`points-ledger.ts`). */
   pointsLedger: GoldenPointsLedger;
 }
@@ -240,6 +246,7 @@ export function buildGoldenDataset(
   // the catalogue rows keep their ids, their offsets and their position, so a
   // scenario compiled against the named dataset sees exactly what it saw before.
   const volume = buildGoldenVolume(now);
+  const learners = buildGoldenLearners(now);
   // #4172 — the congresses at volume, their registrants, submissions and marks.
   const congressVolume = buildGoldenCongressVolume(now, volume);
 
@@ -292,6 +299,8 @@ export function buildGoldenDataset(
       }),
     ),
     ...volume.users,
+    // #4012 — the non-login learners of the 30-module course's results.
+    ...learners.users,
   ];
   if (committeeSubject) {
     users.push(
@@ -780,6 +789,7 @@ export function buildGoldenDataset(
       })),
     ),
     ...volume.consentRecords,
+    ...learners.consentRecords,
   ];
 
   const doctorSpecialties: GoldenDoctorSpecialtyLink[] = [
@@ -805,6 +815,7 @@ export function buildGoldenDataset(
       updatedAt: created,
     })),
     ...volume.doctorSpecialties,
+    ...learners.doctorSpecialties,
   ];
 
   // The taxonomy top-level rows are authored wholly in the catalogue
@@ -1013,7 +1024,8 @@ export function buildGoldenDataset(
     ...withPointsLedger(
       mergeGoldenLearning(
         buildGoldenLearning(created),
-        buildGoldenLearningVolume(created),
+        // The past rule change was saved by the golden admin (its IdP subject).
+        buildGoldenLearningVolume(created, subjectOf("admin")),
       ),
       at({ days: -75 }),
     ),
@@ -1047,6 +1059,9 @@ function mergeGoldenLearning(
   | "learningOptions"
   | "learningRuleLayers"
   | "learningFacts"
+  | "learningAttempts"
+  | "learningNodeStatus"
+  | "learningRuleChanges"
 > {
   return {
     learningSchools: [...course.learningSchools, ...volume.learningSchools],
@@ -1065,6 +1080,9 @@ function mergeGoldenLearning(
       ...volume.learningOwnRuleLayers,
     ],
     learningFacts: volume.learningFacts,
+    learningAttempts: volume.learningAttempts,
+    learningNodeStatus: volume.learningNodeStatus,
+    learningRuleChanges: volume.learningRuleChanges,
   };
 }
 

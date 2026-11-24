@@ -46,6 +46,27 @@ export class LearningLayers {
     return this.byScope.get(`${kind}:${id}`);
   }
 
+  /**
+   * EARS-31 — these layers with one scope's own values replaced: the «new
+   * rules» a rule change is evaluated under before anything is written.
+   */
+  withValues(
+    kind: LearningScopeKind,
+    id: string,
+    values: LearningLayer["values"],
+  ): LearningLayers {
+    const current = this.byScope.get(`${kind}:${id}`);
+    const next = new LearningLayers(this.byScope.values());
+    next.byScope.set(`${kind}:${id}`, {
+      scopeKind: kind,
+      scopeId: id,
+      preset: current?.preset ?? null,
+      ...(current?.presetValues ? { presetValues: current.presetValues } : {}),
+      values,
+    });
+    return next;
+  }
+
   /** EARS-5 — value, source level and preset of `key` at `path`. */
   resolve<K extends LearningSettingKey>(
     key: K,

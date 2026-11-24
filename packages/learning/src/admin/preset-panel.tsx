@@ -11,31 +11,67 @@ import {
   Radio,
 } from "@ds/design-system";
 import type {
+  LearningEarnedProgress,
   LearningPreset,
+  LearningRuleChangePreview,
   LearningScopeRules,
   LearningSettingKey,
 } from "@ds/schemas";
 
 import {
   ADMIN_COPY as C,
+  RULES_COPY as R,
   SETTING_LABEL,
   settingValueInWords,
 } from "./admin-copy";
-import { isStale, refusedFieldLines } from "./refusals";
+import { readOnlyReason } from "./authority";
+import { authorityRefusal, isStale, refusedFieldLines } from "./refusals";
+import { RuleChangeDialog } from "./rule-change-dialog";
+import { settingValues } from "./setting-values";
 import type { LearningAdminTransport } from "./transport";
 
 // 024 EARS-29 slice 1 — «Применить пресет» on a course: the presets are the
 // API's data (`GET /v1/admin/learning/presets`), each shown with the settings
 // it sets in words; applying one writes the course layer under its version and
-// keeps every lower override (EARS-9, server-proven). The per-setting editor is
-// the rules editor's (#4012).
+// keeps every lower override (EARS-9, server-proven). On a school too (the
+// rules editor's school scope); a staff member without the scope's authority
+// (EARS-30) sees the choice read-only, and a 403 is named.
 
 export function PresetPanel({
-  courseId,
+  scopeKind,
+  scopeId,
   transport,
+  readOnly = false,
+  staffRoles,
+  heldByDraft = false,
+  current,
+  onApplied,
 }: {
-  courseId: string;
+  scopeKind: "school" | "course";
+  scopeId: string;
   transport: LearningAdminTransport;
+  /** EARS-30 — the staff member may not change this scope: the choice is shown, not offered. */
+  readOnly?: boolean;
+  /**
+   * EARS-30 — the signed-in staff member's roles, on a screen that does not
+   * decide read-only itself (the course screen): without the scope's
+   * authority the choice is shown read-only with the reason; null while the
+   * roles are still being read (the choice is not offered yet).
+   */
+  staffRoles?: readonly string[] | null;
+  /**
+   * The screen holds unsaved edits of this scope's settings: an apply would
+   * replace the layer under them, so it waits until they are saved or discarded.
+   */
+  heldByDraft?: boolean;
+  /**
+   * The scope's rules as the screen shows them, when the screen also saves
+   * them: a preset applied after that save previews over the saved values and
+   * applies under the saved version, not the one this panel first read.
+   */
+  current?: LearningScopeRules;
+  /** The scope's rules after an apply, for a screen that shows them too. */
+  onApplied?: (rules: LearningScopeRules) => void;
 }) {
   const [presets, setPresets] = useState<LearningPreset[] | null>(null);
   const [rules, setRules] = useState<LearningScopeRules | null>(null);
@@ -43,10 +79,13 @@ export function PresetPanel({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [refused, setRefused] = useState<string[] | null>(null);
+  const [preview, setPreview] = useState<LearningRuleChangePreview | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;
-    void Promise.all([transport.presets(), transport.rules("course", courseId)])
+    void Promise.all([transport.presets(), transport.rules(scopeKind, scopeId)])
       .then(([p, r]) => {
         if (!live) return;
         setPresets(p);
@@ -59,31 +98,73 @@ export function PresetPanel({
     return () => {
       live = false;
     };
-  }, [courseId, transport]);
+  }, [scopeKind, scopeId, transport]);
 
-  async function apply() {
+  useEffect(() => {
+    if (current) setRules(current);
+  }, [current]);
+
+  const reason =
+    staffRoles && rules
+      ? readOnlyReason(scopeKind, rules.authority, staffRoles)
+      : null;
+  const locked = readOnly || staffRoles === null || reason !== null;
+
+  // EARS-31 — on a scope a once-published course resolves through, the apply
+  // is a rule change: the preset's values over the layer's own (024-design §3)
+  // go to the preview first, and the dialog's choice rides the apply.
+  async function start() {
     const preset = presets?.find((p) => p.id === chosen);
     if (!preset || !rules) return;
-    setBusy(true);
     setDone(null);
     setRefused(null);
+    if (rules.authority !== "rules-editor") return apply(undefined);
+    setBusy(true);
     try {
-      setRules(
-        await transport.applyPreset(
-          "course",
-          courseId,
-          preset.id,
-          rules.layerVersion,
-        ),
+      setPreview(
+        await transport.previewRules(scopeKind, scopeId, {
+          ...settingValues(rules.values),
+          ...settingValues(preset.values),
+        }),
       );
-      setDone(C.presetDone(preset.name));
+    } catch (error) {
+      setRefused([authorityRefusal(error, scopeKind) ?? R.previewFailed]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply(earned: LearningEarnedProgress | undefined) {
+    const preset = presets?.find((p) => p.id === chosen);
+    setPreview(null);
+    if (!preset || !rules) return;
+    setBusy(true);
+    try {
+      const applied = earned
+        ? await transport.applyPreset(
+            scopeKind,
+            scopeId,
+            preset.id,
+            rules.layerVersion,
+            earned,
+          )
+        : await transport.applyPreset(
+            scopeKind,
+            scopeId,
+            preset.id,
+            rules.layerVersion,
+          );
+      setRules(applied);
+      onApplied?.(applied);
+      setDone(C.presetDone(preset.name, scopeKind));
     } catch (error) {
       if (isStale(error)) {
         setRefused([C.stale]);
-        setRules(await transport.rules("course", courseId).catch(() => rules));
+        setRules(await transport.rules(scopeKind, scopeId).catch(() => rules));
       } else {
         const lines = refusedFieldLines(error);
-        setRefused(lines.length > 0 ? lines : [C.failed]);
+        const reason = authorityRefusal(error, scopeKind);
+        setRefused(reason ? [reason] : lines.length > 0 ? lines : [C.failed]);
       }
     } finally {
       setBusy(false);
@@ -111,6 +192,11 @@ export function PresetPanel({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
+            {reason ? (
+              <Alert variant="info" data-testid="rules-read-only">
+                {reason}
+              </Alert>
+            ) : null}
             {done ? <Alert variant="success">{done}</Alert> : null}
             {refused ? (
               <Alert variant="danger" data-testid="write-refusal">
@@ -136,6 +222,7 @@ export function PresetPanel({
                     name="course-preset"
                     value={preset.id}
                     checked={chosen === preset.id}
+                    disabled={locked}
                     onChange={() => setChosen(preset.id)}
                   >
                     <span className="font-bold text-foreground">
@@ -157,17 +244,27 @@ export function PresetPanel({
                 </div>
               ))}
             </fieldset>
-            <div>
+            <div className="flex flex-col items-start gap-2">
               <Button
-                disabled={busy || !chosen || !rules}
-                onClick={() => void apply()}
+                disabled={locked || heldByDraft || busy || !chosen || !rules}
+                onClick={() => void start()}
               >
                 {C.applyPreset}
               </Button>
+              {heldByDraft && !locked ? (
+                <p className="text-sm text-muted-foreground">
+                  {R.presetHeldByDraft}
+                </p>
+              ) : null}
             </div>
           </div>
         </CardContent>
       </Card>
+      <RuleChangeDialog
+        preview={preview}
+        onCancel={() => setPreview(null)}
+        onConfirm={(earned) => void apply(earned)}
+      />
     </section>
   );
 }

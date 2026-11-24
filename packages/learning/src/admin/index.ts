@@ -11,3 +11,7 @@ export {
 } from "./course-composition";
 export { PresetPanel } from "./preset-panel";
 export { SETTING_LABEL, settingValueInWords, ruleInWords } from "./admin-copy";
+export {
+  RulesEditorScreen,
+  type RulesEditorScreenProps,
+} from "./rules-editor";

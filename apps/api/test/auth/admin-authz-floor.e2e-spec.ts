@@ -61,7 +61,8 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
   // `platform_admin` flow. Admission to the admin ORIGIN is not reach: what a
   // registrar may then do is the per-route classification below. 046 EARS-26
   // adds `congress-program-committee` to the same policy (TOTP) on the same terms;
-  // 049 EARS-1 adds `broadcast_director` and `superadmin` likewise.
+  // 049 EARS-1 adds `broadcast_director` and `superadmin` likewise; 024 EARS-30
+  // (#4012) adds `learning_rules_editor` (TOTP) on the same terms.
   "POST /v1/admin/auth/mfa/enroll/start": {
     access: "pending-auth",
     roles: [
@@ -69,6 +70,7 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
       "event-registrar",
       "congress-program-committee",
       "broadcast_director",
+      "learning_rules_editor",
       "superadmin",
     ],
   },
@@ -79,6 +81,7 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
       "event-registrar",
       "congress-program-committee",
       "broadcast_director",
+      "learning_rules_editor",
       "superadmin",
     ],
   },
@@ -89,6 +92,7 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
       "event-registrar",
       "congress-program-committee",
       "broadcast_director",
+      "learning_rules_editor",
       "superadmin",
     ],
   },
@@ -155,6 +159,33 @@ const DIRECTOR_REACH_ROUTES: Record<string, string[]> = Object.fromEntries(
   ]),
 );
 
+/**
+ * 024 EARS-30 (#4012) — the authority split of the learning admin API. The
+ * rules rows admit the course editors AND the rules editor (which of the two a
+ * scope takes is the handler's per-scope check); the presets are the rules
+ * editor's alone — `platform_admin` does not imply it (049 pattern: no implicit
+ * hierarchy). The per-scope admission and refusal are proven in
+ * `apps/api/test/learning/learning-rules.e2e-spec.ts`.
+ */
+const PRESETS_ONLY = new Set([
+  "GET /v1/admin/learning/presets/:id",
+  "PUT /v1/admin/learning/presets/:id",
+]);
+const LEARNING_RULES_ROUTES: Record<string, string[]> = {
+  ...Object.fromEntries(
+    [
+      "GET /v1/admin/learning/presets",
+      "GET /v1/admin/learning/rules/:scopeKind/:scopeId",
+      "PUT /v1/admin/learning/rules/:scopeKind/:scopeId",
+      "POST /v1/admin/learning/rules/:scopeKind/:scopeId/preview",
+      "POST /v1/admin/learning/rules/:scopeKind/:scopeId/apply-preset",
+    ].map((endpoint) => [endpoint, ["platform_admin", "learning_rules_editor"]]),
+  ),
+  ...Object.fromEntries(
+    [...PRESETS_ONLY].map((endpoint) => [endpoint, ["learning_rules_editor"]]),
+  ),
+};
+
 const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
   "GET /v1/admin/auth/session": [
@@ -162,6 +193,7 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "event-registrar",
     "congress-program-committee",
     "broadcast_director",
+    "learning_rules_editor",
     "superadmin",
   ],
   "POST /v1/admin/auth/logout": [
@@ -169,6 +201,7 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "event-registrar",
     "congress-program-committee",
     "broadcast_director",
+    "learning_rules_editor",
     "superadmin",
   ],
   // 047 EARS-8 — re-verifying one's own second factor inside the session, for
@@ -179,6 +212,7 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "event-registrar",
     "congress-program-committee",
     "broadcast_director",
+    "learning_rules_editor",
     "superadmin",
   ],
   // 044 EARS-18 — the congress roster read, the working surface the role
@@ -224,6 +258,7 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // `apps/api/test/staff-access/staff-access.e2e-spec.ts`.
   ...SUPERADMIN_ONLY_ROUTES,
   ...DIRECTOR_REACH_ROUTES,
+  ...LEARNING_RULES_ROUTES,
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */
@@ -1168,8 +1203,13 @@ const FLOOR_ROUTES: {
       ["PUT", "/v1/admin/learning/steps/:id/source", `/v1/admin/learning/steps/${ABSENT_ID}/source`],
       ["PUT", "/v1/admin/learning/steps/:id/media", `/v1/admin/learning/steps/${ABSENT_ID}/media`],
       ["GET", "/v1/admin/learning/presets", "/v1/admin/learning/presets"],
+      // 024 EARS-9/30 (#4012) — one preset's read and edit.
+      ["GET", "/v1/admin/learning/presets/:id", `/v1/admin/learning/presets/${ABSENT_ID}`],
+      ["PUT", "/v1/admin/learning/presets/:id", `/v1/admin/learning/presets/${ABSENT_ID}`],
       ["GET", "/v1/admin/learning/rules/:scopeKind/:scopeId", `/v1/admin/learning/rules/course/${ABSENT_ID}`],
       ["PUT", "/v1/admin/learning/rules/:scopeKind/:scopeId", `/v1/admin/learning/rules/course/${ABSENT_ID}`],
+      // 024 EARS-31 (#4012) — the rule-change preview.
+      ["POST", "/v1/admin/learning/rules/:scopeKind/:scopeId/preview", `/v1/admin/learning/rules/course/${ABSENT_ID}/preview`],
       ["POST", "/v1/admin/learning/rules/:scopeKind/:scopeId/apply-preset", `/v1/admin/learning/rules/course/${ABSENT_ID}/apply-preset`],
     ] as const
   ).map(([method, path, url]) => ({
@@ -1243,7 +1283,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function registerAdmin(
       prefix: string,
-      superadmin = false,
+      extraRoles: readonly string[] = [],
     ): Promise<{
       email: string;
       sub: string;
@@ -1251,23 +1291,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const identity = await registerUser(prefix);
       await fake.grantProjectRole(
         identity.sub,
-        superadmin ? ["platform_admin", "superadmin"] : "platform_admin",
+        extraRoles.length > 0 ? ["platform_admin", ...extraRoles] : "platform_admin",
       );
       return identity;
     }
 
     /**
      * Headers for an established, MFA-verified admin session (the allowed
-     * principal) — a superadministrator (049 EARS-3) when `superadmin`.
+     * principal), additionally holding `extraRoles` — `superadmin` (049 EARS-3)
+     * or `learning_rules_editor` (024 EARS-30) for the rows only they reach.
      */
     async function adminHeadersFor(
       prefix: string,
-      superadmin = false,
+      extraRoles: readonly string[] = [],
     ): Promise<{
       headers: Record<string, string>;
       sub: string;
     }> {
-      const { email, sub } = await registerAdmin(prefix, superadmin);
+      const { email, sub } = await registerAdmin(prefix, extraRoles);
       const handle = await establishAdminSession(app, {
         identifier: email,
         password,
@@ -1519,10 +1560,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // A fresh session per route: `logout` consumes the one it is given, so
         // reusing one session would make later routes fail for reasons that are
         // not the floor.
-        // A superadministrator for the `[superadmin]` rows (049 EARS-3).
+        // A superadministrator for the `[superadmin]` rows (049 EARS-3); a
+        // rules editor for the presets rows only it reaches (024 EARS-30).
         const { headers } = await adminHeadersFor(
           "ok",
-          SUPERADMIN_ONLY.has(route.endpoint),
+          SUPERADMIN_ONLY.has(route.endpoint)
+            ? ["superadmin"]
+            : PRESETS_ONLY.has(route.endpoint)
+              ? ["learning_rules_editor"]
+              : [],
         );
         const res = await app.inject({
           method: route.method,

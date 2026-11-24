@@ -1,0 +1,2 @@
+ALTER TABLE "learning_node_status" ADD COLUMN "reason_rule_change_id" uuid;--> statement-breakpoint
+ALTER TABLE "learning_node_status" ADD CONSTRAINT "learning_node_status_reason_rule_change_id_learning_rule_changes_id_fk" FOREIGN KEY ("reason_rule_change_id") REFERENCES "public"."learning_rule_changes"("id") ON DELETE no action ON UPDATE no action;

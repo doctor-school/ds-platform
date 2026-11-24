@@ -29,6 +29,7 @@
 import type {
   learningCourses,
   learningFacts,
+  learningRuleChanges,
   learningLessons,
   learningModules,
   learningOptions,
@@ -50,6 +51,18 @@ import {
   GOLDEN_COURSE_MEMO_KEY,
 } from "./learning.js";
 import { buildGoldenLearningPathVolume } from "./learning-path-volume.js";
+import {
+  buildGoldenLearningResults,
+  GOLDEN_LEARNING_PATH_PASS_MARK,
+  type GoldenLearningResults,
+} from "./learning-results.js";
+
+/** #4012 — the long path whose pass mark a rules editor once changed: the 30-module course. */
+export const GOLDEN_RULE_CHANGE_COURSE = 1;
+/** The 30-module course's pass mark before that change. */
+export const GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK = 40;
+/** The change's day after the dataset's creation: after every seeded result (days 45–65). */
+export const GOLDEN_RULE_CHANGE_DAY = 70;
 import { goldenDirectionId, goldenPartnerId } from "./volume.js";
 
 /** A course rule layer with its own values and no preset (`setLayerValues`). */
@@ -58,6 +71,8 @@ export interface GoldenLearningOwnLayer {
   scopeKind: "course";
   scopeId: string;
   values: Record<string, unknown>;
+  /** The layer's optimistic version; 1 unless a rule change rewrote it. */
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -298,10 +313,18 @@ export interface GoldenLearningVolume {
   learningOptions: (typeof learningOptions.$inferInsert)[];
   learningOwnRuleLayers: GoldenLearningOwnLayer[];
   learningFacts: (typeof learningFacts.$inferInsert)[];
+  /** #4012 — the submitted attempts and the projection of the long paths' results. */
+  learningAttempts: GoldenLearningResults["learningAttempts"];
+  learningNodeStatus: GoldenLearningResults["learningNodeStatus"];
+  /** #4012 — the past rule change on the 30-module path (024 EARS-31). */
+  learningRuleChanges: (typeof learningRuleChanges.$inferInsert)[];
 }
 
 /** Builds the volume schools and the golden doctor's facts; `created` is the dataset's creation instant. */
-export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
+export function buildGoldenLearningVolume(
+  created: Date,
+  ruleEditorSub: string | null = null,
+): GoldenLearningVolume {
   const projectId = golden.projects.publishedSchool.id;
   const stamps = { version: 1, createdAt: created, updatedAt: created };
   const memoBytes = goldenCourseMemoPdf().byteLength;
@@ -316,6 +339,9 @@ export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
     learningOptions: [],
     learningOwnRuleLayers: [],
     learningFacts: [],
+    learningAttempts: [],
+    learningNodeStatus: [],
+    learningRuleChanges: [],
   };
   const doctors = golden.workerPool.verifiedCardiologist;
   const factAt = (day: number) =>
@@ -359,6 +385,8 @@ export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
         partnerOrganisationId:
           c % 7 === 3 ? goldenPartnerId((v * 7 + c) % 11) : null,
         position: c + 1,
+        // Published when created, before any doctor reached it (024 EARS-30).
+        firstPublishedAt: created,
         ...stamps,
       });
       out.learningModules.push({
@@ -493,17 +521,53 @@ export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
   out.learningQuestions.push(...path.learningQuestions);
   out.learningOptions.push(...path.learningOptions);
   path.ownLayerCourseIds.forEach((courseId, c) => {
+    // #4012 — a 50 % pass mark, so a raise to 80 % re-judges results.
+    const values = {
+      ...(structuredClone(GOLDEN_VOLUME_COURSE_RULES) as Record<
+        string,
+        unknown
+      >),
+      "test.threshold": GOLDEN_LEARNING_PATH_PASS_MARK,
+    };
+    const changed = c === GOLDEN_RULE_CHANGE_COURSE;
+    const changedAt = new Date(
+      created.getTime() + GOLDEN_RULE_CHANGE_DAY * 86_400_000,
+    );
     out.learningOwnRuleLayers.push({
       id: goldenUuid(GOLDEN_GROUP.learningRuleLayers, 5001 + c),
       scopeKind: "course",
       scopeId: courseId,
-      values: structuredClone(GOLDEN_VOLUME_COURSE_RULES) as Record<
-        string,
-        unknown
-      >,
+      values,
+      // The rule change below rewrote this layer: `writeLayer` bumps the version.
+      ...(changed ? { version: 2 } : {}),
       createdAt: created,
-      updatedAt: created,
+      updatedAt: changed ? changedAt : created,
+    });
+    if (!changed) return;
+    // 024 EARS-31 — the record `recordRuleChange` writes when a rules editor
+    // raised the 30-module course's pass mark from 40 % to 50 % with «Сохранить
+    // пройденное», after its 200 doctors had submitted: every seeded score is
+    // 50 % or 100 %, so nothing done stopped being done — no `completion-kept`
+    // fact, no status the recompute moved (it names no lesson's reason) — and
+    // the recompute finished (`recomputed_at`). The owner's live raise on the
+    // 12-module course is untouched, and 50 → 80 here still re-judges all 200.
+    out.learningRuleChanges.push({
+      id: goldenUuid(GOLDEN_GROUP.learningRuleChanges, 4_012_000),
+      scopeKind: "course",
+      scopeId: courseId,
+      before: { ...values, "test.threshold": GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK },
+      after: structuredClone(values),
+      earnedProgress: "keep",
+      actorSub: ruleEditorSub,
+      at: changedAt,
+      // 200 doctors recomputed in batches of 50: a few seconds after the save.
+      recomputedAt: new Date(changedAt.getTime() + 4_000),
     });
   });
+  // #4012 — the long paths' submitted results, after every fact above.
+  const results = buildGoldenLearningResults(created, path);
+  out.learningFacts.push(...results.learningFacts);
+  out.learningAttempts.push(...results.learningAttempts);
+  out.learningNodeStatus.push(...results.learningNodeStatus);
   return out;
 }

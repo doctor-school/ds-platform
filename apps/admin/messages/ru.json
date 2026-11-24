@@ -2043,6 +2043,7 @@
       "event-registrar": "Администратор Конгресса",
       "congress-program-committee": "Программный комитет",
       "broadcast_director": "Режиссёр трансляций",
+      "learning_rules_editor": "Редактор правил обучения",
       "superadmin": "Суперадминистратор"
     },
     "grant": {
@@ -2329,6 +2330,7 @@
   "learning": {
     "listTitle": "Обучение",
     "listDescription": "Курсы платформы. Откройте курс, чтобы собрать уроки его модулей и выбрать пресет правил.",
+    "platformRules": "Правила платформы и пресеты",
     "tableCaption": "Курсы",
     "searchLabel": "Поиск курса",
     "searchPlaceholder": "Название или адрес курса",
@@ -2343,7 +2345,8 @@
     "empty": "Курсов пока нет.",
     "emptyDescription": "Курс появится здесь, как только его создадут.",
     "errors": {
-      "listFailed": "Не удалось загрузить курсы."
+      "listFailed": "Не удалось загрузить курсы.",
+      "unknownScope": "Такого уровня правил нет."
     },
     "backToList": "← К курсам"
   }

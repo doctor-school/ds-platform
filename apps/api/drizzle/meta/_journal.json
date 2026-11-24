@@ -477,6 +477,34 @@
       "when": 1795149304591,
       "tag": "0067_023_school_course_data",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795403148897,
+      "tag": "0068_024_rule_change_recompute",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795404430968,
+      "tag": "0069_024_course_first_published",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1795438003828,
+      "tag": "0070_024_status_reason_anchor",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795441274270,
+      "tag": "0071_024_status_reason_while_locked",
+      "breakpoints": true
     }
   ]
 }

@@ -40,6 +40,7 @@ export interface GoldenIdpAccount {
   roleKeys: readonly (
     | "doctor_guest"
     | "platform_admin"
+    | "learning_rules_editor"
     | "event-registrar"
     | "congress-program-committee"
   )[];
@@ -118,7 +119,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "admin" as GoldenAccountKey,
     username: "golden.admin@example.test",
     role: "platform_admin" as const,
-    roleKeys: ["doctor_guest", "platform_admin"] as const,
+    roleKeys: ["doctor_guest", "platform_admin", "learning_rules_editor"] as const,
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,

@@ -70,9 +70,10 @@ POST_LOGOUT_URIS="${IDP_POST_LOGOUT_URIS:-http://localhost:3000,http://localhost
 # committee role (046 EARS-26) the submission registry/card/status routes
 # authorize on; `superadmin` (the superadministrator, always held beside
 # `platform_admin`) and `broadcast_director` (the global broadcast director) are
-# the 049 staff roles (049 EARS-1, EARS-2). Seeding the KEY costs nothing until a
+# the 049 staff roles (049 EARS-1, EARS-2); `learning_rules_editor` is the 024
+# rules editor (024 EARS-30). Seeding the KEY costs nothing until a
 # user is granted it.
-SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest,platform_admin,event-registrar,congress-program-committee,superadmin,broadcast_director}"
+SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest,platform_admin,event-registrar,congress-program-committee,superadmin,broadcast_director,learning_rules_editor}"
 
 # Delivery-mode flags (#176) — switch Zitadel's email/SMS providers between the
 # free dev sinks (default) and the REAL providers, the env-flag precedent of

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { StreamProviderSchema } from "../events/events.schema.js";
-import { LearningElementTypeSchema } from "./settings.js";
+import {
+  LEARNING_SETTING_KEYS,
+  LearningElementTypeSchema,
+  LearningScopeKindSchema,
+  type LearningSettingKey,
+} from "./settings.js";
 import {
   LearningDocumentKindSchema,
   LearningSchoolFactSchema,
@@ -31,6 +36,38 @@ export const LearningNodeStateSchema = z.discriminatedUnion("status", [
 ]);
 export type LearningNodeState = z.infer<typeof LearningNodeStateSchema>;
 export type LearningNodeStatus = LearningNodeState["status"];
+
+/**
+ * EARS-24 — why a lesson's status changed under the doctor: the rule change
+ * (EARS-31) that changed it, structured for the UI's sentence builder — what
+ * changed (each setting of the changed scope, before → after; `null` = not set
+ * there, inherited) and what is needed now (the new status and the lesson's
+ * completion sentence under the new rules). Present only WHILE the lesson's
+ * status was last changed by a rule change: the doctor's next completion
+ * clears it, and no fact of the doctor changes.
+ */
+export const LearningStatusReasonSchema = z.strictObject({
+  ruleChangeId: z.uuid(),
+  at: z.iso.datetime(),
+  scope: z.strictObject({
+    kind: LearningScopeKindSchema,
+    id: z.string(),
+  }),
+  changed: z.array(
+    z.strictObject({
+      key: z.enum(
+        LEARNING_SETTING_KEYS as [LearningSettingKey, ...LearningSettingKey[]],
+      ),
+      before: z.unknown(),
+      after: z.unknown(),
+    }),
+  ),
+  needed: z.strictObject({
+    status: z.enum(["done", "current", "open", "locked", "test-out-reachable"]),
+    completionSentence: z.string(),
+  }),
+});
+export type LearningStatusReason = z.infer<typeof LearningStatusReasonSchema>;
 
 // ── The course path (EARS-13) ───────────────────────────────────────────────
 
@@ -74,6 +111,8 @@ export const LearningPathLessonSchema = z.strictObject({
   durationMin: z.number().int(),
   stepCount: z.number().int(),
   state: LearningNodeStateSchema,
+  /** EARS-24 — present WHILE the status was last changed by a rule change. */
+  statusReason: LearningStatusReasonSchema.optional(),
   steps: z.array(LearningPathStepSchema),
 });
 export type LearningPathLesson = z.infer<typeof LearningPathLessonSchema>;
@@ -159,7 +198,9 @@ export const LearningCourseProgressSchema = z.enum([
   "started",
   "done",
 ]);
-export type LearningCourseProgress = z.infer<typeof LearningCourseProgressSchema>;
+export type LearningCourseProgress = z.infer<
+  typeof LearningCourseProgressSchema
+>;
 
 /** 023 EARS-3 — one published course of the school, in school order. */
 export const LearningSchoolCourseSchema = z.strictObject({
@@ -230,6 +271,8 @@ export const LearningLessonReadSchema = z.strictObject({
     durationMin: z.number().int(),
     stepCount: z.number().int(),
     state: LearningNodeStateSchema,
+    /** EARS-24 — present WHILE the status was last changed by a rule change. */
+    statusReason: LearningStatusReasonSchema.optional(),
     completionSentence: z.string(),
     /** 023 EARS-21 — the lesson's first step on the path, so any lesson link opens the 024 step route; null without one. */
     firstStepId: z.uuid().nullable(),

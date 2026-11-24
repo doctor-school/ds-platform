@@ -54,6 +54,24 @@ const change = (
   fireEvent.change(within(root).getByLabelText(label), { target: { value } });
 
 describe("LessonCompositionScreen", () => {
+  it("EARS-29: links to the rules editor of the lesson and of each step", async () => {
+    render(
+      <LessonCompositionScreen
+        lessonId={AID.lesson}
+        transport={fakeTransport()}
+        providerLabels={PROVIDERS}
+        rulesHref={(kind, id) => `/learning/rules/${kind}/${id}`}
+      />,
+    );
+    expect(
+      await screen.findByRole("link", { name: "Правила урока" }),
+    ).toHaveAttribute("href", `/learning/rules/lesson/${AID.lesson}`);
+    expect(screen.getByRole("link", { name: "Правила шага 2" })).toHaveAttribute(
+      "href",
+      `/learning/rules/step/${AID.s2}`,
+    );
+  });
+
   it("EARS-28: shows the lesson, its state, its total duration and its steps in order", async () => {
     mount();
     expect(

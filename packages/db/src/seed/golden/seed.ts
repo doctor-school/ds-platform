@@ -8,6 +8,7 @@ import {
   and,
   eq,
   getTableColumns,
+  getTableName,
   gte,
   inArray,
   lte,
@@ -318,6 +319,13 @@ async function adoptMirroredGoldenIdentities(
   }
 }
 
+/**
+ * The bind parameters one statement may carry (the Postgres wire protocol's
+ * 16-bit count): a step whose rows would carry more is written in several
+ * INSERTs of the same transaction.
+ */
+export const GOLDEN_MAX_BIND_PARAMS = 65_535;
+
 /** Executes one planned step as an idempotent upsert. */
 export async function applyGoldenStep(
   tx: GoldenExecutor,
@@ -346,14 +354,34 @@ export async function applyGoldenStep(
     }
     set[key] = sql.raw(`excluded."${column.name}"`);
   }
+  for (const key of step.fillKeys) {
+    const column = columns[key];
+    if (!column) {
+      throw new GoldenPlanError(
+        `${step.name}: fill key "${key}" is not a column of the table`,
+      );
+    }
+    set[key] = sql.raw(
+      `coalesce("${getTableName(step.table)}"."${column.name}", excluded."${column.name}")`,
+    );
+  }
 
   // A key-only row (a link table such as `organisation_role_assignments`)
   // has no column to refresh: `ON CONFLICT DO UPDATE` needs a non-empty SET,
   // and a re-run of such a row is a no-op on its conflict target.
-  const insert = tx.insert(step.table).values(step.rows);
-  await (Object.keys(set).length === 0
-    ? insert.onConflictDoNothing({ target })
-    : insert.onConflictDoUpdate({ target, set }));
+  // Every row binds at most one parameter per column of the table.
+  const perStatement = Math.max(
+    1,
+    Math.floor(GOLDEN_MAX_BIND_PARAMS / Object.keys(columns).length),
+  );
+  for (let i = 0; i < step.rows.length; i += perStatement) {
+    const insert = tx
+      .insert(step.table)
+      .values(step.rows.slice(i, i + perStatement));
+    await (Object.keys(set).length === 0
+      ? insert.onConflictDoNothing({ target })
+      : insert.onConflictDoUpdate({ target, set }));
+  }
   return step.rows.length;
 }
 

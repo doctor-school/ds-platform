@@ -35,7 +35,10 @@ import type { LearningServerDeps } from "@ds/learning/server";
 // exercise the same writes the admin screens will.
 
 export const PASSWORD = "Aa1!ufficiently-long-pw";
-export const DEVICE = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+export const DEVICE = {
+  "user-agent": "AdminTest/1.0",
+  "accept-language": "en-US",
+};
 const CONSENT = [{ purpose: "tos", version: "2026-01" }];
 
 export interface Problem {
@@ -94,6 +97,10 @@ export async function bootHarness(): Promise<Harness> {
     consent: CONSENT,
   });
   await fake.grantProjectRole(sub, "platform_admin");
+  // 024 EARS-30 — the suites' default staff member also edits learning rules
+  // (published courses, the platform layer, the presets); `staffSession` makes
+  // the single-role members the access tests compare.
+  await fake.grantProjectRole(sub, "learning_rules_editor");
   const { sid } = await establishAdminSession(app, {
     identifier: email,
     password: PASSWORD,
@@ -109,6 +116,28 @@ export async function bootHarness(): Promise<Harness> {
     },
     close: () => app.close(),
   };
+}
+
+/** A staff member holding exactly `roles` (fake IdP), signed in to the admin: its sid. */
+export async function staffSession(
+  h: Harness,
+  roles: readonly string[],
+): Promise<string> {
+  const { email, sub } = await registerUniqueFakeUserFixture({
+    app: h.app,
+    pool: h.pool,
+    fake: h.fake,
+    nextEmail: () => `learn-staff-${randomUUID()}@ds.test`,
+    password: PASSWORD,
+    consent: CONSENT,
+  });
+  for (const role of roles) await h.fake.grantProjectRole(sub, role);
+  const { sid } = await establishAdminSession(h.app, {
+    identifier: email,
+    password: PASSWORD,
+    device: DEVICE,
+  });
+  return sid;
 }
 
 /** Register + sign in a doctor: the session cookie header and `users.id`. */
@@ -162,11 +191,13 @@ export async function admin<T = Record<string, unknown>>(
     key?: string | null;
     headers?: Record<string, string>;
     raw?: { body: Buffer; contentType: string };
+    /** Another staff session than the default one (`staffSession`). */
+    sid?: string;
   } = {},
 ): Promise<Reply<T>> {
   const headers: Record<string, string> = {
     ...DEVICE,
-    ...adminHeaders(h.adminSid),
+    ...adminHeaders(opts.sid ?? h.adminSid),
     ...(opts.raw
       ? { "content-type": opts.raw.contentType }
       : opts.payload === undefined
@@ -240,18 +271,24 @@ interface TestQuestion {
   options: { id: string; correct: boolean }[];
 }
 
-export interface BuiltCourse {
-  f: LearningFixture;
-  schoolId: string;
-  courseId: string;
-  courseSlug: string;
-  moduleId: string;
+/** One lesson of a built course: a video, a download and the exit test. */
+export interface BuiltLesson {
   lessonId: string;
   videoId: string;
   downloadId: string;
   testId: string;
   /** The test's questions with the right answer (admin read). */
   questions: TestQuestion[];
+}
+
+export interface BuiltCourse extends BuiltLesson {
+  f: LearningFixture;
+  schoolId: string;
+  courseId: string;
+  courseSlug: string;
+  moduleId: string;
+  /** Every lesson of the module in order; the first is the course's own fields. */
+  lessons: BuiltLesson[];
 }
 
 /**
@@ -270,6 +307,8 @@ export async function buildCourse(
     school?: Record<string, unknown>;
     /** 023 EARS-1 — extra fields of the course create. */
     course?: Record<string, unknown>;
+    /** Lessons in the module, each built alike (default 1). */
+    lessons?: number;
   } = {},
 ): Promise<BuiltCourse> {
   const f = opts.into?.f ?? (await seedTaxonomy(h.pool));
@@ -311,21 +350,62 @@ export async function buildCourse(
     }),
     201,
   );
+  const lessons: BuiltLesson[] = [];
+  for (let i = 1; i <= (opts.lessons ?? 1); i += 1)
+    lessons.push(
+      await buildLesson(
+        h,
+        f,
+        mod.id,
+        `Урок ${i}`,
+        opts.durationSec ?? VIDEO_SEC,
+      ),
+    );
+  const built: BuiltCourse = {
+    f,
+    schoolId: school.id,
+    courseId: course.id,
+    courseSlug,
+    moduleId: mod.id,
+    ...lessons[0]!,
+    lessons,
+  };
+  if (opts.publish !== false) await publish(h, built);
+  return built;
+}
+
+/** One lesson through the admin API: a video, a download and the exit test (2 questions). */
+async function buildLesson(
+  h: Harness,
+  f: LearningFixture,
+  moduleId: string,
+  title: string,
+  durationSec: number,
+): Promise<BuiltLesson> {
+  const ok = <T>(r: Reply<T>, status: number): T => {
+    expect(r.status, JSON.stringify(r.body)).toBe(status);
+    return r.body;
+  };
   const lesson = ok(
     await admin<{ id: string }>(h, "POST", "/lessons", {
-      payload: { moduleId: mod.id, projectId: f.projectId, title: "Урок 1" },
+      payload: { moduleId, projectId: f.projectId, title },
     }),
     201,
   );
-  const video = await admin<{ id: string; version: number }>(h, "POST", "/steps", {
-    payload: {
-      lessonId: lesson.id,
-      type: "video",
-      title: "Видео",
-      durationMin: 1,
-      payload: { durationSec: opts.durationSec ?? VIDEO_SEC },
+  const video = await admin<{ id: string; version: number }>(
+    h,
+    "POST",
+    "/steps",
+    {
+      payload: {
+        lessonId: lesson.id,
+        type: "video",
+        title: "Видео",
+        durationMin: 1,
+        payload: { durationSec },
+      },
     },
-  });
+  );
   ok(video, 201);
   ok(
     await admin(h, "PUT", `/steps/${video.body.id}/source`, {
@@ -357,57 +437,57 @@ export async function buildCourse(
     200,
   );
   const test = ok(
-    await admin<{ id: string; questions: TestQuestion[] }>(h, "POST", "/steps", {
-      payload: {
-        lessonId: lesson.id,
-        type: "test",
-        title: "Итоговый тест",
-        durationMin: 3,
+    await admin<{ id: string; questions: TestQuestion[] }>(
+      h,
+      "POST",
+      "/steps",
+      {
         payload: {
-          kind: "exit",
-          questions: [
-            {
-              text: "Вопрос 1",
-              options: [
-                { text: "Верно", correct: true },
-                { text: "Неверно", correct: false },
-              ],
-            },
-            {
-              text: "Вопрос 2",
-              options: [
-                { text: "Неверно", correct: false },
-                { text: "Верно", correct: true },
-              ],
-            },
-          ],
+          lessonId: lesson.id,
+          type: "test",
+          title: "Итоговый тест",
+          durationMin: 3,
+          payload: {
+            kind: "exit",
+            questions: [
+              {
+                text: "Вопрос 1",
+                options: [
+                  { text: "Верно", correct: true },
+                  { text: "Неверно", correct: false },
+                ],
+              },
+              {
+                text: "Вопрос 2",
+                options: [
+                  { text: "Неверно", correct: false },
+                  { text: "Верно", correct: true },
+                ],
+              },
+            ],
+          },
         },
       },
-    }),
+    ),
     201,
   );
-  const built: BuiltCourse = {
-    f,
-    schoolId: school.id,
-    courseId: course.id,
-    courseSlug,
-    moduleId: mod.id,
+  return {
     lessonId: lesson.id,
     videoId: video.body.id,
     downloadId: download.body.id,
     testId: test.id,
     questions: test.questions,
   };
-  if (opts.publish !== false) await publish(h, built);
-  return built;
 }
 
 export async function publish(h: Harness, c: BuiltCourse): Promise<void> {
-  const lesson = await admin(h, "GET", `/lessons/${c.lessonId}`);
-  const pl = await admin(h, "POST", `/lessons/${c.lessonId}/publish`, {
-    ifMatch: lesson.etag!,
-  });
-  expect(pl.status, JSON.stringify(pl.body)).toBe(200);
+  for (const { lessonId } of c.lessons) {
+    const lesson = await admin(h, "GET", `/lessons/${lessonId}`);
+    const pl = await admin(h, "POST", `/lessons/${lessonId}/publish`, {
+      ifMatch: lesson.etag!,
+    });
+    expect(pl.status, JSON.stringify(pl.body)).toBe(200);
+  }
   const course = await admin(h, "GET", `/courses/${c.courseId}`);
   const pc = await admin(h, "POST", `/courses/${c.courseId}/publish`, {
     ifMatch: course.etag!,
@@ -421,22 +501,48 @@ export async function setRules(
   kind: string,
   id: string,
   values: Record<string, unknown>,
+  opts: { earnedProgress?: "keep" | "require-again"; sid?: string } = {},
 ): Promise<Reply> {
   const current = await admin<{ values: Record<string, unknown> }>(
     h,
     "GET",
     `/rules/${kind}/${id}`,
+    { sid: opts.sid },
   );
   expect(current.status).toBe(200);
   return admin(h, "PUT", `/rules/${kind}/${id}`, {
-    payload: { values: { ...current.body.values, ...values } },
+    payload: {
+      values: { ...current.body.values, ...values },
+      ...(opts.earnedProgress ? { earnedProgress: opts.earnedProgress } : {}),
+    },
+    sid: opts.sid,
     ifMatch: current.etag!,
   });
 }
 
+/**
+ * EARS-31 — wait until every rule change on a scope finished its after-commit
+ * recompute (the save returns before it; the projection follows).
+ */
+export async function ruleChangesSettled(
+  h: Harness,
+  scopeId: string,
+): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const pending = await h.pool.query(
+      "SELECT 1 FROM learning_rule_changes WHERE scope_id = $1 AND recomputed_at IS NULL",
+      [scopeId],
+    );
+    if (pending.rows.length === 0) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`rule changes on ${scopeId} never finished their recompute`);
+}
+
 /** The right answer to every question of an attempt. */
 export function answersFor(
-  c: BuiltCourse,
+  c: Pick<BuiltLesson, "questions">,
   attempt: { questions: { id: string }[] },
   right = true,
 ): { questionId: string; optionId: string }[] {

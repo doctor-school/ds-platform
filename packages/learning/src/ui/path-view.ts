@@ -8,6 +8,7 @@ import {
   LEARNING_UI_COPY as C,
   STEP_TYPE_LABEL,
   lockReasonText,
+  statusReasonText,
   stepMetaParts,
 } from "./learning-ui-copy";
 
@@ -59,6 +60,13 @@ export interface PathNode {
    * right after the doctor's next step (canvas `g === doneSteps + 2`).
    */
   lockNote: string | null;
+  /**
+   * 024 EARS-24 — the summary's reason Alert on a step a rule change reopened
+   * (canvas `sum.ruleChanged`): every not-done step of a lesson carrying a
+   * `statusReason`, or its last step when none is left undone. Its path line
+   * reads «Условия урока изменились». Null once the doctor completes it again.
+   */
+  ruleChange: { title: string; body: string } | null;
   here: boolean;
   /** A step the doctor may open (not locked). */
   openable: boolean;
@@ -166,8 +174,12 @@ export function buildPathView(path: LearningCoursePath): PathView {
         doneLessons += 1;
         modDone += 1;
       }
+      const ruleText = !guest && lesson.statusReason ? statusReasonText(lesson.statusReason, lesson.steps) : null;
+      const undone = lesson.steps.filter((s) => s.state.status !== "done");
+      const reopened = new Set((undone.length > 0 ? undone : lesson.steps.slice(-1)).map((s) => s.id));
       lesson.steps.forEach((step, si) => {
         const here = step.id === hereStep;
+        const ruleChange = ruleText && reopened.has(step.id) ? ruleText : null;
         if (here) current = { stepId: step.id, lessonNumber: lesson.number, modulePosition: mod.position };
         const t = guest ? "plain" : tone(step.state, here);
         const word = guest ? "" : wordOf(step.state.status, here);
@@ -195,12 +207,19 @@ export function buildPathView(path: LearningCoursePath): PathView {
             !guest && step.state.status === "locked"
               ? lockReasonText(step.state.reason)
               : null,
+          // A locked node keeps what opens it, even when a rule change locked it
+          // (its reason stays in the summary); an open one names the change.
           lockNote:
-            firstLocked && step.state.status === "locked"
-              ? step.state.reason.kind === "previous"
-                ? C.lockNote
-                : lockReasonText(step.state.reason)
-              : null,
+            step.state.status === "locked"
+              ? firstLocked
+                ? step.state.reason.kind === "previous"
+                  ? C.lockNote
+                  : lockReasonText(step.state.reason)
+                : null
+              : ruleChange
+                ? ruleChange.title
+                : null,
+          ruleChange,
           here,
           openable: step.state.status !== "locked",
           line: guest ? "open" : line(step.state),
@@ -224,6 +243,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         label: `${C.club.kicker}. ${C.club.title}`,
         reason: null,
         lockNote: null,
+        ruleChange: null,
         here: false,
         openable: false,
         line: guest ? "open" : line(mod.club.state),
@@ -246,6 +266,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         label: `${C.document.kicker}. ${C.document.title}`,
         reason: null,
         lockNote: null,
+        ruleChange: null,
         here: false,
         openable: false,
         line: guest ? "open" : line(path.document.state),

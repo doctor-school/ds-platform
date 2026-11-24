@@ -28,10 +28,12 @@ import {
   type CreateLearningStepRequest,
   type LearningCourseAdmin,
   type LearningCourseComposition,
+  type LearningEarnedProgress,
   type LearningElementType,
   type LearningLessonAdmin,
   type LearningModuleAdmin,
   type LearningPreset,
+  type LearningRuleChangePreview,
   type LearningSchoolAdmin,
   type LearningScopeKind,
   type LearningScopeRules,
@@ -44,8 +46,9 @@ import {
   SetLearningStepSourceRequestSchema,
   STREAM_PROVIDER_HAS_PARENT_API,
   type SetLearningStepSourceRequest,
+  type LearningRulesAuthority,
 } from "@ds/schemas";
-import { and, asc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import {
   elementType,
   type LearningMediaDef,
@@ -79,6 +82,45 @@ import {
   scopesOf,
   toStepModel,
 } from "./repository.js";
+import {
+  changedSettings,
+  keepRepublishedCompletion,
+  previewRuleChange,
+  governedCoursesUnder,
+  finishRuleChange,
+  recordRuleChange,
+  type LearningRecordedRuleChange,
+} from "./rule-change.js";
+
+/**
+ * EARS-31 — how a save on a published course treats earned completion
+ * (owner D16: «keep» unless the author chose otherwise) and who made it.
+ */
+/** EARS-30 — who may change a scope's rules. */
+export type { LearningRulesAuthority };
+
+export interface LearningRuleChangeInput {
+  earnedProgress: LearningEarnedProgress;
+  actorSub: string | null;
+  /**
+   * EARS-30 — refuses (throws) a caller without the authority the scope
+   * needs. Called inside the saving transaction once the scope's courses are
+   * locked, so a publish and a rules save cannot race past it.
+   */
+  authorize?: (needed: LearningRulesAuthority) => void;
+}
+
+const DEFAULT_RULE_CHANGE: LearningRuleChangeInput = {
+  earnedProgress: "keep",
+  actorSub: null,
+};
+
+const toPreset = (r: typeof learningPresets.$inferSelect): LearningPreset => ({
+  id: r.id,
+  name: r.name,
+  values: r.values as LearningSettingValues,
+  version: r.version,
+});
 
 // 024 EARS-1, EARS-2, EARS-4, EARS-9, EARS-28, EARS-29 — the admin commands
 // over the structure and the rule layers. Framework-free: the host
@@ -119,7 +161,8 @@ function notFound(what: string): LearningServerError {
  * unpublished, so the publish gate cannot be bypassed and no doctor's earned
  * completion turns un-done under them.
  */
-const PUBLISHED_READ_ONLY = "the lesson is published; unpublish it to change its steps";
+const PUBLISHED_READ_ONLY =
+  "the lesson is published; unpublish it to change its steps";
 
 /** A uniqueness violation (Postgres 23505) by constraint name, if any. */
 function uniqueViolation(err: unknown): string | null {
@@ -388,6 +431,10 @@ export class LearningAdminService {
           state,
           version: current.version + 1,
           updatedAt: new Date(),
+          // EARS-30 — the first publish is stamped once and never cleared.
+          ...(state === "published" && !current.firstPublishedAt
+            ? { firstPublishedAt: this.now() }
+            : {}),
         })
         .where(eq(learningCourses.id, courseId))
         .returning();
@@ -558,6 +605,18 @@ export class LearningAdminService {
       const row = await this.bumpLesson(tx, lessonId, expectedVersion, {
         state,
       });
+      // Owner D16 — a lesson republished changed on a once-published course keeps
+      // its doctors' earned completion: what was done and would no longer be
+      // gets a `completion-kept` fact (EARS-31; no fact changed or removed).
+      if (state === "published" && owner.course.firstPublishedAt) {
+        await keepRepublishedCompletion(tx, {
+          course: owner.course,
+          moduleId: owner.module.id,
+          lessonId,
+          lessonVersion: row.version,
+          now: this.now(),
+        });
+      }
       return this.finishLesson(tx, row, complete);
     });
   }
@@ -771,12 +830,7 @@ export class LearningAdminService {
       .select()
       .from(learningPresets)
       .orderBy(asc(learningPresets.name));
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      values: r.values as LearningSettingValues,
-      version: r.version,
-    }));
+    return rows.map(toPreset);
   }
 
   /** EARS-29 — a scope's own values and every setting's effective value with its origin. */
@@ -800,6 +854,7 @@ export class LearningAdminService {
       scopeKind: kind,
       scopeId,
       layerVersion: row?.version ?? 0,
+      authority: await this.authorityIn(this.deps.db, kind, scopeId, false),
       appliedPreset: own?.preset ?? null,
       values: own?.values ?? {},
       effective: LEARNING_SETTING_KEYS.map((key) => {
@@ -819,35 +874,243 @@ export class LearningAdminService {
     rawValues: unknown,
     expectedVersion: number,
     complete: LearningComplete = noComplete,
+    change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
+    const { result, ruleChange } = await this.deps.transaction(async (tx) => {
+      change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
+      const values = await this.checkedValues(tx, kind, scopeId, rawValues);
+      const ruleChange = await this.recordChange(
+        tx,
+        kind,
+        scopeId,
+        values,
+        change,
+      );
+      await this.writeLayer(tx, kind, scopeId, expectedVersion, {
+        values,
+        keepPreset: true,
+      });
+      return {
+        result: await this.finishRules(tx, kind, scopeId, complete),
+        ruleChange,
+      };
+    });
+    // EARS-31 — the save is the truth once committed: the recompute runs
+    // after it, in the background, and never holds the editor.
+    if (ruleChange?.recompute) void finishRuleChange(this.deps, ruleChange.id);
+    return result;
+  }
+
+  /**
+   * EARS-30 — who may change a scope's rules: a scope a published course
+   * resolves through (and the platform layer) takes the rules editor; a draft
+   * course's scopes stay with the staff who edit that course.
+   */
+  async rulesAuthority(
+    kind: LearningScopeKind,
+    scopeId: string,
+  ): Promise<LearningRulesAuthority> {
+    return this.authorityIn(this.deps.db, kind, scopeId, false);
+  }
+
+  /**
+   * EARS-30 — the authority from `first_published_at`: a course once
+   * published stays with the rules editor after an unpublish. With `lock`,
+   * the scope's courses are held `FOR UPDATE` until the saving transaction
+   * ends, so a concurrent first publish waits for the save (or the save sees
+   * the publish).
+   */
+  private async authorityIn(
+    db: LearningServerDeps["db"] | LearningTx,
+    kind: LearningScopeKind,
+    scopeId: string,
+    lock: boolean,
+  ): Promise<LearningRulesAuthority> {
+    if (kind === "platform") return "rules-editor";
+    await this.scopeChain(db, kind, scopeId);
+    if (lock) {
+      // Lock every course under the scope, governed or not: a draft one may
+      // be published concurrently.
+      const ids = await this.coursesOfScope(db, kind, scopeId);
+      if (ids.length > 0)
+        await db
+          .select({ id: learningCourses.id })
+          .from(learningCourses)
+          .where(inArray(learningCourses.id, ids))
+          .for("update");
+    }
+    const governed = await governedCoursesUnder(db, kind, scopeId);
+    return governed.length > 0 ? "rules-editor" : "course-editor";
+  }
+
+  /** The ids of the courses whose items resolve through a non-platform scope. */
+  private async coursesOfScope(
+    db: LearningServerDeps["db"] | LearningTx,
+    kind: Exclude<LearningScopeKind, "platform">,
+    scopeId: string,
+  ): Promise<string[]> {
+    if (kind === "school")
+      return (
+        await db
+          .select({ id: learningCourses.id })
+          .from(learningCourses)
+          .where(eq(learningCourses.schoolId, scopeId))
+      ).map((r) => r.id);
+    const course =
+      kind === "course"
+        ? await courseById(db, scopeId)
+        : kind === "module"
+          ? (await courseOfModule(db, scopeId))?.course
+          : kind === "lesson"
+            ? (await courseOfLesson(db, scopeId))?.course
+            : (await courseOfStep(db, scopeId))?.course;
+    return course ? [course.id] : [];
+  }
+
+  /** EARS-31 — the change dialog's count under the new values; nothing is written. */
+  async previewScopeValues(
+    kind: LearningScopeKind,
+    scopeId: string,
+    rawValues: unknown,
+  ): Promise<LearningRuleChangePreview> {
+    const values = await this.checkedValues(
+      this.deps.db,
+      kind,
+      scopeId,
+      rawValues,
+    );
+    return previewRuleChange(this.deps.db, kind, scopeId, values, this.now());
+  }
+
+  /** EARS-9, EARS-29 — one preset. */
+  async preset(presetId: string): Promise<LearningPreset> {
+    const [row] = await this.deps.db
+      .select()
+      .from(learningPresets)
+      .where(eq(learningPresets.id, presetId));
+    if (!row) throw notFound("preset");
+    return toPreset(row);
+  }
+
+  /**
+   * EARS-9, EARS-29 — replace a preset's values. A preset is copied into a
+   * layer when applied, so a change reaches only later «Применить пресет».
+   */
+  async updatePreset(
+    presetId: string,
+    rawValues: unknown,
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningPreset>> {
     return this.deps.transaction(async (tx) => {
-      const { ruleScope } = await this.scopeChain(tx, kind, scopeId);
-      const check = validateSettingValues(rawValues, kind, ruleScope);
+      const [current] = await tx
+        .select()
+        .from(learningPresets)
+        .where(eq(learningPresets.id, presetId))
+        .for("update");
+      if (!current) throw notFound("preset");
+      if (current.version !== expectedVersion) throw stale();
+      // A preset applies on a school or a course; it names no item.
+      const check = validateSettingValues(
+        rawValues,
+        "course",
+        EMPTY_RULE_SCOPE,
+      );
       if (!check.ok)
         throw new LearningServerError(
           "VALIDATION_FAILED",
-          "the rules are refused",
+          "the preset is refused",
           check.issues,
         );
-      if (kind === "platform") {
-        const missing = LEARNING_SETTING_KEYS.filter(
-          (k) => !Object.hasOwn(check.values, k),
+      const [row] = await tx
+        .update(learningPresets)
+        .set({
+          values: check.values,
+          version: current.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(learningPresets.id, presetId))
+        .returning();
+      const result = {
+        status: 200 as const,
+        body: toPreset(row!),
+        etag: taxonomyETag(row!.version),
+      };
+      await complete(tx, result);
+      return result;
+    });
+  }
+
+  private now(): Date {
+    return this.deps.now?.() ?? new Date();
+  }
+
+  /** EARS-6 — a scope's new own values, validated (the platform layer holds every key). */
+  private async checkedValues(
+    db: LearningServerDeps["db"] | LearningTx,
+    kind: LearningScopeKind,
+    scopeId: string,
+    rawValues: unknown,
+  ): Promise<LearningSettingValues> {
+    const { ruleScope } = await this.scopeChain(db, kind, scopeId);
+    const check = validateSettingValues(rawValues, kind, ruleScope);
+    if (!check.ok)
+      throw new LearningServerError(
+        "VALIDATION_FAILED",
+        "the rules are refused",
+        check.issues,
+      );
+    if (kind === "platform") {
+      const missing = LEARNING_SETTING_KEYS.filter(
+        (k) => !Object.hasOwn(check.values, k),
+      );
+      if (missing.length > 0)
+        throw new LearningServerError(
+          "VALIDATION_FAILED",
+          "the platform layer holds every setting",
+          missing.map((k) => ({
+            path: `values.${k}`,
+            message: "required on the platform layer",
+          })),
         );
-        if (missing.length > 0)
-          throw new LearningServerError(
-            "VALIDATION_FAILED",
-            "the platform layer holds every setting",
-            missing.map((k) => ({
-              path: `values.${k}`,
-              message: "required on the platform layer",
-            })),
-          );
-      }
-      await this.writeLayer(tx, kind, scopeId, expectedVersion, {
-        values: check.values,
-        keepPreset: true,
-      });
-      return this.finishRules(tx, kind, scopeId, complete);
+    }
+    return check.values;
+  }
+
+  /**
+   * EARS-31 — on a scope a published course resolves through, a save that
+   * changes the values is a rule change: its record and, under «keep», the
+   * `completion-kept` facts, in the saving transaction before the layer is
+   * written. Null on a draft scope or an unchanged save.
+   */
+  private async recordChange(
+    tx: LearningTx,
+    kind: LearningScopeKind,
+    scopeId: string,
+    values: LearningSettingValues,
+    change: LearningRuleChangeInput,
+  ): Promise<LearningRecordedRuleChange | null> {
+    const governed = await governedCoursesUnder(tx, kind, scopeId);
+    if (governed.length === 0) return null;
+    const [current] = await tx
+      .select({ values: learningRuleLayers.values })
+      .from(learningRuleLayers)
+      .where(
+        and(
+          eq(learningRuleLayers.scopeKind, kind),
+          eq(learningRuleLayers.scopeId, scopeId),
+        ),
+      );
+    const before = (current?.values ?? {}) as LearningSettingValues;
+    if (changedSettings(before, values).length === 0) return null;
+    return recordRuleChange(tx, {
+      kind,
+      scopeId,
+      before,
+      after: values,
+      earnedProgress: change.earnedProgress,
+      actorSub: change.actorSub,
+      now: this.now(),
     });
   }
 
@@ -858,9 +1121,10 @@ export class LearningAdminService {
     presetId: string,
     expectedVersion: number,
     complete: LearningComplete = noComplete,
+    change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
-    return this.deps.transaction(async (tx) => {
-      await this.scopeChain(tx, kind, scopeId);
+    const { result, ruleChange } = await this.deps.transaction(async (tx) => {
+      change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
       const [preset] = await tx
         .select()
         .from(learningPresets)
@@ -879,12 +1143,26 @@ export class LearningAdminService {
         (current?.values ?? {}) as LearningSettingValues,
         preset.values as LearningSettingValues,
       );
+      const ruleChange = await this.recordChange(
+        tx,
+        kind,
+        scopeId,
+        values,
+        change,
+      );
       await this.writeLayer(tx, kind, scopeId, expectedVersion, {
         values,
         presetId: preset.id,
       });
-      return this.finishRules(tx, kind, scopeId, complete);
+      return {
+        result: await this.finishRules(tx, kind, scopeId, complete),
+        ruleChange,
+      };
     });
+    // EARS-31 — the save is the truth once committed: the recompute runs
+    // after it, in the background, and never holds the editor.
+    if (ruleChange?.recompute) void finishRuleChange(this.deps, ruleChange.id);
+    return result;
   }
 
   // ── internals ─────────────────────────────────────────────────────────────

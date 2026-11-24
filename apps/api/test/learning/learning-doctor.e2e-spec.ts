@@ -11,6 +11,7 @@ import {
   type BuiltCourse,
   type Harness,
   type Problem,
+  ruleChangesSettled,
   setRules,
   VIDEO_SEC,
 } from "./harness.js";
@@ -534,12 +535,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       let last = await at(30);
       for (let i = 0; i < 12; i++) last = await at(440);
       // 30 s since the first report × 2 (seeded rate) + 30 s slack, once.
-      expect(last.body.progress!.positionSec).toBeLessThanOrEqual(30 * 2 + 30 + 2);
+      expect(last.body.progress!.positionSec).toBeLessThanOrEqual(
+        30 * 2 + 30 + 2,
+      );
       expect(last.body.progress!.watchedPercent).toBeLessThan(100);
       // Once real time covers the seek, the same report is accepted whole.
       h.advanceClock(200);
       last = await at(440);
-      expect(last.body.progress).toEqual({ positionSec: 440, watchedPercent: 96 });
+      expect(last.body.progress).toEqual({
+        positionSec: 440,
+        watchedPercent: 96,
+      });
     });
 
     // ── The cascade and 025 (EARS-11, EARS-12, EARS-18) ───────────────────
@@ -593,26 +599,56 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toMatchObject({ score: 50, passed: true });
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
 
-      // The threshold rises: the next fact re-evaluates the lesson as not done.
+      const lessonStatus = async () =>
+        (
+          await call<{ lesson: { state: { status: string } } }>(
+            h,
+            "GET",
+            `/learning/lessons/${course.lessonId}`,
+            d.headers,
+          )
+        ).body.lesson.state.status;
+      const projected = async () => {
+        await ruleChangesSettled(h, course.courseId);
+        return (
+          await h.pool.query<{ status: string }>(
+            "SELECT status FROM learning_node_status WHERE person_id = $1 AND item_id = $2",
+            [d.personId, course.lessonId],
+          )
+        ).rows[0]?.status;
+      };
+
+      // The threshold rises with «require again» (EARS-31): the recompute
+      // re-evaluates the lesson as not done.
       expect(
-        (await setRules(h, "course", course.courseId, { "test.threshold": 80 }))
-          .status,
+        (
+          await setRules(
+            h,
+            "course",
+            course.courseId,
+            { "test.threshold": 80 },
+            { earnedProgress: "require-again" },
+          )
+        ).status,
       ).toBe(200);
-      const reversed = await at(VIDEO_SEC);
-      expect(
-        reversed.body.changed.find((x) => x.itemId === course.lessonId)?.status,
-      ).not.toBe("done");
+      expect(await lessonStatus()).not.toBe("done");
+      expect(await projected()).not.toBe("done");
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
 
       // It falls again: done again, and the 025 fact is the same one.
       expect(
-        (await setRules(h, "course", course.courseId, { "test.threshold": 50 }))
-          .status,
+        (
+          await setRules(
+            h,
+            "course",
+            course.courseId,
+            { "test.threshold": 50 },
+            { earnedProgress: "require-again" },
+          )
+        ).status,
       ).toBe(200);
-      const again = await at(VIDEO_SEC);
-      expect(
-        again.body.changed.find((x) => x.itemId === course.lessonId)?.status,
-      ).toBe("done");
+      expect(await lessonStatus()).toBe("done");
+      expect(await projected()).toBe("done");
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
     });
 

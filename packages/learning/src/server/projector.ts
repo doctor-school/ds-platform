@@ -87,6 +87,13 @@ export async function project(
     const previous = before.get(itemId);
     if (previous === state.status) continue;
     const itemKind = evaluation.kinds.get(itemId)!;
+    // EARS-24 — a rule change is the cause only of a status it changed: an
+    // item first projected by a recompute had no status before. The reason is
+    // the save's anchor (`reason_rule_change_id`), cleared below.
+    const rowCause =
+      previous === undefined && cause.kind === "rule-change"
+        ? { kind: "fact" as const, id: null }
+        : cause;
     changed.push({ itemKind, itemId, status: state.status });
     await tx
       .insert(learningNodeStatus)
@@ -96,16 +103,26 @@ export async function project(
         itemId,
         status: state.status,
         since: at,
-        causeKind: cause.kind,
-        causeId: cause.id,
+        causeKind: rowCause.kind,
+        causeId: rowCause.id,
       })
       .onConflictDoUpdate({
         target: [learningNodeStatus.personId, learningNodeStatus.itemId],
         set: {
           status: state.status,
           since: at,
-          causeKind: cause.kind,
-          causeId: cause.id,
+          causeKind: rowCause.kind,
+          causeId: rowCause.id,
+          // EARS-24 — done again ends a rule change's reason; leaving locked
+          // ends a reason held only while locked; any other transition keeps it.
+          ...(state.status === "done"
+            ? { reasonRuleChangeId: null, reasonWhileLocked: false }
+            : state.status !== "locked"
+              ? {
+                  reasonRuleChangeId: sql`CASE WHEN ${learningNodeStatus.reasonWhileLocked} THEN NULL ELSE ${learningNodeStatus.reasonRuleChangeId} END`,
+                  reasonWhileLocked: false,
+                }
+              : {}),
         },
       });
     if (state.status !== "done") continue;

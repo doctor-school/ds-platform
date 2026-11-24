@@ -11,8 +11,8 @@ import { existsSync } from "node:fs";
 
 import { materialBodySchema, PointsTraceEntrySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
-import { getTableName, is } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
+import { getTableColumns, getTableName, is, type SQL } from "drizzle-orm";
+import { PgDialect, PgTable } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
@@ -60,6 +60,7 @@ import {
   GOLDEN_EMPTY_SPECIALTY,
   GOLDEN_EMPTY_SCOPE_DIRECTION,
   GOLDEN_EMPTY_SCOPE_SPECIALTY,
+  GOLDEN_MAX_BIND_PARAMS,
   GOLDEN_SEED_ORDER,
   goldenDirectionId,
   goldenProgrammeSpecs,
@@ -77,6 +78,12 @@ import {
   resolveDoctorSpecialtyRows,
   resolveLearningRuleLayerRows,
   GOLDEN_LEARNING_PATH_COURSES,
+  GOLDEN_LEARNERS,
+  GOLDEN_LEARNING_PATH_PASS_MARK,
+  GOLDEN_RULE_CHANGE_COURSE,
+  GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK,
+  goldenLearnerId,
+  goldenResultPlans,
   GOLDEN_LEARNING_PATH_SCHOOL,
   GOLDEN_VOLUME_CONGRESSES,
   GOLDEN_COURSE_MEMO_KEY,
@@ -955,6 +962,73 @@ describe("#2063 golden step execution", () => {
     expect(nothing[0]!.target).toHaveLength(2);
   });
 
+  it("splits a step past the Postgres bind-parameter limit into statements under it, every row written once", async () => {
+    // #4012 — the 200-doctor projection is tens of thousands of rows: one
+    // INSERT of them all exceeds the 65 535 bind parameters of the protocol.
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+      pointsContext,
+    );
+    const step = plan.find((s) => s.name === "learning_node_status")!;
+    const columns = Object.keys(getTableColumns(step.table)).length;
+    expect(step.rows.length * columns).toBeGreaterThan(GOLDEN_MAX_BIND_PARAMS);
+    const chunks: unknown[][] = [];
+    const tx = {
+      insert: () => ({
+        values: (rows: unknown[]) => ({
+          onConflictDoNothing: () => {
+            chunks.push(rows);
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+
+    await expect(applyGoldenStep(tx, step)).resolves.toBe(step.rows.length);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks)
+      expect(chunk.length * columns).toBeLessThanOrEqual(
+        GOLDEN_MAX_BIND_PARAMS,
+      );
+    expect(chunks.flat()).toEqual(step.rows);
+  });
+
+  it("024 EARS-30 (#4012): a refresh in place fills a NULL publication instant and never moves a written one", async () => {
+    // A database seeded before the seed stamped `first_published_at` holds the
+    // golden courses with NULL; the set-once column is left out of the refresh
+    // but filled where still empty (the set-once triggers allow NULL → value).
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+      pointsContext,
+    );
+    const step = plan.find((s) => s.name === "learning_courses")!;
+    expect(step.updateKeys).not.toContain("firstPublishedAt");
+    expect(step.fillKeys).toEqual(["firstPublishedAt"]);
+    const sets: Record<string, unknown>[] = [];
+    const tx = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: (config: { set: Record<string, unknown> }) => {
+            sets.push(config.set);
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+    await applyGoldenStep(tx, step);
+    const dialect = new PgDialect();
+    const fill = dialect.sqlToQuery(sets[0]!.firstPublishedAt as SQL).sql;
+    expect(fill).toBe(
+      'coalesce("learning_courses"."first_published_at", excluded."first_published_at")',
+    );
+    // A step that never publishes fills nothing.
+    expect(plan.find((s) => s.name === "users")!.fillKeys).toEqual([]);
+  });
+
   it("refuses a plan key that is not a column of the table", async () => {
     const plan = buildGoldenSeedPlan(
       dataset,
@@ -1431,8 +1505,16 @@ describe("#2213 golden dataset at volume", () => {
       perDoctor.set(holder, list);
     }
 
+    // #4012 — the long paths' learners are the learning population, not the
+    // эфир one: registrations for them would inflate every roster count.
+    const learners = new Set(
+      Array.from({ length: GOLDEN_LEARNERS }, (_, i) => goldenLearnerId(i)),
+    );
     const volumeDoctors = volumeUsers.filter(
-      (u) => u.role === "doctor_guest" && u.emailVerified,
+      (u) =>
+        u.role === "doctor_guest" &&
+        u.emailVerified &&
+        !learners.has(u.id as string),
     );
     expect(volumeDoctors.length).toBeGreaterThanOrEqual(8);
     for (const doctor of volumeDoctors) {
@@ -3207,7 +3289,14 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
       const m = dataset.learningModules.find((x) => x.id === l.moduleId)!;
       for (const s of stepsOf(l.id!)) stepToCourse.set(s.id!, m.courseId);
     }
-    expect(new Set(dataset.learningFacts.map((f) => f.personId))).toEqual(
+    // #4012 — the long paths' results are held in their own describe below.
+    const schoolCourses = new Set(
+      V.flatMap((school) => coursesOf(school.id).map((c) => c.id)),
+    );
+    const schoolFacts = dataset.learningFacts.filter((f) =>
+      schoolCourses.has(stepToCourse.get(f.stepId!)),
+    );
+    expect(new Set(schoolFacts.map((f) => f.personId))).toEqual(
       new Set(doctors),
     );
     for (const school of V) {
@@ -3225,7 +3314,7 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
           : new Set(),
       );
     }
-    for (const f of dataset.learningFacts) {
+    for (const f of schoolFacts) {
       expect(["opened", "position"]).toContain(f.kind);
       expect(f.source).toBe("web");
       expect((f.occurredAt as Date).getTime()).toBeLessThan(now.getTime());
@@ -3433,11 +3522,7 @@ describe("#4172 golden volume covers the schema", () => {
       "reference book inserted by migration 0065; the plan resolves layers against it",
     points_rule_versions:
       "the 025 rule book, inserted by its migration and edited only through the rule admin",
-    // Runtime projections and in-flight state.
-    learning_node_status:
-      "rebuildable status projection of learning_facts (023 EARS-11); the next real fact projects it",
-    learning_attempts:
-      "a test attempt in flight until submitted; its outcome is a learning fact",
+    // Runtime in-flight state.
     telegram_update_cursor:
       "the poller's own offset per real bot id (048 EARS-24); a seeded offset would make a live bot skip or replay real updates",
     event_role_grants:
@@ -3450,9 +3535,7 @@ describe("#4172 golden volume covers the schema", () => {
       "a hold needs a priced item and a stable registration — #4188 (the priced golden event with a doctor's Pul on hold)",
     points_obligations:
       "an obligation hangs off an advance-covered hold — #4188",
-    // 023 EARS-23 / EARS-31 records with no reader in any app or package yet.
-    learning_rule_changes:
-      "023 EARS-31 rule-change record; nothing reads it yet — seed with its first read",
+    // 023 EARS-23 records with no reader in any app or package yet.
     learning_lesson_ratings:
       "023 EARS-23 rating; nothing reads it yet — seed with its first read",
     learning_feedback:
@@ -3583,7 +3666,7 @@ describe("#4172 golden long learning paths", () => {
     for (const [, steps] of counts) expect(steps).toBeGreaterThan(24);
   });
 
-  it("gives a fresh doctor no fact on the long paths", () => {
+  it("gives a fresh doctor no fact on the long paths — only the #4012 result holders, on their passed lessons", () => {
     const pathSteps = new Set(
       dataset.learningSteps
         .filter((s) => isGoldenVolumeUuid(s.id as string))
@@ -3602,12 +3685,285 @@ describe("#4172 golden long learning paths", () => {
     );
     const longSteps = dataset.learningSteps.filter((s) => ids.has(s.lessonId));
     expect(longSteps.length).toBeGreaterThan(0);
+    const longStepIds = new Set(longSteps.map((s) => s.id));
+    const allowed = new Set<string>();
+    for (const plan of goldenResultPlans()) {
+      const course = GOLDEN_LEARNING_PATH_COURSES[plan.course]!;
+      const lessons = dataset.learningModules
+        .filter((m) => m.courseId === course.id)
+        .sort((a, b) => a.position - b.position)
+        .flatMap((m) =>
+          dataset.learningLessons
+            .filter((l) => l.moduleId === m.id)
+            .sort((a, b) => a.position - b.position),
+        )
+        .slice(0, plan.scores.length);
+      for (const l of lessons)
+        for (const st of dataset.learningSteps.filter(
+          (x) => x.lessonId === l.id,
+        ))
+          allowed.add(`${plan.personId}|${st.id}`);
+    }
+    const onLong = dataset.learningFacts.filter(
+      (f) => f.stepId != null && longStepIds.has(f.stepId),
+    );
+    expect(onLong.length).toBeGreaterThan(0);
     expect(
-      dataset.learningFacts.filter((f) =>
-        longSteps.some((s) => s.id === f.stepId),
-      ),
+      onLong.filter((f) => !allowed.has(`${f.personId}|${f.stepId}`)),
     ).toEqual([]);
     expect(pathSteps.size).toBeGreaterThan(0);
+  });
+});
+
+describe("024 EARS-24, EARS-29–31 (#4012) golden long-path results", () => {
+  // A rules editor raising the pass mark on a slot needs doctors with submitted
+  // results to re-judge: realistic (the worker pool, 10 lessons of the
+  // 12-module path) and extreme (200 doctors on the 30-module path). The
+  // evaluator agreement of the projection is held in
+  // `packages/learning/src/golden-learning-results.test.ts`.
+  const dataset = buildGoldenDataset(now, subjects);
+  const plans = goldenResultPlans();
+  const pool = golden.workerPool.verifiedCardiologist.map((d) => d.id);
+  const attemptFacts = dataset.learningFacts.filter(
+    (f) => f.kind === "attempt-submitted",
+  );
+
+  it("pins the volume: 6 doctors × 10 lessons on the 12-module path, 200 doctors × 2–5 lessons on the 30-module path", () => {
+    const course0 = plans.filter((p) => p.course === 0);
+    expect(course0.map((p) => p.personId)).toEqual(pool);
+    expect(course0.every((p) => p.scores.length === 10)).toBe(true);
+    expect(
+      course0.every((p) => p.scores.includes(50) && p.scores.includes(100)),
+    ).toBe(true);
+    const course1 = plans.filter((p) => p.course === 1);
+    expect(new Set(course1.map((p) => p.personId)).size).toBe(200);
+    expect(
+      course1.every((p) => p.scores.length >= 2 && p.scores.length <= 5),
+    ).toBe(true);
+    // Every 30-module doctor holds a 50 % result: a raise re-judges all 200.
+    expect(course1.every((p) => p.scores.includes(50))).toBe(true);
+    const lessons = plans.reduce((n, p) => n + p.scores.length, 0);
+    expect(dataset.learningAttempts).toHaveLength(lessons);
+    expect(attemptFacts).toHaveLength(lessons);
+  });
+
+  it("writes each attempt as `submitAttempt` does: submitted, a system fact keyed on the attempt, graded on the drawn questions", () => {
+    const attempts = new Map(dataset.learningAttempts.map((a) => [a.id, a]));
+    const options = new Map(dataset.learningOptions.map((o) => [o.id, o]));
+    for (const f of attemptFacts) {
+      const data = f.data as {
+        attemptId: string;
+        score: number;
+        answers: { questionId: string; optionId: string }[];
+      };
+      const attempt = attempts.get(data.attemptId)!;
+      expect(attempt.personId).toBe(f.personId);
+      expect(attempt.testId).toBe(f.stepId);
+      expect(attempt.submittedAt).toEqual(f.occurredAt);
+      expect(f.eventId).toBe(`learning:attempt:${data.attemptId}`);
+      expect(f.source).toBe("system");
+      const correct = data.answers.filter(
+        (a) => options.get(a.optionId)?.correct,
+      ).length;
+      const drawn = (attempt.questionIds as string[]).length;
+      expect(Math.round((correct / drawn) * 100)).toBe(data.score);
+      expect(data.score).toBeGreaterThanOrEqual(GOLDEN_LEARNING_PATH_PASS_MARK);
+      expect((f.occurredAt as Date).getTime()).toBeLessThan(now.getTime());
+      expect(isGoldenVolumeUuid(attempt.id as string)).toBe(true);
+    }
+  });
+
+  it("the learners are verified, active, non-login mirror rows with consents and a specialty", () => {
+    const ids = new Set(
+      Array.from({ length: GOLDEN_LEARNERS }, (_, i) => goldenLearnerId(i)),
+    );
+    const users = dataset.users.filter((u) => ids.has(u.id as string));
+    expect(users).toHaveLength(GOLDEN_LEARNERS);
+    const logins = new Set(GOLDEN_IDP_ACCOUNTS.map((a) => a.username));
+    for (const u of users) {
+      expect(u).toMatchObject({
+        role: "doctor_guest",
+        emailVerified: true,
+        recordStatus: "active",
+      });
+      expect(logins.has(u.email as string)).toBe(false);
+      expect(isGoldenVolumeUuid(u.id as string)).toBe(true);
+    }
+    for (const id of ids) {
+      expect(
+        dataset.consentRecords.filter((c) => c.userId === id),
+      ).toHaveLength(GOLDEN_CONSENT_PURPOSES.length);
+      expect(
+        dataset.doctorSpecialties.filter((d) => d.doctorId === id),
+      ).toHaveLength(1);
+    }
+  });
+
+  it("seeds the projection for every result holder, caused by its own facts, append-only", () => {
+    const facts = new Map(dataset.learningFacts.map((f) => [f.id, f]));
+    for (const row of dataset.learningNodeStatus) {
+      expect(row.causeKind).toBe("fact");
+      expect(facts.get(row.causeId!)?.personId).toBe(row.personId);
+    }
+    expect(
+      new Set(dataset.learningNodeStatus.map((r) => r.personId)).size,
+    ).toBe(200);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+      pointsContext,
+    );
+    for (const name of [
+      "learning_attempts",
+      "learning_node_status",
+      "learning_rule_changes",
+    ]) {
+      expect(plan.find((s) => s.name === name)!.updateKeys, name).toEqual([]);
+    }
+    const order = [...GOLDEN_SEED_ORDER];
+    expect(order.indexOf("learning_node_status")).toBeGreaterThan(
+      order.indexOf("learning_facts"),
+    );
+  });
+
+  it("gives the long paths a 50 % pass mark on their own layer", () => {
+    for (const course of GOLDEN_LEARNING_PATH_COURSES) {
+      const layer = dataset.learningRuleLayers.find(
+        (l) => l.scopeId === course.id,
+      ) as { values: Record<string, unknown> };
+      expect(layer.values["test.threshold"]).toBe(
+        GOLDEN_LEARNING_PATH_PASS_MARK,
+      );
+    }
+  });
+
+  it("024 EARS-31: records the past 40 → 50 % «keep» raise on the 30-module path as the save writes it, recomputed and moving no status", () => {
+    const course = GOLDEN_LEARNING_PATH_COURSES[GOLDEN_RULE_CHANGE_COURSE]!;
+    expect(dataset.learningRuleChanges).toHaveLength(1);
+    const change = dataset.learningRuleChanges[0]!;
+    const layer = dataset.learningRuleLayers.find(
+      (l) => l.scopeId === course.id,
+    ) as { values: Record<string, unknown>; version?: number; updatedAt: Date };
+    // `recordRuleChange`: the scope, the layer before and after, the actor.
+    expect(change).toMatchObject({
+      scopeKind: "course",
+      scopeId: course.id,
+      earnedProgress: "keep",
+      actorSub: subjects.admin,
+    });
+    expect(isGoldenVolumeUuid(change.id as string)).toBe(true);
+    expect(change.after).toEqual(layer.values);
+    expect(change.before).toEqual({
+      ...layer.values,
+      "test.threshold": GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK,
+    });
+    // `writeLayer` rewrote the layer in the same save.
+    expect(layer.version).toBe(2);
+    expect(layer.updatedAt).toEqual(change.at);
+    // After every seeded result on the course, before «now», and finished.
+    const results = dataset.learningAttempts.filter((a) =>
+      dataset.learningSteps.some(
+        (s) =>
+          s.id === a.testId &&
+          dataset.learningLessons.some(
+            (l) =>
+              l.id === s.lessonId &&
+              dataset.learningModules.some(
+                (m) => m.id === l.moduleId && m.courseId === course.id,
+              ),
+          ),
+      ),
+    );
+    expect(results.length).toBeGreaterThan(0);
+    const at = (change.at as Date).getTime();
+    for (const a of results)
+      expect((a.submittedAt as Date).getTime()).toBeLessThan(at);
+    expect(at).toBeLessThan(now.getTime());
+    expect((change.recomputedAt as Date).getTime()).toBeGreaterThan(at);
+    // Every seeded score passes the earlier mark too, so «keep» kept nothing
+    // and the recompute moved no status: no completion-kept fact, no status
+    // naming the change. The other long path carries no change at all.
+    for (const f of attemptFacts)
+      expect(
+        (f.data as { score: number }).score,
+      ).toBeGreaterThanOrEqual(GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK);
+    expect(
+      dataset.learningFacts.filter((f) => f.kind === "completion-kept"),
+    ).toEqual([]);
+    expect(
+      dataset.learningNodeStatus.filter((r) => r.causeKind === "rule-change"),
+    ).toEqual([]);
+    const other = dataset.learningRuleLayers.find(
+      (l) => l.scopeId === GOLDEN_LEARNING_PATH_COURSES[0]!.id,
+    ) as { version?: number };
+    expect(other.version ?? 1).toBe(1);
+  });
+});
+
+describe("024 EARS-30 (#4012) golden courses carry their first publication", () => {
+  // `first_published_at` is what tells a rules editor's change on a course
+  // doctors could have reached from a course editor's free edit (EARS-30). The
+  // seed runs after migration 0069's backfill, so it stamps the instant itself:
+  // the real first publish, before any doctor's fact, attempt or status on the
+  // course; a never-published draft stays NULL.
+  const dataset = buildGoldenDataset(now, subjects);
+  const moduleCourse = new Map(
+    dataset.learningModules.map((m) => [m.id, m.courseId]),
+  );
+  const lessonCourse = new Map(
+    dataset.learningLessons.map((l) => [l.id, moduleCourse.get(l.moduleId)]),
+  );
+  const stepCourse = new Map(
+    dataset.learningSteps.map((s) => [s.id, lessonCourse.get(s.lessonId)]),
+  );
+  const earliest = new Map<string, number>();
+  const note = (courseId: string | undefined, at: Date | null | undefined) => {
+    if (!courseId || !(at instanceof Date)) return;
+    const prev = earliest.get(courseId);
+    if (prev === undefined || at.getTime() < prev)
+      earliest.set(courseId, at.getTime());
+  };
+  for (const f of dataset.learningFacts)
+    note(stepCourse.get(f.stepId as string), f.occurredAt);
+  for (const a of dataset.learningAttempts)
+    note(stepCourse.get(a.testId), a.startedAt ?? a.submittedAt);
+  const courseIds = new Set(dataset.learningCourses.map((c) => c.id));
+  for (const s of dataset.learningNodeStatus) {
+    const courseId = courseIds.has(s.itemId)
+      ? s.itemId
+      : (moduleCourse.get(s.itemId) ??
+        lessonCourse.get(s.itemId) ??
+        stepCourse.get(s.itemId));
+    note(courseId, s.since);
+  }
+
+  it("every published golden course, and every one doctors hold facts on, carries first_published_at before its earliest fact; drafts stay NULL", () => {
+    expect(dataset.learningCourses.length).toBeGreaterThan(0);
+    for (const c of dataset.learningCourses) {
+      const once = c.state === "published" || earliest.has(c.id!);
+      if (!once) {
+        expect(c.firstPublishedAt ?? null, c.slug).toBeNull();
+        continue;
+      }
+      expect(c.firstPublishedAt, c.slug).toBeInstanceOf(Date);
+      const first = (c.firstPublishedAt as Date).getTime();
+      expect(first, c.slug).toBeLessThan(now.getTime());
+      const fact = earliest.get(c.id!);
+      if (fact !== undefined) expect(first, c.slug).toBeLessThanOrEqual(fact);
+    }
+  });
+
+  it("the seeded 40 → 50 % rule change post-dates the course's first publication", () => {
+    expect(dataset.learningRuleChanges.length).toBeGreaterThan(0);
+    for (const change of dataset.learningRuleChanges) {
+      const course = dataset.learningCourses.find(
+        (c) => c.id === change.scopeId,
+      )!;
+      expect((course.firstPublishedAt as Date).getTime()).toBeLessThan(
+        (change.at as Date).getTime(),
+      );
+    }
   });
 });
 

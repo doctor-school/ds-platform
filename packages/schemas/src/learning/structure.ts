@@ -134,7 +134,10 @@ export interface LearningStepMediaRule {
 export const LEARNING_STEP_INPUTS: Readonly<
   Record<
     z.infer<typeof LearningElementTypeSchema>,
-    { readonly media: LearningStepMediaRule | null; readonly providerSource: boolean }
+    {
+      readonly media: LearningStepMediaRule | null;
+      readonly providerSource: boolean;
+    }
   >
 > = {
   video: { media: null, providerSource: true },
@@ -179,9 +182,7 @@ export const LearningDocumentKindSchema = z.enum([
 export type LearningDocumentKind = z.infer<typeof LearningDocumentKindSchema>;
 
 const optionalText = text.min(1).nullable().default(null);
-const httpsUrl = z
-  .url({ protocol: /^https$/ })
-  .max(2000);
+const httpsUrl = z.url({ protocol: /^https$/ }).max(2000);
 
 export const CreateLearningSchoolRequestSchema = z.strictObject({
   directionId: z.uuid(),
@@ -281,12 +282,73 @@ export type ReorderLearningStepsRequest = z.infer<
   typeof ReorderLearningStepsRequestSchema
 >;
 
-/** EARS-9 / EARS-29 — apply a preset on a school or a course. */
+
+/**
+ * EARS-31, owner D16 — what a rule change on a published course does to a
+ * doctor's earned completion: «keep» (the default) stores a `completion-kept`
+ * fact for every item that was done and would no longer be; «require-again»
+ * lets the new rules decide.
+ */
+export const LEARNING_EARNED_PROGRESS = ["keep", "require-again"] as const;
+export const LearningEarnedProgressSchema = z.enum(LEARNING_EARNED_PROGRESS);
+export type LearningEarnedProgress = z.infer<
+  typeof LearningEarnedProgressSchema
+>;
+
+/**
+ * EARS-9 / EARS-29 — apply a preset on a school or a course. On a scope a
+ * once-published course resolves through the apply is a rule change (EARS-31):
+ * `earnedProgress` is the author's choice, «keep» by default (owner D16).
+ */
 export const ApplyLearningPresetRequestSchema = z.strictObject({
   presetId: z.uuid(),
+  earnedProgress: LearningEarnedProgressSchema.default("keep"),
 });
-export type ApplyLearningPresetRequest = z.infer<
+export type ApplyLearningPresetRequest = z.input<
   typeof ApplyLearningPresetRequestSchema
+>;
+
+/**
+ * EARS-29, EARS-31 — replace a scope's own values. `values` is validated per
+ * scope by the rules validator (EARS-6); `earnedProgress` counts only on a
+ * scope a published course resolves through.
+ */
+export const SetLearningScopeRulesRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+  earnedProgress: LearningEarnedProgressSchema.default("keep"),
+});
+export type SetLearningScopeRulesRequest = z.input<
+  typeof SetLearningScopeRulesRequestSchema
+>;
+
+/** EARS-31 — the change dialog's question: the new values, nothing written. */
+export const PreviewLearningRuleChangeRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+});
+export type PreviewLearningRuleChangeRequest = z.infer<
+  typeof PreviewLearningRuleChangeRequestSchema
+>;
+
+/**
+ * EARS-31 — the doctors whose statuses would change under the new values
+ * (the evaluator over their facts, old rules vs new); `toDone` / `toNotDone`
+ * count the doctors with at least one item turning done / no longer done.
+ */
+export const LearningRuleChangePreviewSchema = z.strictObject({
+  affectedDoctors: z.number().int().min(0),
+  toDone: z.number().int().min(0),
+  toNotDone: z.number().int().min(0),
+});
+export type LearningRuleChangePreview = z.infer<
+  typeof LearningRuleChangePreviewSchema
+>;
+
+/** EARS-9, EARS-29 — replace a preset's values (`learning_rules_editor`). */
+export const UpdateLearningPresetRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+});
+export type UpdateLearningPresetRequest = z.infer<
+  typeof UpdateLearningPresetRequestSchema
 >;
 
 // ── Admin read models ───────────────────────────────────────────────────────
@@ -418,11 +480,28 @@ export const LearningPresetListSchema = z.strictObject({
 });
 export type LearningPresetList = z.infer<typeof LearningPresetListSchema>;
 
+/**
+ * EARS-30 — who may change a scope's rules: `rules-editor` for the platform
+ * layer and every scope a once-published course resolves through
+ * (`learning_rules_editor`), `course-editor` for a draft course's scopes (the
+ * staff who edit that course).
+ */
+export const LEARNING_RULES_AUTHORITIES = [
+  "rules-editor",
+  "course-editor",
+] as const;
+export const LearningRulesAuthoritySchema = z.enum(LEARNING_RULES_AUTHORITIES);
+export type LearningRulesAuthority = z.infer<
+  typeof LearningRulesAuthoritySchema
+>;
+
 /** EARS-5 / EARS-29 — the effective rules of a scope; `layerVersion` 0 = no row yet. */
 export const LearningScopeRulesSchema = z.strictObject({
   scopeKind: LearningScopeKindSchema,
   scopeId: z.string(),
   layerVersion: z.number().int(),
+  /** EARS-30 — the authority a change of this scope takes. */
+  authority: LearningRulesAuthoritySchema,
   appliedPreset: z.string().nullable(),
   /** This layer's own values (the overrides set here). */
   values: LearningSettingValuesSchema,

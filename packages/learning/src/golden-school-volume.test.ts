@@ -244,7 +244,10 @@ describe("023 EARS-5 (#4017) — the golden schools at volume hold the admin pat
   it("the ledger's completions are exactly the lessons and modules the evaluator marks done", () => {
     const doctor = golden.doctors.verifiedCardiologist.id;
     const credited = new Set(
-      goldenLearningCompletions(rows, [doctor]).map((c) => c.id),
+      goldenLearningCompletions(
+        { ...rows, learningRuleLayers: rows.learningOwnRuleLayers },
+        [doctor],
+      ).map((c) => c.id),
     );
     const done = new Set<string>();
     for (const course of rows.learningCourses) {
@@ -256,16 +259,23 @@ describe("023 EARS-5 (#4017) — the golden schools at volume hold the admin pat
       );
       const facts: LearningFactModel[] = rows.learningFacts
         .filter((f) => f.personId === doctor && stepIds.has(f.stepId!))
-        .map((f) =>
+        .map((f): LearningFactModel =>
           f.kind === "opened"
             ? { kind: "opened", stepId: f.stepId! }
-            : {
-                kind: "position",
-                stepId: f.stepId!,
-                positionSec: Number(
-                  (f.data as Record<string, unknown>)["positionSec"],
-                ),
-              },
+            : f.kind === "attempt-submitted"
+              ? {
+                  // #4012 — the long paths' submitted results.
+                  kind: "attempt-submitted",
+                  stepId: f.stepId!,
+                  score: Number((f.data as Record<string, unknown>)["score"]),
+                }
+              : {
+                  kind: "position",
+                  stepId: f.stepId!,
+                  positionSec: Number(
+                    (f.data as Record<string, unknown>)["positionSec"],
+                  ),
+                },
         );
       if (facts.length === 0) continue;
       const { evaluation } = evaluateCourse({

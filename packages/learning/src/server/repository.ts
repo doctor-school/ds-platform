@@ -8,6 +8,7 @@ import {
   learningOptions,
   learningPresets,
   learningQuestions,
+  learningRuleChanges,
   learningRuleLayers,
   learningSchools,
   learningSteps,
@@ -241,6 +242,37 @@ export async function loadFactsOfCourses(
   courses: readonly LoadedCourse[],
 ): Promise<LearningFactModel[][]> {
   if (courses.length === 0) return [];
+  const records = await loadFactRecords(db, [personId], courses);
+  const changes = await requireAgainChanges(db, courses);
+  return courses.map((loaded, i) =>
+    countingFacts(records.get(personId)?.[i] ?? [], loaded, changes),
+  );
+}
+
+/** A stored fact with the instant it happened (EARS-31 compares it with later rule changes). */
+export interface LearningFactRecord {
+  fact: LearningFactModel;
+  occurredAt: Date;
+}
+
+/** EARS-31 — a «require again» rule change: it re-judges every earlier kept credit it covers. */
+export interface LearningRequireAgainChange {
+  kind: LearningScopeKind;
+  scopeId: string;
+  at: Date;
+}
+
+/**
+ * Several doctors' fact records on several courses in one read: per person,
+ * one array per course in the order given.
+ */
+export async function loadFactRecords(
+  db: Handle,
+  personIds: readonly string[],
+  courses: readonly LoadedCourse[],
+): Promise<Map<string, LearningFactRecord[][]>> {
+  const out = new Map<string, LearningFactRecord[][]>();
+  if (personIds.length === 0 || courses.length === 0) return out;
   const owner = new Map<string, number>();
   courses.forEach((loaded, i) => {
     for (const id of [
@@ -255,15 +287,17 @@ export async function loadFactsOfCourses(
   const itemIds = [...owner.keys()];
   const rows = await db
     .select({
+      personId: learningFacts.personId,
       kind: learningFacts.kind,
       stepId: learningFacts.stepId,
       itemRef: learningFacts.itemRef,
       data: learningFacts.data,
+      occurredAt: learningFacts.occurredAt,
     })
     .from(learningFacts)
     .where(
       and(
-        eq(learningFacts.personId, personId),
+        inArray(learningFacts.personId, [...personIds]),
         or(
           stepIds.length > 0
             ? inArray(learningFacts.stepId, stepIds)
@@ -272,16 +306,102 @@ export async function loadFactsOfCourses(
         ),
       ),
     );
-  const perCourse: LearningFactModel[][] = courses.map(() => []);
+  for (const id of personIds) out.set(id, courses.map(() => []));
   for (const r of rows) {
     const i =
       (r.stepId !== null ? owner.get(r.stepId) : undefined) ??
       (r.itemRef !== null ? owner.get(r.itemRef) : undefined);
     if (i === undefined) continue;
     const fact = toFact(r);
-    if (fact) perCourse[i]!.push(fact);
+    if (fact) out.get(r.personId)![i]!.push({ fact, occurredAt: r.occurredAt });
   }
-  return perCourse;
+  return out;
+}
+
+/** EARS-31 — the «require again» rule changes on any scope these courses resolve through. */
+export async function requireAgainChanges(
+  db: Handle,
+  courses: readonly LoadedCourse[],
+): Promise<LearningRequireAgainChange[]> {
+  if (courses.length === 0) return [];
+  const ids = courses.flatMap((c) => [
+    c.row.schoolId,
+    c.row.id,
+    ...c.modules.map((m) => m.id),
+    ...c.lessons.map((l) => l.id),
+    ...c.steps.map((s) => s.id),
+  ]);
+  const rows = await db
+    .select({
+      kind: learningRuleChanges.scopeKind,
+      scopeId: learningRuleChanges.scopeId,
+      at: learningRuleChanges.at,
+    })
+    .from(learningRuleChanges)
+    .where(
+      and(
+        eq(learningRuleChanges.earnedProgress, "require-again"),
+        or(
+          eq(learningRuleChanges.scopeKind, "platform"),
+          inArray(learningRuleChanges.scopeId, ids),
+        ),
+      ),
+    );
+  return rows.map((r) => ({
+    kind: r.kind as LearningScopeKind,
+    scopeId: r.scopeId,
+    at: r.at,
+  }));
+}
+
+/**
+ * EARS-31 — whether a rule change on a scope bears on an item's completion:
+ * the scope holds the item (an ancestor or the item itself) or sits inside it
+ * (a step or lesson of a kept module or course).
+ */
+export function scopeCovers(
+  loaded: LoadedCourse,
+  scope: { kind: LearningScopeKind; scopeId: string },
+  itemId: string,
+): boolean {
+  if (scope.kind === "platform") return true;
+  if (scope.kind === "school") return loaded.row.schoolId === scope.scopeId;
+  const parent = new Map<string, string>();
+  for (const m of loaded.modules) parent.set(m.id, loaded.row.id);
+  for (const l of loaded.lessons) parent.set(l.id, l.moduleId);
+  for (const st of loaded.steps) parent.set(st.id, st.lessonId);
+  const chain = (id: string): Set<string> => {
+    const out = new Set<string>();
+    for (let at: string | undefined = id; at; at = parent.get(at)) out.add(at);
+    return out;
+  };
+  return chain(itemId).has(scope.scopeId) || chain(scope.scopeId).has(itemId);
+}
+
+/**
+ * EARS-31 — the facts that count: a `completion-kept` credit counts only while
+ * no LATER «require again» rule change covers its item. No fact is changed or
+ * removed; a re-judged credit is simply not handed to the evaluator.
+ */
+export function countingFacts(
+  records: readonly LearningFactRecord[],
+  loaded: LoadedCourse,
+  changes: readonly LearningRequireAgainChange[],
+): LearningFactModel[] {
+  const out: LearningFactModel[] = [];
+  for (const { fact, occurredAt } of records) {
+    if (
+      fact.kind === "completion-kept" &&
+      changes.some(
+        (c) =>
+          c.at.getTime() > occurredAt.getTime() &&
+          scopeCovers(loaded, c, fact.itemId),
+      )
+    )
+      continue;
+    out.push(fact);
+  }
+  return out;
 }
 
 function toFact(r: {

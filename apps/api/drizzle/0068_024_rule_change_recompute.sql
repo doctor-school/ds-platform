@@ -1,0 +1,1 @@
+ALTER TABLE "learning_rule_changes" ADD COLUMN "recomputed_at" timestamp with time zone;

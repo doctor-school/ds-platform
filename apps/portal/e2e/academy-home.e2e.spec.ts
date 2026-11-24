@@ -604,19 +604,24 @@ test.describe("Feature 013 — static public Academy home", () => {
             scrollLeft: el.scrollLeft,
             max: el.scrollWidth - el.clientWidth,
             cards: el.querySelectorAll("[data-slot] > a").length,
+            busy: el.getAttribute("aria-busy") === "true",
             lastGap: Math.round(
               box.right - padEnd - Math.max(...slots.map((slot) => slot.right)),
             ),
           };
         });
       const settle = async () => {
+        // A → past the loaded cards pauses at the loaded edge while the next
+        // page loads (one step may span two pages), then follows to its goal
+        // (#4221): a slow runner's pause outlasts one poll interval, so a
+        // position only counts as settled while the rail is not busy.
         let settled = -1;
         await expect
           .poll(
             async () => {
-              const now = (await layout()).scrollLeft;
-              const done = now === settled;
-              settled = now;
+              const { scrollLeft: now, busy } = await layout();
+              const done = !busy && now === settled;
+              settled = busy ? -1 : now;
               return done;
             },
             { intervals: [400] },

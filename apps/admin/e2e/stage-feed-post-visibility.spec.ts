@@ -1,8 +1,27 @@
-import { expect, test } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import { signInAsAdmin } from "@ds/e2e/admin-events";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 import { isGoldenUuid } from "../../../packages/db/src/seed/golden/ids";
 import { visible } from "./support/visible";
+
+const test = base.extend<{ postCleanup: { restore?: () => Promise<void> } }>({
+  postCleanup: [
+    async ({ page }, use) => {
+      // Depend on the admin page so it stays alive through fixture teardown.
+      const cleanup: { restore?: () => Promise<void> } = {};
+      await use(cleanup);
+      if (cleanup.restore) {
+        await test.step("Restore the seeded post after an interrupted test", async () => {
+          expect(page.isClosed(), "admin page available for cleanup").toBe(
+            false,
+          );
+          await cleanup.restore!();
+        });
+      }
+    },
+    { timeout: 45_000 },
+  ],
+});
 
 // The stage reports are published. Keep sign-in and MFA out of the captures.
 test.use({ trace: "off", screenshot: "off", video: "off" });
@@ -16,6 +35,7 @@ function required(name: string): string {
 test("Staff hides and restores a Telegram post on the Academy home feed", async ({
   page: admin,
   browser,
+  postCleanup,
 }) => {
   test.setTimeout(240_000);
   const home = new URL("/", required("E2E_PORTAL_URL")).href;
@@ -69,33 +89,29 @@ test("Staff hides and restores a Telegram post on the Academy home feed", async 
     const restore = visible(admin.getByTestId(`feed-post-unhide-${id}`));
     await expect(state).toHaveText("В ленте");
 
-    let restored = false;
-    try {
-      await test.step("Hide the post and check a fresh Academy home read", async () => {
-        await hide.click();
-        await admin.getByTestId("feed-post-hide-confirm").click();
-        await expect(state).toHaveText("Скрыт");
-        await academy.reload({ waitUntil: "domcontentloaded" });
-        // A second unchanged card proves that the new feed has loaded.
-        await expect(otherCard).toBeVisible();
-        await expect(card).toHaveCount(0);
-      });
+    postCleanup.restore = async () => {
+      await admin.reload({ waitUntil: "domcontentloaded", timeout: 10_000 });
+      await expect(state).toBeVisible({ timeout: 10_000 });
+      if (await restore.isVisible()) await restore.click({ timeout: 10_000 });
+      await expect(state).toHaveText("В ленте", { timeout: 10_000 });
+    };
+    await test.step("Hide the post and check a fresh Academy home read", async () => {
+      await hide.click();
+      await admin.getByTestId("feed-post-hide-confirm").click();
+      await expect(state).toHaveText("Скрыт");
+      await academy.reload({ waitUntil: "domcontentloaded" });
+      // A second unchanged card proves that the new feed has loaded.
+      await expect(otherCard).toBeVisible();
+      await expect(card).toHaveCount(0);
+    });
 
-      await test.step("Restore the post and see it on the Academy home again", async () => {
-        await restore.click();
-        await expect(state).toHaveText("В ленте");
-        restored = true;
-        await academy.reload({ waitUntil: "domcontentloaded" });
-        await expect(card).toBeVisible();
-      });
-    } finally {
-      if (!restored) {
-        await admin.reload({ waitUntil: "domcontentloaded" });
-        await expect(state).toBeVisible();
-        if (await restore.isVisible()) await restore.click();
-        await expect(state).toHaveText("В ленте");
-      }
-    }
+    await test.step("Restore the post and see it on the Academy home again", async () => {
+      await restore.click();
+      await expect(state).toHaveText("В ленте");
+      delete postCleanup.restore;
+      await academy.reload({ waitUntil: "domcontentloaded" });
+      await expect(card).toBeVisible();
+    });
   } finally {
     await visitor.close();
   }

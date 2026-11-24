@@ -80,9 +80,12 @@ one-off history import (EARS-30).
     wins. A replaced or superseded copy is a 012 cleanup job (entity kind
     `feed_entry`). It never throws and never touches the source's status.
   - `telegram-history-export.ts` + `telegram-history-import.command.ts` +
-    `scripts/telegram-import-history.ts` (`pnpm --filter @ds/api
-telegram:import-history -- --source t.me/<address> --export
-<folder>/result.json`) — the EARS-30 one-off import of a Telegram Desktop
+    `telegram-import-history.main.ts` + `telegram-import-history-cli.ts` (in
+    the api image: `node dist/materials/telegram/telegram-import-history.main.js
+--source t.me/<address> --export /export/result.json` in a `docker compose
+run --rm --no-deps -v <folder>:/export:ro api` container; on a workstation
+    `pnpm --filter @ds/api telegram:import-history -- --source t.me/<address>
+--export <folder>/result.json`) — the EARS-30 one-off import of a Telegram Desktop
     JSON export: the whole file validated first (Zod over the fields used; a
     single-channel export `{ type: public_channel | private_channel, id,
 messages }`, `id` bare and compared as `-(10^12 + id)` with the bound

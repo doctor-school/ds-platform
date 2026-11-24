@@ -1009,7 +1009,7 @@ test("4121: the stage partnership fixture reuses the running portal image with n
   assert.doesNotMatch(block, /\b(?:volumes|env_file|ports|networks|INTERNAL_API_TOKEN):/);
 });
 
-test("4128: the two entry-refusal fixtures use their storefront images without real API access", () => {
+test("4128: the entry-refusal fixtures use their storefront images without internal API credentials", () => {
   const { longRunning } = slotServiceSet(SLOT_COMPOSE_TEXT);
   for (const storefront of ["portal", "doctor"]) {
     const fixtureName = `${storefront}-entry-unavailable`;
@@ -1032,6 +1032,11 @@ test("4128: the two entry-refusal fixtures use their storefront images without r
       /\b(?:env_file|volumes|ports|network_mode|depends_on):/,
     );
     if (storefront === "portal") {
+      assert.ok(
+        block.includes(
+          "DOCTOR_PUBLIC_ORIGIN: https://doctor-${SLOT:?}.${STAGE_BASE_DOMAIN:?}",
+        ),
+      );
       assert.match(block, /healthcheck: &entry-unavailable-healthcheck/);
       assert.match(
         block,
@@ -1039,6 +1044,11 @@ test("4128: the two entry-refusal fixtures use their storefront images without r
       );
       assert.match(block, /r\.statusCode===503/);
     } else {
+      assert.ok(
+        block.includes(
+          "ACADEMY_PUBLIC_ORIGIN: https://academy-${SLOT:?}.${STAGE_BASE_DOMAIN:?}",
+        ),
+      );
       assert.match(block, /healthcheck: \*entry-unavailable-healthcheck/);
     }
   }

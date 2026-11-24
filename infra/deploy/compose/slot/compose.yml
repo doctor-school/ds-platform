@@ -226,6 +226,7 @@ services:
       PORT: "3001"
       INTERNAL_API_URL: http://127.0.0.1:3999
       INTERNAL_API_TOKEN: stage-entry-unavailable-fixture
+      DOCTOR_PUBLIC_ORIGIN: https://doctor-${SLOT:?}.${STAGE_BASE_DOMAIN:?}
     healthcheck: &entry-unavailable-healthcheck
       test:
         [
@@ -247,6 +248,7 @@ services:
       PORT: "3004"
       INTERNAL_API_URL: http://127.0.0.1:3999
       INTERNAL_API_TOKEN: stage-entry-unavailable-fixture
+      ACADEMY_PUBLIC_ORIGIN: https://academy-${SLOT:?}.${STAGE_BASE_DOMAIN:?}
     healthcheck: *entry-unavailable-healthcheck
   # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
   doctor:

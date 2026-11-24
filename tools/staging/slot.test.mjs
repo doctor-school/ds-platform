@@ -1009,6 +1009,51 @@ test("4121: the stage partnership fixture reuses the running portal image with n
   assert.doesNotMatch(block, /\b(?:volumes|env_file|ports|networks|INTERNAL_API_TOKEN):/);
 });
 
+test("4128: the entry-refusal fixtures use their storefront images without internal API credentials", () => {
+  const { longRunning } = slotServiceSet(SLOT_COMPOSE_TEXT);
+  for (const storefront of ["portal", "doctor"]) {
+    const fixtureName = `${storefront}-entry-unavailable`;
+    const fixture = longRunning.find((service) => service.name === fixtureName);
+    const normal = longRunning.find((service) => service.name === storefront);
+    assert.ok(
+      fixture && normal,
+      "fixture and normal service participate in the health gate",
+    );
+    assert.equal(fixture.image, normal.image);
+    assert.equal(fixture.port, normal.port);
+    const block = SLOT_COMPOSE_TEXT.match(
+      new RegExp(`^ {2}${fixtureName}:\\r?\\n((?:^ {4}.*\\r?\\n)*)`, "m"),
+    )?.[1];
+    assert.ok(block);
+    assert.match(block, /INTERNAL_API_URL: http:\/\/127\.0\.0\.1:3999/);
+    assert.match(block, /INTERNAL_API_TOKEN: stage-entry-unavailable-fixture/);
+    assert.doesNotMatch(
+      block,
+      /\b(?:env_file|volumes|ports|network_mode|depends_on):/,
+    );
+    if (storefront === "portal") {
+      assert.ok(
+        block.includes(
+          "DOCTOR_PUBLIC_ORIGIN: https://doctor-${SLOT:?}.${STAGE_BASE_DOMAIN:?}",
+        ),
+      );
+      assert.match(block, /healthcheck: &entry-unavailable-healthcheck/);
+      assert.match(
+        block,
+        /sec-fetch-mode':'navigate','sec-fetch-dest':'document/,
+      );
+      assert.match(block, /r\.statusCode===503/);
+    } else {
+      assert.ok(
+        block.includes(
+          "ACADEMY_PUBLIC_ORIGIN: https://academy-${SLOT:?}.${STAGE_BASE_DOMAIN:?}",
+        ),
+      );
+      assert.match(block, /healthcheck: \*entry-unavailable-healthcheck/);
+    }
+  }
+});
+
 const STAGE_ENV_EXAMPLE_KEYS = envKeys(
   readFileSync(new URL("../../infra/deploy/stage.env.example", import.meta.url), "utf8"),
 );

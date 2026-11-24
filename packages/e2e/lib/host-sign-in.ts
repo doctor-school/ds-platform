@@ -305,59 +305,70 @@ export async function provisionConfirmedAccount(
   account: PasswordCredentials,
 ): Promise<void> {
   const origin = base.replace(/\/$/, "");
+  const context = await freshContext(browser, origin);
+  try {
+    const page = await context.newPage();
+    await page.goto(`${origin}/register`, { waitUntil: "load" });
+    await registerOnHostForm(page, host, origin, account);
+  } finally {
+    await context.close();
+  }
+}
+
+/**
+ * Completes a registration on the sign-in host form `page` has been led to
+ * (the storefront's `/register` entry or a gate link carrying a return target):
+ * the required consents, e-mail and password, then the code from the mailbox.
+ * Resolves once the accepted code lands the new account back on the storefront
+ * at `base` — on the return target when the entry carried one.
+ */
+export async function registerOnHostForm(
+  page: Page,
+  host: HostId,
+  base: string,
+  account: PasswordCredentials,
+): Promise<void> {
+  const origin = base.replace(/\/$/, "");
   const mailbox = (
     process.env.E2E_MAILPIT_URL ??
     process.env.MAILPIT_URL ??
     mailpitUrlFor(origin)
   ).replace(/\/$/, "");
-  const context = await freshContext(browser, origin);
-  try {
-    const page = await context.newPage();
-    await page.goto(`${origin}/register`, { waitUntil: "load" });
-    await waitForClientReady(page);
-    expect(
-      isSignInHostForm(page.url()),
-      `the ${host} storefront /register leads to the sign-in host form`,
-    ).toBe(true);
-    // A value typed into the pre-hydration DOM is discarded by the first
-    // client render; the form is filled once the door agrees it is complete.
-    await expect(async () => {
-      for (const consent of REQUIRED_REGISTRATION_CONSENTS[host])
-        await tickConsent(page, consent);
-      await inputSecret(page.getByTestId("register-email"), account.email);
-      await inputSecret(
-        page.getByTestId("register-password"),
-        account.password,
-      );
-      await expect(page.getByTestId("register-submit")).toBeEnabled({
-        timeout: 2_000,
-      });
-    }).toPass({ timeout: 15_000 });
-    const mail = nativeRecoveryMail();
-    const before = await captureAddressedMailCheckpoint(
-      mail,
-      mailbox,
-      account.email,
-    );
-    await page.getByTestId("register-submit").click();
-    await page.waitForURL((url) => url.pathname === "/verify");
-    await expect(page.getByTestId("verify-submit")).toBeVisible();
-    const code = await fetchRecoveryCode(
-      mail,
-      mailbox,
-      account.email,
-      before,
-      "register",
-    );
-    // The slotted OTP field auto-submits on completion (#175).
-    await inputSecret(
-      page.locator('input[autocomplete="one-time-code"]'),
-      code,
-    );
-    // The accepted code signs the new account in and lands it back on the
-    // storefront: the landing is the proof the account is confirmed.
-    await page.waitForURL((url) => url.origin === new URL(origin).origin);
-  } finally {
-    await context.close();
-  }
+  await waitForClientReady(page);
+  expect(
+    isSignInHostForm(page.url()),
+    `the ${host} storefront /register leads to the sign-in host form`,
+  ).toBe(true);
+  // A value typed into the pre-hydration DOM is discarded by the first
+  // client render; the form is filled once the door agrees it is complete.
+  await expect(async () => {
+    for (const consent of REQUIRED_REGISTRATION_CONSENTS[host])
+      await tickConsent(page, consent);
+    await inputSecret(page.getByTestId("register-email"), account.email);
+    await inputSecret(page.getByTestId("register-password"), account.password);
+    await expect(page.getByTestId("register-submit")).toBeEnabled({
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 15_000 });
+  const mail = nativeRecoveryMail();
+  const before = await captureAddressedMailCheckpoint(
+    mail,
+    mailbox,
+    account.email,
+  );
+  await page.getByTestId("register-submit").click();
+  await page.waitForURL((url) => url.pathname === "/verify");
+  await expect(page.getByTestId("verify-submit")).toBeVisible();
+  const code = await fetchRecoveryCode(
+    mail,
+    mailbox,
+    account.email,
+    before,
+    "register",
+  );
+  // The slotted OTP field auto-submits on completion (#175).
+  await inputSecret(page.locator('input[autocomplete="one-time-code"]'), code);
+  // The accepted code signs the new account in and lands it back on the
+  // storefront: the landing is the proof the account is confirmed.
+  await page.waitForURL((url) => url.origin === new URL(origin).origin);
 }

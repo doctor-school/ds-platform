@@ -361,12 +361,14 @@ export interface SchoolOpenedContent {
  * the doctor gets it. DRAFT copy (variant B) — the copy and look are the
  * owner's Stage A pick in 023 slice 3 (023-design §6).
  */
-export function schoolOpenedMessage(content: SchoolOpenedContent): EmailMessage {
+export function schoolOpenedMessage(
+  content: SchoolOpenedContent,
+): EmailMessage {
   return composeEmail({
-    subject: `Doctor.School — школа «${content.schoolTitle}» открылась`,
+    subject: `Doctor.School — «${content.schoolTitle}» открылась`,
     preheader: "Школа открылась — первый курс уже доступен",
     intro:
-      `Школа «${content.schoolTitle}» открылась: вышел первый курс — ` +
+      `«${content.schoolTitle}» открылась: вышел первый курс — ` +
       `«${content.courseTitle}».`,
     paragraphs: [
       "Вы просили сообщить, когда школа откроется. Это единственное такое " +

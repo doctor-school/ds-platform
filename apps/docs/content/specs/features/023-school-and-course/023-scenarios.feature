@@ -47,11 +47,22 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     When the doctor uses the interest capture again
     Then the doctor still has one interest in "cardio"
 
-  @EARS-7 @EARS-26
+  @EARS-6 @EARS-7 @school-doctor-journeys
+  Scenario: A signed-in doctor joins a «скоро» school's list, withdraws, and a failed write says so
+    Given the published school "cardio" has no published course
+    And a signed-in doctor
+    When the doctor opens "/schools/cardio" and uses «Сообщить об открытии»
+    Then the courses section shows «Вы в списке» with «Не сообщать»
+    When the doctor uses «Не сообщать»
+    Then the courses section shows «Сообщить об открытии» again
+    When the doctor uses «Сообщить об открытии» and the interest write fails
+    Then the courses section says the doctor was not added to the list and still shows «Сообщить об открытии»
+
+  @EARS-7
   Scenario: Interested doctors hear once when the school's first course opens
     Given two doctors have an active interest in "cardio" and a third withdrew it
-    When a staff member opens "cardio" in the admin school editor
-    Then the editor shows 2 interested doctors and no names
+    When a staff member reads "cardio" through the admin school API
+    Then the read counts 2 interested doctors and names none
     When the staff member publishes the first course of "cardio"
     Then each of the two doctors gets one school-opened notice email
     And the doctor who withdrew gets none

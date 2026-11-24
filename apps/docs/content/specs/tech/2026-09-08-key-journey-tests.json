@@ -57,6 +57,10 @@
       "status": "NONE",
       "gap": 4128
     },
+    "D14": {
+      "status": "FULL",
+      "gap": null
+    },
     "A1": {
       "status": "FULL",
       "gap": null
@@ -2309,6 +2313,22 @@
       "titles": [
         [
           "Staff attaches and publishes a recording and it plays on both storefronts"
+        ]
+      ]
+    },
+    {
+      "rows": ["D14"],
+      "leg": "live/doctor/learning",
+      "file": "school-interest-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "023 — the «скоро» school and the doctor's interest",
+          "EARS-6, EARS-7: a guest joins a «скоро» school's list through registration and withdraws"
+        ],
+        [
+          "023 — the «скоро» school and the doctor's interest",
+          "EARS-7: a signed-in doctor whose interest write fails sees the alert and keeps the capture"
         ]
       ]
     }

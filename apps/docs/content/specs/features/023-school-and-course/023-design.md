@@ -115,15 +115,17 @@ sequenceDiagram
   B->>I: PUT /v1/me/learning/schools/{id}/interest
   I->>I: upsert (person, school) state = active
   I-->>B: 200 «Вы в списке»
-  A->>A: PublishCourse — first published course of the school
-  A-->>N: CoursePublished { firstOfSchool } (after commit)
-  loop active interests with notified_at NULL
+  A->>A: PublishCourse — no other course of the school is published (soon → open)
+  A->>I: claim active interests with notified_at NULL: set notified_at (same transaction)
+  A-->>N: claimed notices (after commit)
+  loop each claimed interest
     N->>M: send school-opened notice (notice-emails.ts)
-    N->>N: set notified_at
   end
 ```
 
-The letter belongs to the product-notice class of the `Mailer` port (no code, no credential); `notified_at` makes a replay or a second course publication send nothing. A guest's capture rides the 021 registration return target (the school screen with the capture intent) and is completed by the same `PUT` on return. The letter's copy and look are the owner's Stage A pick in slice 3.
+The claim runs inside the publish transaction, only when the publication turns the school from `soon` to `open` (no other course of the school is published), and sets `notified_at` on every active interest that has none; the claimed doctors are sent the letter after the commit, through the `LearningNoticePort` that the api host implements over the product-notice class of the `Mailer` port (no code, no credential). A replay, a second course publication while the school is open, or a withdrawn interest sends nothing; a school that went back to `soon` and opens again notifies only doctors never notified before. A send failure is logged by person id and not retried — the claim already stands, so a doctor never gets the letter twice.
+
+A guest's capture rides the 021 registration return target: the school screen with the closed marker `?capture=interest`, which the same-origin return guard (`parseSameOriginReturnTarget`, `@ds/schemas`) keeps as an allowlisted query — any other value, a repeat or a foreign parameter still drops the whole query, and a foreign origin is refused. On return the screen completes the capture with the same `PUT` and drops the marker from the address, so a reload never registers again. The letter's copy and look, and the capture's copy, are the owner's Stage A pick in slice 3.
 
 ## 7. Review lifecycle (EARS-18…EARS-20)
 

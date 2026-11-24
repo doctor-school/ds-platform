@@ -7109,6 +7109,132 @@
         "required": ["affectedDoctors", "toDone", "toNotDone"],
         "type": "object"
       },
+      "LearningSchoolAdminDetailDto": {
+        "additionalProperties": false,
+        "properties": {
+          "activeInterestCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "communityUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "directionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "facts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "text": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["label", "text"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "internshipOffer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leadExpertId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "mentoringOffer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "soonNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": ["draft", "published"],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "directionId",
+          "leadExpertId",
+          "projectId",
+          "slug",
+          "title",
+          "state",
+          "description",
+          "facts",
+          "soonNote",
+          "communityUrl",
+          "mentoringOffer",
+          "internshipOffer",
+          "version",
+          "activeInterestCount"
+        ],
+        "type": "object"
+      },
       "LearningSchoolAdminDto": {
         "additionalProperties": false,
         "properties": {
@@ -7227,6 +7353,39 @@
           "internshipOffer",
           "version"
         ],
+        "type": "object"
+      },
+      "LearningSchoolInterestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "registeredAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "schoolId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["active", "withdrawn"],
+            "type": "string"
+          },
+          "withdrawnAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["schoolId", "state", "registeredAt", "withdrawnAt"],
         "type": "object"
       },
       "LearningSchoolListDto": {
@@ -7548,6 +7707,16 @@
               }
             ]
           },
+          "interested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "school": {
             "additionalProperties": false,
             "properties": {
@@ -7660,7 +7829,14 @@
             "type": "boolean"
           }
         },
-        "required": ["school", "direction", "expert", "signedIn", "courses"],
+        "required": [
+          "school",
+          "direction",
+          "expert",
+          "signedIn",
+          "interested",
+          "courses"
+        ],
         "type": "object"
       },
       "LearningScopeRulesDto": {
@@ -14136,6 +14312,34 @@
         "tags": ["LearningAdmin"]
       }
     },
+    "/v1/admin/learning/schools/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_school",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDetailDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
     "/v1/admin/learning/steps": {
       "post": {
         "operationId": "LearningAdminController_createStep",
@@ -16058,6 +16262,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RecordLearningFactResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/schools/{schoolId}/interest": {
+      "delete": {
+        "operationId": "LearningMeController_withdrawInterest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schoolId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolInterestDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      },
+      "put": {
+        "operationId": "LearningMeController_registerInterest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schoolId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolInterestDto"
                 }
               }
             },

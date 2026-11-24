@@ -1,6 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import {
   FEED_SOURCE_ADDRESS_ERROR,
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
@@ -108,6 +114,59 @@ async function shot(page: Page, name: string): Promise<void> {
     await setPalette(page, "light");
   }
   await page.setViewportSize(WIDE);
+}
+
+/**
+ * 048 EARS-37 — every visible action on the page takes the focus from the
+ * keyboard: each one is marked, then Tab walks the page from its start until
+ * all are met (or the walk wraps), and the unmet ones are named.
+ */
+async function expectEveryActionTabReachable(page: Page): Promise<void> {
+  const total = await page.evaluate(() => {
+    const actions = [
+      ...document.body.querySelectorAll<HTMLElement>(
+        'a[href], button, input:not([type="hidden"]), select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter(
+      (el) =>
+        !el.matches(":disabled") &&
+        el.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+    );
+    actions.forEach((el, n) => el.setAttribute("data-e2e-action", String(n)));
+    (document.activeElement as HTMLElement | null)?.blur();
+    return actions.length;
+  });
+  expect(total, `${page.url()} shows no action at all`).toBeGreaterThan(0);
+  const met = new Set<string>();
+  for (let press = 0; press < total * 3 && met.size < total; press += 1) {
+    await page.keyboard.press("Tab");
+    const at = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-e2e-action") ?? null,
+    );
+    if (at !== null) met.add(at);
+  }
+  const unmet = await page.evaluate(
+    (seen) =>
+      [...document.querySelectorAll<HTMLElement>("[data-e2e-action]")]
+        .filter((el) => !seen.includes(el.getAttribute("data-e2e-action")!))
+        .map(
+          (el) =>
+            `${el.tagName.toLowerCase()} «${(el.innerText || el.getAttribute("aria-label") || "").trim()}»`,
+        ),
+    [...met],
+  );
+  expect(unmet, `${page.url()}: actions the keyboard never reaches`).toEqual(
+    [],
+  );
+}
+
+/** Tab forward until `target` holds the focus (it must be reachable). */
+async function tabTo(page: Page, target: Locator): Promise<void> {
+  for (let press = 0; press < 200; press += 1) {
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`${page.url()}: the keyboard never reaches ${target}`);
 }
 
 /** The stored source list, read through the same admin route the page uses. */
@@ -458,6 +517,82 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       );
       expect(await hiddenAt(p1202.id)).toBeNull();
     } finally {
+      await removeTelegramPosts(posts.map((p) => p.id));
+    }
+  });
+
+  test("EARS-37: at 390 px «Источники» and «Публикации» do not scroll sideways and every action is reached and used from the keyboard", async () => {
+    const posts = await seedTelegramPosts(moved, [
+      [1301, "Пост 1301 — программа школы", "2026-11-14T09:00:00Z"],
+      [1302, "Пост 1302 — итоги эфира", "2026-11-15T09:00:00Z"],
+    ]);
+    const p1302 = posts[1]!;
+    try {
+      await openSources(admin);
+      // At a phone width the list renders its rows as cards.
+      await admin.setViewportSize(NARROW);
+      await expect(cell(admin, `feed-source-posts-${moved}`)).toBeVisible();
+      await expectNoPageSideScroll(admin);
+      await expectEveryActionTabReachable(admin);
+
+      // «Публикации» is followed from the keyboard.
+      await admin.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
+      await tabTo(admin, cell(admin, `feed-source-posts-${moved}`));
+      await admin.keyboard.press("Enter");
+      await admin.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/);
+      await expect(cell(admin, `feed-post-state-${p1302.id}`)).toHaveText(
+        "В ленте",
+      );
+      await expectNoPageSideScroll(admin);
+      await expectEveryActionTabReachable(admin);
+
+      // «Скрыть из ленты» from the keyboard: the confirmation takes the focus,
+      // Escape cancels with nothing changed, Enter on «Скрыть» hides the post.
+      await admin.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
+      await tabTo(admin, cell(admin, `feed-post-hide-${p1302.id}`));
+      await admin.keyboard.press("Enter");
+      const confirm = admin.getByTestId("feed-post-hide-dialog");
+      await expect(confirm).toBeVisible();
+      await expect
+        .poll(() =>
+          confirm.evaluate((el) => el.contains(document.activeElement)),
+        )
+        .toBe(true);
+      await expectNoPageSideScroll(admin);
+      await admin.keyboard.press("Escape");
+      await expect(confirm).toBeHidden();
+      expect(await hiddenAt(p1302.id)).toBeNull();
+
+      await tabTo(admin, cell(admin, `feed-post-hide-${p1302.id}`));
+      await admin.keyboard.press("Enter");
+      await expect(confirm).toBeVisible();
+      await tabTo(admin, admin.getByTestId("feed-post-hide-confirm"));
+      await admin.keyboard.press("Enter");
+      await expect(confirm).toBeHidden();
+      await expect(cell(admin, `feed-post-state-${p1302.id}`)).toHaveText(
+        "Скрыт",
+      );
+      expect(await hiddenAt(p1302.id)).not.toBeNull();
+
+      // «Вернуть в ленту» from the keyboard.
+      await admin.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
+      await tabTo(admin, cell(admin, `feed-post-unhide-${p1302.id}`));
+      await admin.keyboard.press("Enter");
+      await expect(admin.getByTestId("feed-post-notice")).toContainText(
+        "Пост вернулся в ленту на свою дату.",
+      );
+      await expect(cell(admin, `feed-post-state-${p1302.id}`)).toHaveText(
+        "В ленте",
+      );
+      expect(await hiddenAt(p1302.id)).toBeNull();
+    } finally {
+      await admin.setViewportSize(WIDE);
       await removeTelegramPosts(posts.map((p) => p.id));
     }
   });

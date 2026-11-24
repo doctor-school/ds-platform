@@ -43,8 +43,10 @@ conflict and kind filter remain in the same six-title receipt.
 
 ## Admin and Academy material journeys
 
-`--project material-journeys` executes the eight 048 originals tagged
-`@material-academy-journeys` (V-9, V-10, V-12, EARS-18). The administrator signs
+`--project material-journeys` executes the nine 048 originals tagged
+`@material-academy-journeys` (V-9, V-10, V-12, EARS-18, and the EARS-37 source
+pages on a phone: no side scroll and a clean axe scan of «Источники» and
+«Публикации»). The administrator signs
 in behind the second factor and writes through the real Admin; a visitor reads
 the Academy home rail and the reading page on the running Academy storefront in
 the same run. Steps live in `material-journeys/steps.ts`; the shared stand

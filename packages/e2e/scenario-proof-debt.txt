@@ -623,7 +623,6 @@
 048 | The VK source pages and VK cards work on a phone
 048 | The doctor storefront shows no VK card
 048 | The one-off VK import brings in earlier posts and a re-run duplicates nothing
-048 | The source pages work on a phone
 048 | VK confirms the Callback server of the listed community
 049 | A broadcast director creates an event and runs its broadcast
 049 | A broadcast director signs in with an authenticator code and is not a participant

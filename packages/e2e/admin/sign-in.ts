@@ -1,49 +1,48 @@
-import { type Page } from "@playwright/test";
+import { errors, type Page } from "@playwright/test";
 import { inputSecret } from "../lib/owned-registration";
 import { bootstrapAdminSession, type BootstrapResult } from "./admin-session";
 import { totpCode } from "./totp";
 
-/**
- * The ONE browser admin sign-in every e2e flow uses (#1676) — the admin flow
- * specs and, since #2751, the storefront specs that provision admin-side state.
- *
- * Every flow spec used to carry its own `signInAsAdmin` copy, and each copy drove
- * the arc exactly once: login form → `/mfa/enroll` → TOTP → `/events`. That is a
- * race against Zitadel, not a deterministic sequence. `bootstrapAdminSession`
- * grants the `platform_admin` project role, but the IdP's role projection is
- * eventually consistent, so a login issued inside that window comes back without
- * the role — the admin bounces and the `waitForURL(/\/events/)` at the END of the
- * sequence times out. The failure is not an assertion: it is the sign-in, and
- * because the flow describes are `mode: "serial"`, one lagged login skips the rest
- * of the file. Both narrow specs already wrapped their login in a 4-attempt retry,
- * but only around the `/mfa/enroll` hop — the post-TOTP transition, which is where
- * the lag actually surfaces, was left bare.
- *
- * So the retry here brackets the FULL sequence: a timeout at either hop starts a
- * fresh attempt from `/login`, up to `ATTEMPTS` times. Two consequences of
- * retrying the whole arc are handled explicitly:
- *
- * - The second factor may already exist by the time we come back. A first attempt
- *   that enrolled the factor and then lost the `/events` transition leaves the
- *   account enrolled, so the next login is CHALLENGED (`/mfa/challenge`) instead
- *   of offered enrollment. The secret is carried across attempts and either card
- *   is completed with it.
- * - A TOTP code is single-use within its 30-second step (011 EARS-6), so a code
- *   already submitted is never submitted again — the helper waits out the step
- *   boundary for a fresh one rather than replaying a burnt code.
- *
- * Behaviour is otherwise identical to the copies it replaces: it lands on
- * `/events` with a real `platform_admin` session, or throws. It resolves the
- * TOTP secret it enrolled, so a spec can answer a later code prompt of the same
- * account — the 047 step-up re-verification.
- */
 export const ADMIN_ORIGIN =
   process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
-/** Bounded by the observed projection lag — the narrow specs' proven attempt budget. */
+/** Allow for the IdP role-projection lag (#1676). */
 const ATTEMPTS = 4;
+const CONTROL_TIMEOUT = 8_000;
+const NAVIGATION_TIMEOUT = 20_000;
 /** A TOTP step; a burnt code cannot be replayed before the next one begins. */
 const STEP_MS = 30_000;
+
+/** `/login` redirects pending and active sessions without mounting the form (#4125). */
+async function waitForLoginScreen(page: Page) {
+  const screen = await page.waitForFunction(
+    () => {
+      switch (location.pathname) {
+        case "/events":
+          return "events";
+        case "/mfa/challenge":
+          return "challenge";
+        case "/mfa/enroll":
+          return "enroll";
+        case "/login":
+          return (
+            Boolean(
+              document.querySelector("#email")?.getClientRects().length,
+            ) && "login"
+          );
+        default:
+          return false;
+      }
+    },
+    undefined,
+    { timeout: CONTROL_TIMEOUT },
+  );
+  try {
+    return await screen.jsonValue();
+  } finally {
+    await screen.dispose();
+  }
+}
 
 /**
  * Sign in as a `platform_admin` and land on `/events`, completing the one-time
@@ -66,54 +65,94 @@ export async function signInAsAdmin(
   let secret = credentials?.totpSecret;
   /** The last code submitted — never replayed within its own step. */
   let burntCode: string | undefined;
+  let submittedPassword = false;
+  let submittedMfa = false;
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     if (attempt > 0) await page.waitForTimeout(2500);
-
-    await page.goto("/login");
-    await page.locator("#email").fill(email);
-    const passwordInput = page.locator("#password");
-    if (credentials?.totpSecret) await inputSecret(passwordInput, password);
-    else await passwordInput.fill(password);
-    await page.getByTestId("login-submit").click();
-
+    let phase = "opening the login page";
     try {
-      // Either MFA card is a valid landing: enrollment on a first pass, the
-      // challenge once an earlier attempt got as far as enrolling the factor.
-      await page.waitForURL(
-        credentials?.totpSecret
-          ? /\/mfa\/challenge/
-          : /\/mfa\/(enroll|challenge)/,
-        { timeout: 8000 },
-      );
-
-      const enrolling = /\/mfa\/enroll/.test(page.url());
-      if (enrolling) {
-        secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-      } else if (!secret) {
-        // Challenged with no secret in hand: the account carries a factor this
-        // helper never enrolled, so no code can be derived. That is a stand-state
-        // problem, not a lag — fail loudly rather than burn the attempt budget.
+      await page.goto("/login", {
+        waitUntil: "domcontentloaded",
+        timeout: NAVIGATION_TIMEOUT,
+      });
+      phase = "waiting for the login form or its redirect";
+      const screen = await waitForLoginScreen(page);
+      if (screen === "events") {
+        if (submittedMfa && secret) return secret;
         throw new Error(
-          `${email} is already enrolled in TOTP outside this helper — no secret to answer the challenge with`,
+          "Admin session was already active before this sign-in completed MFA",
         );
       }
 
+      let enrolling = screen === "enroll";
+      if (screen === "login") {
+        submittedMfa = false;
+        phase = "submitting the password form";
+        await page.locator("#email").fill(email, { timeout: CONTROL_TIMEOUT });
+        const passwordInput = page.locator("#password");
+        if (credentials?.totpSecret) {
+          await inputSecret(passwordInput, password, {
+            timeout: CONTROL_TIMEOUT,
+          });
+        } else {
+          await passwordInput.fill(password, { timeout: CONTROL_TIMEOUT });
+        }
+        await page
+          .getByTestId("login-submit")
+          .click({ timeout: CONTROL_TIMEOUT });
+        submittedPassword = true;
+        phase = "waiting for the MFA screen";
+        await page.waitForURL(
+          ({ pathname }) =>
+            pathname === "/mfa/challenge" || pathname === "/mfa/enroll",
+          { waitUntil: "domcontentloaded", timeout: CONTROL_TIMEOUT },
+        );
+        enrolling = new URL(page.url()).pathname === "/mfa/enroll";
+      }
+      if (enrolling) {
+        if (credentials?.totpSecret || !submittedPassword) {
+          throw new Error("Admin sign-in reached unexpected MFA enrollment");
+        }
+        phase = "reading the newly enrolled factor";
+        secret = (
+          await page
+            .getByTestId("mfa-secret")
+            .innerText({ timeout: CONTROL_TIMEOUT })
+        ).trim();
+      } else if (!secret) {
+        throw new Error(
+          "Admin account is already enrolled in TOTP outside this helper — no secret to answer the challenge with",
+        );
+      }
+
+      phase = "answering the MFA prompt";
       const code = await freshCode(page, secret, burntCode);
       burntCode = code;
       const codeInput = page
         .getByTestId(enrolling ? "mfa-enroll-form" : "mfa-challenge-form")
         .getByRole("textbox");
-      if (credentials?.totpSecret) await inputSecret(codeInput, code);
-      else await codeInput.fill(code);
+      if (credentials?.totpSecret) {
+        await inputSecret(codeInput, code, { timeout: CONTROL_TIMEOUT });
+      } else {
+        await codeInput.fill(code, { timeout: CONTROL_TIMEOUT });
+      }
+      submittedMfa = true;
 
-      // The hop the local copies left unguarded: the role projection lags the
-      // grant, so a login inside that window lands back on `/login` instead.
-      await page.waitForURL(/\/events/, { timeout: 20_000 });
+      phase = "waiting for the events page after MFA";
+      await page.waitForURL(({ pathname }) => pathname === "/events", {
+        waitUntil: "domcontentloaded",
+        timeout: NAVIGATION_TIMEOUT,
+      });
       return secret;
     } catch (error) {
-      if (attempt === ATTEMPTS - 1) throw error;
-      /* the platform_admin role projection lags the grant — retry */
+      if (!(error instanceof errors.TimeoutError)) throw error;
+      if (attempt === ATTEMPTS - 1) {
+        throw new Error(
+          `Admin sign-in timed out while ${phase} (attempt ${ATTEMPTS})`,
+          { cause: error },
+        );
+      }
     }
   }
 

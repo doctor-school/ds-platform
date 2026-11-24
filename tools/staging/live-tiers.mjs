@@ -143,6 +143,7 @@ export const LIVE_TIERS = Object.freeze([
       "e2e/stage-event-lifecycle.spec.ts",
       "e2e/stage-congress-review.spec.ts",
       "e2e/stage-recording-publish.spec.ts",
+      "e2e/stage-feed-post-visibility.spec.ts",
     ],
     seededEnv: { E2E_DOCTOR_CONGRESS_SLUG: GOLDEN_SLUGS.doctorCongress },
     gated: [],

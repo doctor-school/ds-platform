@@ -94,8 +94,8 @@
       "gap": null
     },
     "S3": {
-      "status": "NONE",
-      "gap": 4125
+      "status": "FULL",
+      "gap": null
     },
     "S4": {
       "status": "FULL",
@@ -2288,6 +2288,15 @@
       "project": "chromium",
       "titles": [
         ["Staff publishes an event on both storefronts and ends its open room"]
+      ]
+    },
+    {
+      "rows": ["S3"],
+      "leg": "live/admin/event-lifecycle",
+      "file": "stage-feed-post-visibility.spec.ts",
+      "project": "chromium",
+      "titles": [
+        ["Staff hides and restores a Telegram post on the Academy home feed"]
       ]
     },
     {

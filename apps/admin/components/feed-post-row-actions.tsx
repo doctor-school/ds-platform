@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
   Button,
 } from "@ds/design-system";
-import type { FeedEntryAdmin } from "@ds/schemas";
+import type { FeedEntryAdmin, FeedSourceNetwork } from "@ds/schemas";
 import { feedEntryErrorKey } from "@/lib/feed-source-errors";
 import { feedSourcesUrl } from "@/providers/data-provider";
 
@@ -22,7 +22,8 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  * The row action of «Публикации» (048 EARS-32):
  *
  * - **«Скрыть из ленты»** behind an `AlertDialog` that says what the act does
- *   (the post leaves the Academy feed and stays in Telegram);
+ *   (the post leaves the Academy feed and stays in Telegram / VK — EARS-47
+ *   applies it to a VK post or video unchanged);
  * - **«Вернуть в ленту»** acts at once — it only gives the feed back a post
  *   it had, at its own date.
  *
@@ -33,12 +34,15 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  */
 export function FeedPostRowActions({
   entry,
+  platform,
   dateLabel,
   onStarted,
   onChanged,
   onFailed,
 }: {
   entry: FeedEntryAdmin;
+  /** The listed source's platform — named in the hide confirmation. */
+  platform: FeedSourceNetwork;
   /** The row's date as the page shows it — names the post to a screen reader. */
   dateLabel: string;
   onStarted: () => void;
@@ -130,7 +134,9 @@ export function FeedPostRowActions({
               {t("feedPosts.hideConfirm.title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("feedPosts.hideConfirm.description")}
+              {t("feedPosts.hideConfirm.description", {
+                platform: t(`feedSources.platforms.${platform}`),
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -10,6 +10,8 @@ import {
 import {
   FEED_SOURCE_ADDRESS_ERROR,
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
+  FEED_VK_SOURCE_ADDRESS_ERROR,
+  FEED_VK_SOURCE_ADDRESS_TAKEN_ERROR,
 } from "@ds/schemas";
 import {
   ADMIN_ORIGIN,
@@ -25,6 +27,14 @@ import {
   removeTelegramPosts,
   seedTelegramPosts,
 } from "./support/feed-posts";
+import {
+  removeVkSources,
+  restoreVkCallsThisMonth,
+  seedVkEntries,
+  seedVkSource,
+  setVkCallsThisMonth,
+  vkHiddenAt,
+} from "./support/feed-vk";
 import { visible } from "./support/visible";
 
 /**
@@ -284,7 +294,7 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
     );
     await expect(
       admin.getByTestId("feed-source-platform").locator("option"),
-    ).toHaveText(["Telegram"]);
+    ).toHaveText(["Telegram", "VK"]);
 
     for (const refused of [
       "https://example.com/bbmacademy",
@@ -635,6 +645,300 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       expect(status).toBe(403);
     } finally {
       await deskContext.close();
+    }
+  });
+});
+
+/**
+ * 048 slice 3 (#4004, V-33) — a VK community on «Источники» and «Публикации»
+ * on the same real path. The stand's API has no VK connector configured, so
+ * the at-once check of an added VK source reads «Ошибка: VK не подключён на
+ * сервере»; the other five EARS-44 reasons, the bound community, its entries
+ * and the month's call count are stored as the connector stores them
+ * (`support/feed-vk.ts`) — their production is proven against the VK double
+ * by the API e2e (V-25…V-30).
+ */
+test.describe("048 EARS-38, EARS-44, EARS-47, EARS-52 — VK on «Источники» and «Публикации»", () => {
+  let adminContext: BrowserContext | undefined;
+  let admin: Page;
+  const run = Date.now().toString(36);
+  const VK_OFFICIAL = "bbm.academy";
+  const vkMoved = `bbm.e2e.${run}`;
+  const REASONS = [
+    "VK не подключён на сервере",
+    "Сообщество не найдено",
+    "Адрес сообщества изменился на vk.com/bbm.academy.new",
+    "VK не присылает новые записи",
+    "Лимит вызовов VK почти исчерпан",
+    "VK недоступен",
+  ];
+  const reasonAddress = (n: number) => `vk.reason${n}.${run}`;
+  const postsAddress = `vk.posts.${run}`;
+  const owned = [
+    VK_OFFICIAL,
+    vkMoved,
+    postsAddress,
+    ...REASONS.map((_, n) => reasonAddress(n)),
+  ];
+  let callsBefore: number | null = null;
+
+  test.beforeAll(async ({ browser }) => {
+    // The official community may be left by an aborted earlier run.
+    await removeVkSources(owned);
+    callsBefore = await setVkCallsThisMonth(1234);
+    adminContext = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+    admin = await adminContext.newPage();
+    await admin.setViewportSize(WIDE);
+    await signInAsAdmin(admin);
+  });
+
+  test.afterAll(async () => {
+    await adminContext?.close();
+    await removeVkSources(owned);
+    await restoreVkCallsThisMonth(callsBefore);
+  });
+
+  test("048 EARS-38: a VK wall, post, video or other-network link is refused at the «Адрес сообщества» field, nothing stored", async () => {
+    await openSources(admin);
+    const before = await storedAddresses(admin);
+    await admin.goto("/materials/sources/create");
+    await admin.getByTestId("feed-source-platform").selectOption("vk");
+    await expect(admin.getByText("Адрес сообщества")).toBeVisible();
+    await expect(admin.getByText("Например, vk.com/bbm.academy")).toBeVisible();
+    for (const refused of [
+      "https://vk.com/wall-211000111_501",
+      "vk.com/bbm.academy?w=wall-211000111_501",
+      "https://vk.com/video-211000111_456239017",
+      "https://t.me/bbmacademy",
+      "vk.com/a",
+    ]) {
+      await submitAddress(admin, refused);
+      await expect(admin.getByText(FEED_VK_SOURCE_ADDRESS_ERROR)).toBeVisible();
+      await expect(admin.getByTestId("feed-source-address")).toHaveValue(
+        refused,
+      );
+      await expect(admin).toHaveURL(/\/materials\/sources\/create$/);
+    }
+    await shot(admin, "vk-create-refused");
+    expect(await storedAddresses(admin)).toEqual(before);
+  });
+
+  test("048 EARS-38, EARS-44: vk.ru/bbm.academy is listed as vk.com/bbm.academy, checked at once, with the month's calls; the same community again is refused", async () => {
+    await admin.goto("/materials/sources/create");
+    await admin.getByTestId("feed-source-platform").selectOption("vk");
+    await submitAddress(admin, "https://vk.ru/BBM.Academy");
+    await admin.waitForURL(/\/materials\/sources$/);
+    const added = row(admin, VK_OFFICIAL);
+    await expect(added).toBeVisible();
+    await expect(cell(admin, `feed-source-row-${VK_OFFICIAL}`)).toHaveText(
+      `vk.com/${VK_OFFICIAL}`,
+    );
+    await expect(added.getByText("VK", { exact: true })).toBeVisible();
+    await expect(cell(admin, `feed-source-state-${VK_OFFICIAL}`)).toHaveText(
+      "Включён",
+    );
+    await expect(cell(admin, `feed-source-status-${VK_OFFICIAL}`)).toHaveText(
+      "Ошибка: VK не подключён на сервере",
+    );
+    await expect(
+      cell(admin, `feed-source-checked-${VK_OFFICIAL}`),
+    ).not.toHaveText("Ещё не проверялся");
+    const calls = admin.getByTestId("feed-sources-vk-calls");
+    await expect(calls).toContainText(
+      "Вызовов VK в этом месяце: 1 234 из 10 000",
+    );
+    await expect(calls).toHaveAttribute("data-state", "normal");
+    await expect(calls).not.toContainText("Лимит почти исчерпан");
+    await shot(admin, "vk-sources-listed");
+
+    await admin.goto("/materials/sources/create");
+    await admin.getByTestId("feed-source-platform").selectOption("vk");
+    await submitAddress(admin, "vk.com/bbm.academy");
+    await expect(
+      admin.getByText(FEED_VK_SOURCE_ADDRESS_TAKEN_ERROR),
+    ).toBeVisible();
+    await expect(admin).toHaveURL(/\/materials\/sources\/create$/);
+    // The rule is per platform: on Telegram the same text reads the channel copy.
+    await admin.getByTestId("feed-source-platform").selectOption("telegram");
+    await expect(admin.getByText("Адрес канала")).toBeVisible();
+    await submitAddress(admin, "vk.com/bbm.academy");
+    await expect(admin.getByText(FEED_SOURCE_ADDRESS_ERROR)).toBeVisible();
+  });
+
+  test("048 EARS-38: «Изменить адрес» of a VK source refuses a post link at the field, then changes it", async () => {
+    await openSources(admin);
+    await cell(admin, `feed-source-edit-${VK_OFFICIAL}`).click();
+    const dialog = admin.getByTestId("feed-source-edit-dialog");
+    await expect(dialog).toContainText(
+      `Сейчас источник — vk.com/${VK_OFFICIAL}.`,
+    );
+    await expect(dialog.getByText("Адрес сообщества")).toBeVisible();
+    await expect(dialog.getByTestId("feed-source-address")).toHaveValue(
+      `vk.com/${VK_OFFICIAL}`,
+    );
+    await submitAddress(admin, "vk.com/wall-211000111_501");
+    await expect(dialog.getByText(FEED_VK_SOURCE_ADDRESS_ERROR)).toBeVisible();
+    await expect(dialog.getByTestId("feed-source-address")).toHaveValue(
+      "vk.com/wall-211000111_501",
+    );
+    await shot(admin, "vk-edit-refused");
+    await submitAddress(admin, `https://vk.com/${vkMoved.toUpperCase()}`);
+    await expect(dialog).toBeHidden();
+    await expect(admin.getByTestId("feed-source-notice")).toContainText(
+      "Адрес источника изменён.",
+    );
+    await expect(cell(admin, `feed-source-row-${vkMoved}`)).toHaveText(
+      `vk.com/${vkMoved}`,
+    );
+    const stored = await storedAddresses(admin);
+    expect(stored).toContain(vkMoved);
+    expect(stored).not.toContain(VK_OFFICIAL);
+  });
+
+  test("048 EARS-44: each of the six VK reasons reads «Ошибка: <reason>»; the month's line warns from 8 000", async () => {
+    for (const [n, reason] of REASONS.entries()) {
+      await seedVkSource(reasonAddress(n), { reason });
+    }
+    await openSources(admin);
+    for (const [n, reason] of REASONS.entries()) {
+      await expect(
+        cell(admin, `feed-source-status-${reasonAddress(n)}`),
+      ).toHaveText(`Ошибка: ${reason}`);
+    }
+    await shot(admin, "vk-sources-reasons");
+
+    await setVkCallsThisMonth(8000);
+    await admin.reload();
+    const calls = admin.getByTestId("feed-sources-vk-calls");
+    await expect(calls).toHaveAttribute("data-state", "warn");
+    await expect(calls).toContainText(
+      "Вызовов VK в этом месяце: 8 000 из 10 000. Лимит почти исчерпан.",
+    );
+    await shot(admin, "vk-sources-calls-warn");
+
+    await setVkCallsThisMonth(7999);
+    await admin.reload();
+    await expect(calls).toHaveAttribute("data-state", "normal");
+    await expect(calls).toContainText(
+      "Вызовов VK в этом месяце: 7 999 из 10 000",
+    );
+  });
+
+  test("048 EARS-47: «Публикации» of a VK source lists posts and videos with «Удалён в VK» and the VK note; a VK video is hidden and returned", async () => {
+    const source = await seedVkSource(postsAddress, { reason: null });
+    const [post, removed, video] = await seedVkEntries(source, [
+      {
+        kind: "post",
+        objectId: 501,
+        text: "Пост 501 — анонс школы кардиологии",
+        at: "2026-11-10T09:00:00Z",
+      },
+      {
+        kind: "post",
+        objectId: 502,
+        text: "Пост 502 — удалён со стены",
+        at: "2026-11-11T09:00:00Z",
+        removed: true,
+      },
+      {
+        kind: "video",
+        objectId: 456239017,
+        text: "Видео — разбор клинического случая",
+        at: "2026-11-12T09:00:00Z",
+      },
+    ]);
+    await openSources(admin);
+    await expect(cell(admin, `feed-source-status-${postsAddress}`)).toHaveText(
+      "Работает",
+    );
+    await cell(admin, `feed-source-posts-${postsAddress}`).click();
+    await admin.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/);
+    await expect(
+      admin.getByRole("heading", {
+        level: 1,
+        name: `Публикации · vk.com/${postsAddress}`,
+      }),
+    ).toBeVisible();
+    await expect(
+      visible(
+        admin.getByText(
+          "Видео, удалённое в VK, остаётся в ленте, пока его не скрыть.",
+        ),
+      ),
+    ).toBeVisible();
+    await expect(cell(admin, `feed-post-kind-${post}`)).toHaveText("Пост");
+    await expect(cell(admin, `feed-post-kind-${video}`)).toHaveText("Видео");
+    await expect(cell(admin, `feed-post-state-${post}`)).toHaveText("В ленте");
+    await expect(cell(admin, `feed-post-state-${removed}`)).toHaveText(
+      "Удалён в VK",
+    );
+    await expect(cell(admin, `feed-post-state-${video}`)).toHaveText("В ленте");
+    const original = cell(admin, `feed-post-original-${post}`);
+    await expect(original).toHaveText("Открыть в VK ↗");
+    await expect(original).toHaveAttribute(
+      "href",
+      `https://vk.com/wall-${source.groupId}_501`,
+    );
+    await expect(original).toHaveAttribute("target", "_blank");
+    await expect(original).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(cell(admin, `feed-post-original-${video}`)).toHaveAttribute(
+      "href",
+      `https://vk.com/video-${source.groupId}_456239017`,
+    );
+    await expect(cell(admin, `feed-post-original-${video}`)).toHaveAttribute(
+      "aria-label",
+      /^Открыть видео от .+ в VK, откроется в новой вкладке$/,
+    );
+    await shot(admin, "vk-posts-list");
+
+    await cell(admin, `feed-post-hide-${video}`).click();
+    const confirm = admin.getByTestId("feed-post-hide-dialog");
+    await expect(confirm).toContainText(
+      "Пост уйдёт из ленты Академии. В VK он останется.",
+    );
+    await confirm.getByRole("button", { name: "Отмена" }).click();
+    await expect(confirm).toBeHidden();
+    expect(await vkHiddenAt(video!)).toBeNull();
+
+    await cell(admin, `feed-post-hide-${video}`).click();
+    await admin.getByTestId("feed-post-hide-confirm").click();
+    await expect(confirm).toBeHidden();
+    await expect(cell(admin, `feed-post-state-${video}`)).toHaveText("Скрыт");
+    expect(await vkHiddenAt(video!)).not.toBeNull();
+    await shot(admin, "vk-posts-video-hidden");
+
+    await cell(admin, `feed-post-unhide-${video}`).click();
+    await expect(admin.getByTestId("feed-post-notice")).toContainText(
+      "Пост вернулся в ленту на свою дату.",
+    );
+    await expect(cell(admin, `feed-post-state-${video}`)).toHaveText("В ленте");
+    expect(await vkHiddenAt(video!)).toBeNull();
+  });
+
+  test("048 EARS-52: at 390 px «Источники» with VK sources and «Публикации» of a VK source do not scroll sideways and every action is reached from the keyboard", async () => {
+    try {
+      await openSources(admin);
+      await admin.setViewportSize(NARROW);
+      await expect(admin.getByTestId("feed-sources-vk-calls")).toBeVisible();
+      await expect(
+        cell(admin, `feed-source-posts-${postsAddress}`),
+      ).toBeVisible();
+      await expectNoPageSideScroll(admin);
+      await expectEveryActionTabReachable(admin);
+
+      await admin.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
+      await tabTo(admin, cell(admin, `feed-source-posts-${postsAddress}`));
+      await admin.keyboard.press("Enter");
+      await admin.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/);
+      await expect(
+        visible(admin.getByText("Удалён в VK", { exact: true })),
+      ).toBeVisible();
+      await expectNoPageSideScroll(admin);
+      await expectEveryActionTabReachable(admin);
+    } finally {
+      await admin.setViewportSize(WIDE);
     }
   });
 });

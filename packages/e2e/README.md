@@ -283,6 +283,12 @@ pnpm --filter @ds/e2e test:e2e            # bddgen && playwright test
 An unset `E2E_*_URL` fails by NAME — a run that silently defaulted to localhost
 would report a green pass against nothing.
 
+That whole-suite command is what CI e2e and the Actions PR-slot run
+(`pnpm e2e:stage pr-<N>`) execute; it never runs on the operator workstation
+(`.claude/rules/dev-stand.md` → «The workstation runs no full regression», #4202).
+A workstation run narrows to the spec(s) the change edits with `E2E_GREP` / `--grep`
+and sets `E2E_WORKERS=1`.
+
 ## The suite is the spec's feature file
 
 `features` points at `apps/docs/content/specs/features/*/*-scenarios.feature`
@@ -607,8 +613,8 @@ Every other journey registers its own `randomUUID` account or only reads, and th
 per-IP auth limit is already lifted on every stage slot (#2684). The derived
 navigation walk signs the doctor in once per worker and host and reuses that
 session's cookies for the remaining items (the login itself is covered by its own
-scenarios, which keep their per-scenario UI sign-in). Run serially for debugging
-with `E2E_WORKERS=1`.
+scenarios, which keep their per-scenario UI sign-in). The default 4 is for CI and the
+Actions PR-slot run; a workstation run (one spec, for debugging) sets `E2E_WORKERS=1`.
 
 The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).
@@ -757,7 +763,7 @@ invalid count fails closed. Every remote command is appended to
 Run on a lead-owned, converged PR slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "Registration is refused without consent"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "Registration is refused without consent"
 ```
 
 ### Exact minimum password (003 EARS-36)
@@ -778,7 +784,7 @@ The scenario reuses `owned-registration.ts`, `secure-session.ts` and the auth
 fixtures, keeps traces off, and revokes only its own session during cleanup.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A password of eight characters with no character classes is accepted"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A password of eight characters with no character classes is accepted"
 ```
 
 ### Short password refusal (003 EARS-36)
@@ -798,7 +804,7 @@ case together with the existing exact-eight acceptance regression on the
 lead-owned converged slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
 ```
 
 ### Initial password hint (003 EARS-37)
@@ -815,7 +821,7 @@ checks remain intact. The selected case creates no account, sends no code and
 needs no CAPTCHA test token.
 
 ```sh
-pnpm e2e:stage main --project academy --grep "The single password rule is visible before submission"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "The single password rule is visible before submission"
 ```
 
 ### Password message replacement (003 EARS-37)
@@ -849,7 +855,7 @@ tests remain; no exactly matching app-local browser test was removed. The
 separate direct code-link login journey remains unchanged.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "The typed address survives a switch between the sign-in methods"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "The typed address survives a switch between the sign-in methods"
 ```
 
 ### Password reveal (003 EARS-38)
@@ -910,7 +916,7 @@ existing auth-flow cold-state and IdP password-invalidation unit tests remain.
 The test revokes its owned session and closes both contexts on completion.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A cold verification step still signs in by the code"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A cold verification step still signs in by the code"
 ```
 
 ### Address-less verification (003 EARS-40)
@@ -984,7 +990,7 @@ this scenario on the lead-selected converged stand; a test-only PR creates no
 owner Stage-B request or new slot:
 
 ```sh
-pnpm e2e:stage main --project academy --grep "The held registration password is never persisted anywhere"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "The held registration password is never persisted anywhere"
 ```
 
 ### Account profile surface (003 EARS-28)
@@ -1898,7 +1904,7 @@ owner Stage-B slot is introduced.
 The `@default-auth-limits` scenarios are local default-limit browser coverage,
 separate from stage's deliberately raised per-account ceiling. Ordinary C6 runs
 exclude that tag on both storefronts. Set `E2E_AUTH_LIMIT_TIER=default` and a
-loopback `E2E_PORTAL_URL`, then run `pnpm --filter @ds/e2e test:e2e --project=academy`
+loopback `E2E_PORTAL_URL`, then run `E2E_WORKERS=1 pnpm --filter @ds/e2e test:e2e --project=academy`
 to generate only those tagged Academy cases. `E2E_GREP` can select one by title.
 Unknown tier values, missing URLs, remote targets and embedded URL credentials
 fail configuration before a browser starts. Use a lead-owned compiled local API

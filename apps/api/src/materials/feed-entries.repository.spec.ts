@@ -54,16 +54,20 @@ describe("048 public feed read (V-6)", () => {
     }
   });
 
-  it("048 EARS-10: the feed read serves only entries of a platform the card contract renders — today the own materials alone", () => {
-    expect(FEED_CARD_PLATFORMS).toEqual(["academy"]);
+  it("048 EARS-33: the feed read serves the platforms the card contract renders — the own materials and Telegram", () => {
+    expect(FEED_CARD_PLATFORMS).toEqual(["academy", "telegram"]);
     for (const after of [
       null,
       { instant: "2026-10-30T10:00:00.123456Z", id: crypto.randomUUID() },
     ]) {
       const { sql, params } = publicFeedPageQuery(db, 13, after).toSQL();
-      expect(sql).toMatch(/"feed_entries"\."source_platform" in \(\$\d+\)/);
+      expect(sql).toMatch(
+        /"feed_entries"\."source_platform" in \(\$\d+, \$\d+\)/,
+      );
       expect(params).toContain("academy");
-      expect(params).not.toContain("telegram");
+      expect(params).toContain("telegram");
+      // The duration a video post card shows is read off the entry row.
+      expect(sql).toMatch(/"feed_entries"\."duration_seconds"/);
     }
   });
 });

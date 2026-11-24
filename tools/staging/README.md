@@ -168,6 +168,22 @@ sudoedit /etc/ds-platform/slots/$SLOT.telegram.env   # TELEGRAM_BOT_TOKEN=<the s
 #   ... up -d --no-deps --force-recreate api
 ```
 
+**History import on a slot (048 EARS-30).** The one-off import runs from the slot's
+own api image — its entry is compiled into `dist/`, so no tsx and no repo checkout are
+needed — in a one-off container of the api service, with the Telegram Desktop export
+folder mounted read-only. The image runs as `node`, so the folder must be
+world-readable. A source must already show «Работает» (an unbound source is refused):
+
+```bash
+sudo chmod -R a+rX <export folder>
+# the slot's existing compose invocation (above), with `run` instead of `up`:
+#   ... run --rm --no-deps -v <export folder>:/export:ro api \
+#     node dist/materials/telegram/telegram-import-history.main.js \
+#     --source t.me/<address> --export /export/result.json
+```
+
+Stdout is one JSON line of counts; a second run prints `written: 0`.
+
 Moving the connector to another slot: remove the file from the old slot and recreate
 its api first, then place it on the new slot. On its first poll the api deletes any
 webhook the bot still has (keeping its pending updates), so no separate registration
@@ -254,21 +270,84 @@ slot on a timer — `gc` is an operator subcommand and reclaims disk, not live s
 ## Regression run: `pnpm e2e:stage <slot>`
 
 The C6 regression contract (`packages/e2e`) driven against a slot's **public** hostnames
-— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: a preview
-verdict is pasted into the PR body **by hand**, and the `main` run is the release check:
-the `stage.yml` suite job runs it in Actions for every `main` target and posts the
-`stage-suite` status the Actions release pre-flight requires; `pnpm deploy:prod` runs it on
-the PC only for a break-glass hotfix `--ref` target (below, «The release check»).
+— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7. **A PR-slot
+run executes in GitHub Actions by default, not on this machine** (#4202): Playwright
+browsers on the operator workstation ran it out of memory with several sessions at once,
+and a public repository's GitHub-hosted runners cost nothing.
+
+- **A PR slot** — `pnpm e2e:stage pr-<N>` dispatches `.github/workflows/stage.yml`
+  on PR N's own head branch (`gh workflow run stage.yml --ref <head branch> -f
+slot=pr-<N> -f sha=<head SHA>` plus the filters you passed; branch and SHA come from
+  `gh pr view <N> --json headRefName,headRefOid,isCrossRepository`), waits for the run,
+  prints the compact verdict it posted on PR N, and exits 0 only for a green run (1 red,
+  2 when nothing was dispatched). No browser starts here. A cross-repository PR is
+  refused before dispatching. The run never runs under `main`'s ref: it executes the
+  branch's code, and a `main`-ref run would hold `main`'s Actions cache scope, which
+  `main`'s privileged workflows restore; on the branch's ref the cache scope is that
+  branch, which `main` never reads. The whole run is therefore the branch's code, so
+  **the branch must contain this workflow's PR-slot jobs — rebase it on `main`**; a
+  branch without them is refused by `gh workflow run` and the CLI says to rebase. A
+  branch outside the `stage-pr` policy (below) never reaches `slot-suite`, rebased or
+  not: the CLI refuses it before dispatching and the verdict names the policy.
+  A `slot-gate` job (no environment, no secret) refuses a run under `main`'s ref, a ref
+  that is not PR N's head branch, a short or non-hex SHA, a closed PR, a fork's commit
+  and a stale SHA, each as a red run naming the reason, before `slot-suite` starts. It
+  is branch code, so it is a correctness check, not a security boundary. The
+  boundary for the **`stage-pr`** secrets is repository write access: any code that
+  can push a same-repo branch the environment's deployment-branch policy admits
+  (`*/*` — a `*` never matches `/`, so `main`, unprefixed refs and refs with two or
+  more `/` are excluded) can reach them through a workflow of its own on that branch,
+  not only through this dispatch, so dispatch rights are not the boundary. What
+  bounds the exposure is that `stage-pr` holds only the suite's stage-only secrets,
+  never `stage`'s ssh key, and a branch-ref run has no `main` cache scope. `slot-suite` takes its secrets from
+  `stage-pr`, checks out the dispatched SHA and runs that tree's suite — no
+  `statuses` permission, so a PR-slot run never posts or changes the `stage-suite`
+  status. A `slot-verdict` job (`GITHUB_TOKEN` with `pull-requests: write` only)
+  renders the comment as plain text — passed / failed / flaky / skipped counts, the
+  failing titles (≤20), the e2e:stage verdict block and the run link — and posts it on
+  PR N; link it in the PR body. The full HTML/JSON report
+  is not kept: never an Actions artifact (this repository's artifacts are public,
+  release-pipeline spec §4), and not shipped to the box either, since that needs the CI
+  ssh key on a runner that executed PR code. `--local` reproduces it.
+- **`--local`** keeps the workstation run, for debugging a single spec
+  (`pnpm e2e:stage pr-<N> --local --grep "…"`); it is also what the Actions job itself
+  runs. `--report-dir` / `--verdict-file` need it.
+- **The `main` slot** is the release check: the `stage.yml` suite job runs it in Actions
+  for every `main` target and posts the `stage-suite` status the Actions release
+  pre-flight requires; `pnpm deploy:prod` runs it on the PC only for a break-glass hotfix
+  `--ref` target (below, «The release check»).
+
+**Not yet in Actions.** The converge: the CI key's forced command
+(`infra/deploy/bin/ds-deploy-entrypoint`) has no verb that raises a PR slot (its release
+driver refuses `stage-pr-<N>`: «PR slots stay operator-driven»), so raise or sync the
+slot with `pnpm stage:slot up pr-<N> --ref <sha>` before dispatching; the run asserts
+the slot's `/v1/health` serves the dispatched SHA before any scenario (`--slot-sha`)
+and is red with «slot serves <x>, PR head is <y> — re-sync the slot» otherwise. And the
+box-observing tests (#3119): the CI key's `observe` verb serves the `main` slot only, and
+no ssh key reaches PR code, so the Actions run leaves them out by name
+(`--no-box-observe`). The one source list is `box-observing.mjs` (its test fails when a
+file reaches a box-observing lib and is not listed); the verdict comment names each one
+left out, and the CLI prints the exact `pnpm e2e:stage pr-<N> --local --grep "…"` that
+runs just them here (one browser is enough).
+
+**One pending run per slot.** The dispatch's concurrency group is `stage-slot-<slot>`
+with `cancel-in-progress: false`: a running run finishes, but Actions keeps at most one
+PENDING run per group, so a third dispatch on the same slot cancels the second, and the
+CLI waiting on that one exits 1 on its `cancelled` conclusion. Dispatch again once the
+running one is done.
 
 ```bash
-export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
-pnpm e2e:stage pr-123                     # both storefronts
-pnpm e2e:stage main --project academy --grep "витрина"
-pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
+pnpm e2e:stage pr-123                     # dispatch: both storefronts, in Actions
 pnpm e2e:stage pr-123 --project login     # the door scenarios bound to the sign-in host
 pnpm e2e:stage pr-123 --project sign-in-host  # the sign-in host's own plain specs
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
 pnpm e2e:stage pr-123 --no-live           # skip the storefront live-tier legs (#3168)
+
+# --local: the workstation run, one spec at a time
+export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
+E2E_WORKERS=1 pnpm e2e:stage pr-123 --local --no-live --no-axe --project academy --grep "витрина"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "<one journey>"  # `main` runs here, narrowed
+# the full `main` run, walks included, is the automatic stage.yml main run in Actions — never the workstation
 ```
 
 **The sign-in host's two projects (#3345).** `login` is a Gherkin project: every
@@ -477,7 +556,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`, `stage-recording-publish.spec.ts`) | yes           |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                                            | yes           |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                                               | yes           |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                                           | yes           |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (event page, narrow hero plate, canvas structure, archive)                                      | yes           |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                                              | yes           |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                                                   | yes           |
 | `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                                                 | yes           |

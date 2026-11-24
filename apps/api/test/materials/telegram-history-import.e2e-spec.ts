@@ -49,8 +49,8 @@ import {
 // never duplicated; a foreign or unbound channel is refused with nothing
 // written; previews come from the exported files; nothing logged carries a
 // post text (EARS-36). The command runs through its unit — the operator
-// script (`scripts/telegram-import-history.ts`) only parses arguments and
-// prints the report.
+// entry (`src/materials/telegram/telegram-import-history.main.ts`) only
+// parses arguments and prints the report.
 describe.skipIf(!process.env.DATABASE_URL)(
   "048 Telegram history import (e2e)",
   () => {
@@ -245,9 +245,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("048 EARS-30: when an operator imports an export twice, overlapping a post the poller delivered, the system shall write each earlier post once at its Telegram date and the re-run shall write nothing", async () => {
       const src = await source();
-      expect((await deliver(src, 1201, "Пост из бота")).kind).toBe(
-        "polled",
-      );
+      expect((await deliver(src, 1201, "Пост из бота")).kind).toBe("polled");
       const file = await exportOf(src.bare, [
         message(900, { text: "Архив 900" }),
         message(901, { text: ["Архив ", { type: "bold", text: "901" }] }),

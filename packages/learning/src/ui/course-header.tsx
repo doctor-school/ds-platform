@@ -73,15 +73,15 @@ export function CourseHeader({
           {course.title}
         </h1>
         {course.description ? (
-          <p className="m-0 max-w-prose text-lead leading-relaxed text-muted-foreground">
+          <p className="m-0 text-lead leading-relaxed text-muted-foreground">
             {course.description}
           </p>
         ) : null}
-        <dl className="m-0 grid max-w-prose grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+        <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
           {facts.map((f) => (
             <div key={f.label} className="contents">
               <dt className="font-bold text-muted-foreground">{f.label}</dt>
-              <dd className="m-0 sm:col-span-2">{f.value}</dd>
+              <dd className="m-0 sm:col-span-3">{f.value}</dd>
             </div>
           ))}
         </dl>

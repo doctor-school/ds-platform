@@ -80,9 +80,12 @@ one-off history import (EARS-30).
     wins. A replaced or superseded copy is a 012 cleanup job (entity kind
     `feed_entry`). It never throws and never touches the source's status.
   - `telegram-history-export.ts` + `telegram-history-import.command.ts` +
-    `scripts/telegram-import-history.ts` (`pnpm --filter @ds/api
-telegram:import-history -- --source t.me/<address> --export
-<folder>/result.json`) — the EARS-30 one-off import of a Telegram Desktop
+    `telegram-import-history.main.ts` + `telegram-import-history-cli.ts` (in
+    the api image: `node dist/materials/telegram/telegram-import-history.main.js
+--source t.me/<address> --export /export/result.json` in a `docker compose
+run --rm --no-deps -v <folder>:/export:ro api` container; on a workstation
+    `pnpm --filter @ds/api telegram:import-history -- --source t.me/<address>
+--export <folder>/result.json`) — the EARS-30 one-off import of a Telegram Desktop
     JSON export: the whole file validated first (Zod over the fields used; a
     single-channel export `{ type: public_channel | private_channel, id,
 messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
@@ -137,7 +140,11 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
    `hidden_at IS NOT NULL` and `source_off` entries on the entry row itself, so
    it never reads `feed_sources` (EARS-22, Lead decision 11). It serves only
    the platforms in `FEED_CARD_PLATFORMS` — those the card contract has a
-   member for — so a stored network entry is never served before its card
-   (048-design §Delivery slices (slice 2)). The admin
+   member for: `academy` (`news`, `column`) and `telegram` (`post`, EARS-33) —
+   so a stored network entry is never served before its card (048-design
+   §Delivery slices (slice 2)). A `post` card is built from the stored entry
+   alone — the preview key signed at the read, `null` while it is pending or
+   failed — so the read never calls Telegram and serves every stored entry
+   while the connector is down or unconfigured (EARS-35). The admin
    controllers share `admin-write.http.ts` (id shape, `If-Match`, field errors,
    idempotent replay).

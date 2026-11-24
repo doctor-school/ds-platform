@@ -3,7 +3,11 @@ import { expertShortName } from "../taxonomy/taxonomy.schema.js";
 import {
   FEED_PAGE_SIZE_DEFAULT,
   FEED_PAGE_SIZE_MAX,
+  FEED_TELEGRAM_SOURCE_NAME,
   FeedCardSchema,
+  FeedColumnCardSchema,
+  FeedNewsCardSchema,
+  FeedPostCardSchema,
   PublicFeedPageSchema,
   PublicFeedQuerySchema,
 } from "./feed.js";
@@ -78,6 +82,7 @@ describe("048 public read contracts", () => {
     });
     expect(page.data).toHaveLength(2);
     expect(FeedCardSchema.safeParse({ ...news, body: {} }).success).toBe(false);
+    // A `post` is its own member: an own card's shape under `kind: "post"` is no card.
     expect(FeedCardSchema.safeParse({ ...news, kind: "post" }).success).toBe(
       false,
     );
@@ -94,7 +99,7 @@ describe("048 public read contracts", () => {
       "source",
       "title",
     ];
-    for (const member of FeedCardSchema.options) {
+    for (const member of [FeedNewsCardSchema, FeedColumnCardSchema]) {
       expect(Object.keys(member.shape).sort()).toEqual(common);
     }
     // A card never addresses the materials table: no slug, no material id, no author id.
@@ -139,5 +144,89 @@ describe("048 public read contracts", () => {
       FeedCardSchema.safeParse({ ...news, partner: { name: "П", logo: "x" } })
         .success,
     ).toBe(false);
+  });
+
+  // ── slice 2 — the Telegram post card (EARS-33, V-13) ─────────────────
+
+  const post = {
+    id: "5b0e9d2a-7c1f-4e3b-8a6d-2f4e6a8c0b13",
+    kind: "post",
+    text: "Новый выпуск: разбор клинического случая",
+    publishedAt: "2026-11-16T08:30:00.000Z",
+    image: { url: "https://cdn.example/feed/preview.webp" },
+    duration: 754,
+    source: { platform: "telegram", name: "BBM Academy · Telegram" },
+    partner: null,
+    href: "https://t.me/bbm_academy/1201",
+    external: true,
+  };
+
+  it("048 EARS-33: a post card carries id, kind, text, publishedAt, image, duration, the Telegram source, partner null, the t.me href and external true", () => {
+    expect(Object.keys(FeedPostCardSchema.shape).sort()).toEqual([
+      "duration",
+      "external",
+      "href",
+      "id",
+      "image",
+      "kind",
+      "partner",
+      "publishedAt",
+      "source",
+      "text",
+    ]);
+    expect(FeedCardSchema.parse(post)).toEqual(post);
+    expect(FEED_TELEGRAM_SOURCE_NAME).toBe("BBM Academy · Telegram");
+    // No image and no video: the no-image layout; an empty text (a bare photo) is a post.
+    expect(
+      FeedCardSchema.safeParse({
+        ...post,
+        image: null,
+        duration: null,
+        text: "",
+      }).success,
+    ).toBe(true);
+    expect(
+      PublicFeedPageSchema.parse({ data: [news, post], nextCursor: null }).data,
+    ).toHaveLength(2);
+  });
+
+  it("048 EARS-33: a post card refuses a partner, another source, a relative or non-t.me href, a non-integer or negative duration, external false and a title", () => {
+    const refused: Record<string, unknown>[] = [
+      { partner: { name: "Партнёр" } },
+      { source: { platform: "academy", name: "BBM Academy · Telegram" } },
+      { source: { platform: "telegram", name: "Академия" } },
+      { href: "/materials/x" },
+      { href: "http://t.me/bbm_academy/1" },
+      { href: "https://example.com/bbm_academy/1" },
+      { duration: -1 },
+      { duration: 1.5 },
+      { external: false },
+      { title: "Заголовок" },
+    ];
+    for (const patch of refused) {
+      expect(
+        FeedCardSchema.safeParse({ ...post, ...patch }).success,
+        JSON.stringify(patch),
+      ).toBe(false);
+    }
+    const { external: _external, ...withoutExternal } = post;
+    expect(FeedCardSchema.safeParse(withoutExternal).success).toBe(false);
+  });
+
+  it("048 EARS-33: the news and column members stay as slice 1 left them — academy source, no text, duration or external", () => {
+    for (const member of [FeedNewsCardSchema, FeedColumnCardSchema]) {
+      expect(member.shape).not.toHaveProperty("text");
+      expect(member.shape).not.toHaveProperty("duration");
+      expect(member.shape).not.toHaveProperty("external");
+    }
+    expect(
+      FeedCardSchema.safeParse({
+        ...news,
+        source: { platform: "telegram", name: "BBM Academy · Telegram" },
+      }).success,
+    ).toBe(false);
+    expect(FeedCardSchema.safeParse({ ...news, external: true }).success).toBe(
+      false,
+    );
   });
 });

@@ -21,7 +21,7 @@
 // statement order — is a pure function, unit-tested in `golden-db.test.mjs`; the
 // executor (`runGoldenDbBuild`) is injectable so the tests never touch Postgres.
 
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { sshCapture, sshScript } from "../deploy/lib/remote.mjs";
@@ -364,8 +364,12 @@ async function main() {
   );
 }
 
+// Under `node -e` / `--input-type=module`, `process.argv[1]` is the first argument
+// of the snippet, not a script, and may name a file not yet written: an importer must
+// never throw here (slot-verdict, #4202). An entry script always exists.
 const invokedDirectly =
   process.argv[1] !== undefined &&
+  existsSync(process.argv[1]) &&
   import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {

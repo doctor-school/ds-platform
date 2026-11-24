@@ -76,6 +76,8 @@ export const GOLDEN_SLUGS = Object.freeze({
   doctorEndedBothCuts: "golden-volume-event-151",
   /** `golden.events.hidden` — an `experts` event in the `hidden` state. */
   academyHidden: "golden-event-hidden",
+  /** Archived `experts` event with a published montage and its hero badge. */
+  academyArchivedRecorded: "golden-volume-event-4",
   /** Published online `experts` event with speakers — the 005 one-tap journey's second event. */
   academyUpcomingOneTap: "golden-volume-event-412",
   /** Published online `experts` event with speakers — the 004 EARS-8 marker spec's own event. */
@@ -439,9 +441,8 @@ export const LIVE_TIERS = Object.freeze([
     },
   },
   {
-    // #2996: the Academy event-page specs (020 EARS-1/8/9/19, 014 EARS-4/7/21),
-    // their own config so the golden slugs below reach exactly these two specs
-    // and not every default-tier spec that also reads `E2E_WEBINAR_SLUG`.
+    // #2996: seed the Academy event-page specs without setting
+    // `E2E_WEBINAR_SLUG` for the default tier.
     name: "live/academy/event-page",
     host: "academy",
     app: "apps/portal",
@@ -452,6 +453,8 @@ export const LIVE_TIERS = Object.freeze([
     seededEnv: {
       E2E_WEBINAR_SLUG: GOLDEN_SLUGS.academyUpcoming,
       E2E_WEBINAR_SLUG_ENDED: GOLDEN_SLUGS.academyEndedRecorded,
+      E2E_WEBINAR_SLUG_HIDDEN: GOLDEN_SLUGS.academyHidden,
+      E2E_WEBINAR_SLUG_ARCHIVE: GOLDEN_SLUGS.academyArchivedRecorded,
       E2E_ENDED_WEBINAR_SLUG: GOLDEN_SLUGS.academyEndedRecorded,
       E2E_PREPARING_WEBINAR_SLUG: GOLDEN_SLUGS.academyPreparingDated,
       E2E_HYBRID_SLUG: GOLDEN_SLUGS.academyHybrid,

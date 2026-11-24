@@ -177,6 +177,8 @@ export interface GoldenDataset {
   learningNodeStatus: GoldenLearningVolume["learningNodeStatus"];
   /** #4012 — the past rule change on the 30-module path (024 EARS-31). */
   learningRuleChanges: GoldenLearningVolume["learningRuleChanges"];
+  /** #4019 — the «скоро» school's interests (023 EARS-7). */
+  learningSchoolInterests: GoldenLearningVolume["learningSchoolInterests"];
   /** #4172 — the golden doctors' attention-points accruals (`points-ledger.ts`). */
   pointsLedger: GoldenPointsLedger;
 }
@@ -1033,10 +1035,9 @@ export function buildGoldenDataset(
 }
 
 /** The learning rows and the doctors' ledger their completions accrue (#4172). */
-function withPointsLedger<T extends Parameters<typeof buildGoldenPointsLedger>[0]["learning"]>(
-  learning: T,
-  starterAt: Date,
-): T & { pointsLedger: GoldenPointsLedger } {
+function withPointsLedger<
+  T extends Parameters<typeof buildGoldenPointsLedger>[0]["learning"],
+>(learning: T, starterAt: Date): T & { pointsLedger: GoldenPointsLedger } {
   return {
     ...learning,
     pointsLedger: buildGoldenPointsLedger({ learning, starterAt }),
@@ -1062,6 +1063,7 @@ function mergeGoldenLearning(
   | "learningAttempts"
   | "learningNodeStatus"
   | "learningRuleChanges"
+  | "learningSchoolInterests"
 > {
   return {
     learningSchools: [...course.learningSchools, ...volume.learningSchools],
@@ -1083,6 +1085,7 @@ function mergeGoldenLearning(
     learningAttempts: volume.learningAttempts,
     learningNodeStatus: volume.learningNodeStatus,
     learningRuleChanges: volume.learningRuleChanges,
+    learningSchoolInterests: volume.learningSchoolInterests,
   };
 }
 

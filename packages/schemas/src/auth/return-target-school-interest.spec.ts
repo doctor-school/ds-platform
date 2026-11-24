@@ -32,4 +32,15 @@ describe("023 EARS-7 — the school-interest return marker", () => {
       parseSameOriginReturnTarget("/schools/orto?capture=interest&next=//evil"),
     ).toBe("/schools/orto");
   });
+
+  it("EARS-7: the marker never carries a foreign origin through the guard", () => {
+    for (const foreign of [
+      "https://evil.example/schools/orto?capture=interest",
+      "//evil.example/schools/orto?capture=interest",
+      "/%2F%2Fevil.example/schools/orto?capture=interest",
+      "javascript:alert(1)?capture=interest",
+    ]) {
+      expect(parseSameOriginReturnTarget(foreign), foreign).toBeNull();
+    }
+  });
 });

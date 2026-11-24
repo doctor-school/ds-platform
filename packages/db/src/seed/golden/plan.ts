@@ -55,6 +55,7 @@ import {
   learningQuestions,
   learningRuleChanges,
   learningRuleLayers,
+  learningSchoolInterests,
   learningSchools,
   learningSteps,
   learningTests,
@@ -217,6 +218,7 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   // their facts leave (after the facts its cause ids name).
   "learning_attempts",
   "learning_node_status",
+  "learning_school_interests",
   // #4172 — the doctors' 025 accruals: accounts, then each fact's posting keys
   // and journal row, then the postings that reference both.
   "points_accounts",
@@ -547,6 +549,14 @@ export function buildGoldenSeedPlan(
       ["personId", "itemId"],
       { appendOnly: true },
     ),
+    // 023 EARS-7 (#4019) — one interest per (doctor, school), keyed as the
+    // register upsert writes it; after its school and doctors.
+    step(
+      "learning_school_interests",
+      learningSchoolInterests,
+      dataset.learningSchoolInterests,
+      ["personId", "schoolId"],
+    ),
     // #4172 — the 025 ledger is append-only (triggers refuse UPDATE/DELETE):
     // an account opened before meets its (subject, unit) key and keeps its
     // id, and the facts the ledger already holds were dropped from `points`
@@ -834,6 +844,18 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   );
   check("learning_schools", dataset.learningSchools, "leadExpertId", expertIds);
   check("learning_schools", dataset.learningSchools, "projectId", projectIds);
+  check(
+    "learning_school_interests",
+    dataset.learningSchoolInterests,
+    "personId",
+    idSet(dataset.users),
+  );
+  check(
+    "learning_school_interests",
+    dataset.learningSchoolInterests,
+    "schoolId",
+    idSet(dataset.learningSchools),
+  );
   check(
     "learning_courses",
     dataset.learningCourses,

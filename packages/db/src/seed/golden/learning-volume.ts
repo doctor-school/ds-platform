@@ -26,6 +26,10 @@
 // ONE download: `apps/doctor/e2e/school-volume-live.spec.ts` makes a fresh
 // doctor start the one and finish the other through the real fact endpoint.
 
+import {
+  buildGoldenLearningSoonVolume,
+  type GoldenLearningSoonVolume,
+} from "./learning-soon-volume.js";
 import type {
   learningCourses,
   learningFacts,
@@ -318,6 +322,8 @@ export interface GoldenLearningVolume {
   learningNodeStatus: GoldenLearningResults["learningNodeStatus"];
   /** #4012 — the past rule change on the 30-module path (024 EARS-31). */
   learningRuleChanges: (typeof learningRuleChanges.$inferInsert)[];
+  /** #4019 — the «скоро» school's interests (023 EARS-7, `learning-soon-volume.ts`). */
+  learningSchoolInterests: GoldenLearningSoonVolume["learningSchoolInterests"];
 }
 
 /** Builds the volume schools and the golden doctor's facts; `created` is the dataset's creation instant. */
@@ -342,6 +348,7 @@ export function buildGoldenLearningVolume(
     learningAttempts: [],
     learningNodeStatus: [],
     learningRuleChanges: [],
+    learningSchoolInterests: [],
   };
   const doctors = golden.workerPool.verifiedCardiologist;
   const factAt = (day: number) =>
@@ -555,7 +562,10 @@ export function buildGoldenLearningVolume(
       id: goldenUuid(GOLDEN_GROUP.learningRuleChanges, 4_012_000),
       scopeKind: "course",
       scopeId: courseId,
-      before: { ...values, "test.threshold": GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK },
+      before: {
+        ...values,
+        "test.threshold": GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK,
+      },
       after: structuredClone(values),
       earnedProgress: "keep",
       actorSub: ruleEditorSub,
@@ -569,5 +579,9 @@ export function buildGoldenLearningVolume(
   out.learningFacts.push(...results.learningFacts);
   out.learningAttempts.push(...results.learningAttempts);
   out.learningNodeStatus.push(...results.learningNodeStatus);
+  // #4019 — the «скоро» school and its interests, after every row above.
+  const soon = buildGoldenLearningSoonVolume(created);
+  out.learningSchools.push(...soon.learningSchools);
+  out.learningSchoolInterests.push(...soon.learningSchoolInterests);
   return out;
 }

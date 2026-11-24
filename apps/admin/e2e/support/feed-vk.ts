@@ -91,7 +91,7 @@ export async function seedVkEntries(
          VALUES ('vk', $1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9::timestamptz)
          RETURNING id`,
         [
-          `${source.id}:${entry.kind}:${entry.objectId}`,
+          `${source.id}:${source.groupId}:${entry.kind}:${entry.objectId}`,
           source.id,
           entry.kind,
           entry.text,
@@ -104,9 +104,9 @@ export async function seedVkEntries(
       );
       const id = rows[0]!.id;
       await client.query(
-        `INSERT INTO feed_entry_vk_objects (feed_source_id, object_kind, vk_object_id, feed_entry_id)
-         VALUES ($1, $2, $3, $4)`,
-        [source.id, entry.kind, entry.objectId, id],
+        `INSERT INTO feed_entry_vk_objects (feed_source_id, vk_group_id, object_kind, vk_object_id, feed_entry_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [source.id, source.groupId, entry.kind, entry.objectId, id],
       );
       ids.push(id);
     }

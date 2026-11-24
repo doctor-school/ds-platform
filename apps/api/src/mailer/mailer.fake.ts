@@ -5,6 +5,7 @@ import {
   type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
   type CongressSubmissionReminderRequest,
+  type SchoolOpenedNoticeRequest,
   type Mailer,
 } from "./mailer.types.js";
 import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
@@ -50,6 +51,9 @@ export class FakeMailer implements Mailer {
   readonly congressSubmissionReceipts: Array<
     CongressSubmissionReceiptRequest & { to: string }
   > = [];
+  /** Every accepted 023 EARS-7 school-opened notice, in order. */
+  readonly schoolOpenedNotices: Array<SchoolOpenedNoticeRequest & { to: string }> =
+    [];
   /** When set, the NEXT submission receipt rejects with it (046 EARS-14). */
   private nextSubmissionReceiptFailure: Error | undefined;
   /** Every accepted 046 EARS-29 / EARS-35 decision or extension letter, in order. */
@@ -177,6 +181,14 @@ export class FakeMailer implements Mailer {
    */
   failNextSubmissionReceipt(error: Error): void {
     this.nextSubmissionReceiptFailure = error;
+  }
+
+  async sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void> {
+    assertSendableEmail(input.email);
+    this.schoolOpenedNotices.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
   }
 
   async sendCongressSubmissionReceipt(

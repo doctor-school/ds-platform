@@ -48,6 +48,7 @@ import {
   type SetLearningStepSourceRequest,
   type LearningRulesAuthority,
 } from "@ds/schemas";
+import type { LearningSchoolAdminDetail } from "@ds/schemas";
 import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import {
   elementType,
@@ -58,6 +59,10 @@ import {
   type LearningScopePath,
 } from "../model.js";
 import { applyPresetValues } from "../rules/resolver.js";
+import {
+  activeInterestCount,
+  claimSchoolOpenedNotices,
+} from "./school-interest.js";
 import {
   EMPTY_RULE_SCOPE,
   publishRequirements,
@@ -71,6 +76,7 @@ import {
   type LearningServerDeps,
   type LearningTx,
 } from "./deps.js";
+import type { LearningSchoolOpenedNotice } from "./deps.js";
 import {
   courseById,
   courseOfLesson,
@@ -220,6 +226,22 @@ export class LearningAdminService {
   constructor(private readonly deps: LearningServerDeps) {}
 
   // ── Schools and courses (EARS-1) ──────────────────────────────────────────
+
+  /**
+   * 023 EARS-7, EARS-26 — `GET /v1/admin/learning/schools/{id}`: the school
+   * with the number of doctors holding an active interest (never who).
+   */
+  async school(schoolId: string): Promise<LearningSchoolAdminDetail> {
+    const [row] = await this.deps.db
+      .select()
+      .from(learningSchools)
+      .where(eq(learningSchools.id, schoolId));
+    if (!row) throw notFound("school");
+    return {
+      ...toSchool(row),
+      activeInterestCount: await activeInterestCount(this.deps.db, schoolId),
+    };
+  }
 
   async listSchools(): Promise<LearningSchoolAdmin[]> {
     const rows = await this.deps.db
@@ -390,7 +412,10 @@ export class LearningAdminService {
     expectedVersion: number,
     complete: LearningComplete = noComplete,
   ): Promise<LearningCommandResult<LearningCourseAdmin>> {
-    return this.deps.transaction(async (tx) => {
+    // 023 EARS-7 — the school-opened notices this publication claimed; sent
+    // only once the publication has committed.
+    let notices: LearningSchoolOpenedNotice[] = [];
+    const result = await this.deps.transaction(async (tx) => {
       const [current] = await tx
         .select()
         .from(learningCourses)
@@ -438,6 +463,8 @@ export class LearningAdminService {
         })
         .where(eq(learningCourses.id, courseId))
         .returning();
+      if (state === "published")
+        notices = await claimSchoolOpenedNotices(tx, courseId, this.now());
       const result = {
         status: 200 as const,
         body: toCourse(row!),
@@ -446,6 +473,8 @@ export class LearningAdminService {
       await complete(tx, result);
       return result;
     });
+    if (notices.length > 0) await this.deps.notices.schoolOpened(notices);
+    return result;
   }
 
   // ── Modules and lessons (EARS-1, EARS-28) ─────────────────────────────────

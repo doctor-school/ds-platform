@@ -14,6 +14,7 @@ import type {
   LearningNodeState,
   LearningPathAuthor,
   LearningPathStep,
+  LearningSchoolInterest,
   LearningSchoolRead,
   LearningStepBody,
   LearningStepRead,
@@ -53,6 +54,11 @@ import {
   type LearningStatusChange,
 } from "./projector.js";
 import { fileFormatLabel } from "./file-format.js";
+import {
+  hasActiveInterest,
+  registerSchoolInterest,
+  withdrawSchoolInterest,
+} from "./school-interest.js";
 import {
   courseBySlug,
   coursePlaces,
@@ -346,8 +352,27 @@ export class LearningDoctorService {
       direction: places.direction,
       expert: await this.author(places.expert),
       signedIn: personId !== null,
+      interested: personId
+        ? await hasActiveInterest(db, personId, school.id)
+        : null,
       courses,
     };
+  }
+
+  /** 023 EARS-7 — `PUT /v1/me/learning/schools/{schoolId}/interest` (idempotent). */
+  registerSchoolInterest(
+    personId: string,
+    schoolId: string,
+  ): Promise<LearningSchoolInterest> {
+    return registerSchoolInterest(this.deps, personId, schoolId);
+  }
+
+  /** 023 EARS-7 — `DELETE /v1/me/learning/schools/{schoolId}/interest`. */
+  withdrawSchoolInterest(
+    personId: string,
+    schoolId: string,
+  ): Promise<LearningSchoolInterest> {
+    return withdrawSchoolInterest(this.deps, personId, schoolId);
   }
 
   /** EARS-13 — `GET /v1/learning/courses/{courseSlug}/path`. */

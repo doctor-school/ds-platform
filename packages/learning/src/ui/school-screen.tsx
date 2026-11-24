@@ -3,6 +3,7 @@ import { Button, Skeleton } from "@ds/design-system";
 
 import { CourseCards, courseCard } from "./school-cards";
 import { SchoolCourseList } from "./school-course-list";
+import { SchoolInterest } from "./school-interest";
 import {
   registerHref,
   schoolHref,
@@ -14,9 +15,12 @@ import { LEARNING_UI_COPY, SCHOOL_UI_COPY as C } from "./learning-ui-copy";
 // `design-source/doctor-school.dc.html` (Stage A «Го» 2026-11-12): the poster
 // header, «О школе», the school's courses — up to six as the doctor content
 // card (`FeedCard` variant Б), more as «Вы учитесь» cards + searchable rows
-// (`SchoolCourseList`) — and, for a guest, the registration gate. The «скоро»
-// state, events, the document block, mentoring, reviews and the community land
-// in their own slices — this slice renders nothing for them.
+// (`SchoolCourseList`) — and, for a guest, the registration gate. EARS-6,
+// EARS-7: a `soon` school (no published course) shows «Скоро» in the header,
+// «Школа готовится» with its note and the interest capture, and the empty
+// events and reviews sections — empty by construction, as both hang on a
+// published course. The open school's events, document block, mentoring,
+// reviews and community land in their own slices.
 
 const MAX_FACTS = 4;
 /** 023 EARS-5 — up to six courses are all cards; more switch to the list. */
@@ -76,6 +80,8 @@ export function SchoolScreen({ config, read }: SchoolScreenProps) {
         </section>
       ) : null}
 
+      {school.status === "soon" ? <SoonSections config={config} read={read} /> : null}
+
       {courses.length > 0 ? (
         <section
           aria-labelledby="school-courses"
@@ -122,6 +128,62 @@ export function SchoolScreen({ config, read }: SchoolScreenProps) {
   );
 }
 
+/** The canvas's dashed empty block («школа готовится», empty events / reviews). */
+function EmptyBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-2 border-dashed border-hairline p-6 text-center sm:p-9">
+      {children}
+    </div>
+  );
+}
+
+/** 023 EARS-6, EARS-7 — the soon school's courses state, events and reviews. */
+function SoonSections({ config, read }: SchoolScreenProps) {
+  const { school, signedIn, interested } = read;
+  const sections = [
+    { id: "school-events", heading: C.soon.eventsHeading, text: C.soon.eventsEmpty },
+    { id: "school-reviews", heading: C.soon.reviewsHeading, text: C.soon.reviewsEmpty },
+  ];
+  return (
+    <>
+      <section aria-labelledby="school-courses" className="px-gutter pt-section">
+        <div className="mx-auto max-w-content">
+          <SectionHeading id="school-courses">{C.coursesHeading}</SectionHeading>
+          <EmptyBlock>
+            <div className="text-lg font-extrabold tracking-tight">
+              {C.soon.title}
+            </div>
+            {school.soonNote ? (
+              <p className="m-0 mx-auto mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
+                {school.soonNote}
+              </p>
+            ) : null}
+            <SchoolInterest
+              config={config}
+              schoolId={school.id}
+              schoolSlug={school.slug}
+              signedIn={signedIn}
+              interested={interested}
+            />
+          </EmptyBlock>
+        </div>
+      </section>
+      {sections.map((s) => (
+        <section key={s.id} aria-labelledby={s.id} className="px-gutter pt-section">
+          <div className="mx-auto max-w-content">
+            <SectionHeading id={s.id}>{s.heading}</SectionHeading>
+            <EmptyBlock>
+              <p className="m-0 text-sm font-semibold text-muted-foreground">
+                {s.text}
+              </p>
+            </EmptyBlock>
+          </div>
+        </section>
+      ))}
+    </>
+  );
+}
+
 function SchoolPoster({ read }: { read: LearningSchoolRead }) {
   const { school, direction, expert } = read;
   return (
@@ -149,7 +211,9 @@ function SchoolPoster({ read }: { read: LearningSchoolRead }) {
             {school.title}
           </h1>
           <span className="mt-4 inline-block flex-none rotate-2 border-2 border-hero-foreground px-4 py-2.5 text-xs font-extrabold tracking-eyebrow uppercase">
-            {C.counts(school.courseCount, school.lessonCount)}
+            {school.status === "soon"
+              ? C.soon.badge
+              : C.counts(school.courseCount, school.lessonCount)}
           </span>
         </div>
         {school.description ? (

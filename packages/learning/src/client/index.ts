@@ -3,6 +3,7 @@ import type {
   LearningAttemptResult,
   LearningCoursePath,
   LearningLessonRead,
+  LearningSchoolInterest,
   LearningSchoolRead,
   LearningStepRead,
   PointsAccount,
@@ -40,6 +41,10 @@ export interface LearningClientOptions {
 export interface LearningClient {
   /** 023 EARS-3 — the school screen's read; 404 for an unknown or unpublished school. */
   school(schoolSlug: string): Promise<LearningSchoolRead>;
+  /** 023 EARS-7 — register the doctor's interest in a «скоро» school (idempotent). */
+  registerSchoolInterest(schoolId: string): Promise<LearningSchoolInterest>;
+  /** 023 EARS-7 — withdraw it; 404 when there is no active interest. */
+  withdrawSchoolInterest(schoolId: string): Promise<LearningSchoolInterest>;
   coursePath(courseSlug: string): Promise<LearningCoursePath>;
   lesson(lessonId: string): Promise<LearningLessonRead>;
   step(stepId: string): Promise<LearningStepRead>;
@@ -62,7 +67,7 @@ export function createLearningClient(
   const doFetch = options.fetch ?? fetch;
 
   async function call<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     body?: unknown,
   ): Promise<T> {
@@ -97,6 +102,10 @@ export function createLearningClient(
   const seg = encodeURIComponent;
   return {
     school: (slug) => call("GET", `/v1/learning/schools/${seg(slug)}`),
+    registerSchoolInterest: (id) =>
+      call("PUT", `/v1/me/learning/schools/${seg(id)}/interest`),
+    withdrawSchoolInterest: (id) =>
+      call("DELETE", `/v1/me/learning/schools/${seg(id)}/interest`),
     coursePath: (slug) => call("GET", `/v1/learning/courses/${seg(slug)}/path`),
     lesson: (id) => call("GET", `/v1/learning/lessons/${seg(id)}`),
     step: (id) => call("GET", `/v1/me/learning/steps/${seg(id)}`),

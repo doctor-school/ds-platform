@@ -15,6 +15,8 @@ import {
 } from "@ds/learning/server";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { MailerModule } from "../mailer/mailer.module.js";
+import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { PointsEngine } from "../points/engine/points-engine.service.js";
 import { PointsModule } from "../points/points.module.js";
 import {
@@ -26,6 +28,7 @@ import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { LearningAdminController } from "./learning.admin.controller.js";
 import { LearningProblemFilter } from "./learning.errors.js";
 import { LearningMeController } from "./learning.me.controller.js";
+import { learningNoticeSender } from "./learning.notices.js";
 import { LearningPublicController } from "./learning.public.controller.js";
 
 /** The `@ds/learning/server` seams wired once per process (024-design §1). */
@@ -36,11 +39,11 @@ export const LEARNING_DEPS = Symbol("LEARNING_DEPS");
  * (framework-free); this module only supplies its seams: the database, the
  * audit-attributed transaction (010), the 025 `PointsEngine` (facts recorded
  * inside the causing transaction), the 012 media signer for `download` files
- * and the in-process event bus. `TaxonomyModule` gives the shared 012
+ * the in-process event bus and the 023 school-opened product notice (`Mailer`). `TaxonomyModule` gives the shared 012
  * idempotency record, problem filter and media pipeline.
  */
 @Module({
-  imports: [TaxonomyModule, PointsModule],
+  imports: [TaxonomyModule, PointsModule, MailerModule],
   controllers: [
     LearningAdminController,
     LearningPublicController,
@@ -50,17 +53,23 @@ export const LEARNING_DEPS = Symbol("LEARNING_DEPS");
     LearningProblemFilter,
     {
       provide: LEARNING_DEPS,
-      inject: [DRIZZLE_DB, PointsEngine, OBJECT_STORAGE],
+      inject: [DRIZZLE_DB, PointsEngine, OBJECT_STORAGE, MAILER],
       useFactory: (
         db: DrizzleHandle["db"],
         points: PointsEngine,
         storage: ObjectStorage,
+        mailer: Mailer,
       ): LearningServerDeps => ({
         db,
         transaction: (fn) => withRequestAuditContext(db, fn),
         points: { record: (tx, fact) => points.record(tx, fact) },
         media: { signedUrl: (key) => storage.urlFor(key) },
         events: new LearningEventBus(),
+        notices: learningNoticeSender(
+          db,
+          mailer,
+          new Logger("LearningSchoolOpenedNotice"),
+        ),
       }),
     },
     {

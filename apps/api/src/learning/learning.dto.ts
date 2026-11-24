@@ -12,7 +12,9 @@ import {
   LearningPresetListSchema,
   LearningPresetSchema,
   LearningRuleChangePreviewSchema,
+  LearningSchoolAdminDetailSchema,
   LearningSchoolAdminSchema,
+  LearningSchoolInterestSchema,
   LearningSchoolListSchema,
   LearningSchoolReadSchema,
   LearningScopeRulesSchema,
@@ -38,6 +40,9 @@ export class LearningStepReadDto extends createZodDto(LearningStepReadSchema) {}
 export class RecordLearningFactResponseDto extends createZodDto(
   RecordLearningFactResponseSchema,
 ) {}
+export class LearningSchoolInterestDto extends createZodDto(
+  LearningSchoolInterestSchema,
+) {}
 export class LearningAttemptDto extends createZodDto(LearningAttemptSchema) {}
 export class LearningAttemptResultDto extends createZodDto(
   LearningAttemptResultSchema,
@@ -49,6 +54,9 @@ export class LearningSchoolListDto extends createZodDto(
 ) {}
 export class LearningSchoolAdminDto extends createZodDto(
   LearningSchoolAdminSchema,
+) {}
+export class LearningSchoolAdminDetailDto extends createZodDto(
+  LearningSchoolAdminDetailSchema,
 ) {}
 export class LearningCourseListDto extends createZodDto(
   LearningCourseListSchema,

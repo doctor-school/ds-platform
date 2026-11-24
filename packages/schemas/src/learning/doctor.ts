@@ -247,9 +247,29 @@ export const LearningSchoolReadSchema = z.strictObject({
   expert: LearningPathAuthorSchema.nullable(),
   /** false = a guest; every course `state` is then null. */
   signedIn: z.boolean(),
+  /**
+   * 023 EARS-3, EARS-7 — whether the signed-in doctor has an active interest
+   * in the school («Вы в списке»); null for a guest.
+   */
+  interested: z.boolean().nullable(),
   courses: z.array(LearningSchoolCourseSchema),
 });
 export type LearningSchoolRead = z.infer<typeof LearningSchoolReadSchema>;
+
+/**
+ * 023 EARS-7 — `PUT` / `DELETE /v1/me/learning/schools/{schoolId}/interest`:
+ * the doctor's interest in the school after the write. A repeat register
+ * answers the existing active interest (idempotent).
+ */
+export const LearningSchoolInterestSchema = z.strictObject({
+  schoolId: z.uuid(),
+  state: z.enum(["active", "withdrawn"]),
+  registeredAt: z.iso.datetime(),
+  withdrawnAt: z.iso.datetime().nullable(),
+});
+export type LearningSchoolInterest = z.infer<
+  typeof LearningSchoolInterestSchema
+>;
 
 // ── The lesson (EARS-15, EARS-17) ───────────────────────────────────────────
 

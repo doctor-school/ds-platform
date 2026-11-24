@@ -12,6 +12,8 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
 import {
   BOT_PROTECTION,
   type BotProtection,
@@ -52,6 +54,8 @@ export interface Harness {
   app: NestFastifyApplication;
   pool: pg.Pool;
   fake: FakeIdpClient;
+  /** 023 EARS-7 — every product notice the learning host sent. */
+  mailer: FakeMailer;
   adminSid: string;
   /**
    * Let `sec` seconds of real time pass on the learning server's clock (the
@@ -64,10 +68,13 @@ export interface Harness {
 
 export async function bootHarness(): Promise<Harness> {
   const fake = new FakeIdpClient();
+  const mailer = new FakeMailer();
   const moduleRef: TestingModule = await withSignInHost(
     Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(IDP_CLIENT)
       .useValue(fake)
+      .overrideProvider(MAILER)
+      .useValue(mailer)
       .overrideProvider(RATE_LIMIT_THRESHOLDS)
       .useValue(RELAXED_RATE_LIMIT)
       // Hermetic register fixture: bot protection is not under test.
@@ -110,6 +117,7 @@ export async function bootHarness(): Promise<Harness> {
     app,
     pool,
     fake,
+    mailer,
     adminSid: sid,
     advanceClock: (sec) => {
       clockOffsetMs += sec * 1000;
@@ -225,7 +233,7 @@ export async function admin<T = Record<string, unknown>>(
 /** A doctor (or guest, with no headers) call under `/v1`. */
 export async function call<T = Record<string, unknown>>(
   h: Harness,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   url: string,
   headers: Record<string, string> = DEVICE,
   payload?: unknown,

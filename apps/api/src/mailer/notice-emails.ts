@@ -343,3 +343,36 @@ export function congressSubmissionDecisionMessage(
     footer: ["Команда Doctor.School"],
   });
 }
+
+/** 023 EARS-7 — what the school-opened notice is rendered from. */
+export interface SchoolOpenedContent {
+  /** `learning_schools.title`. */
+  schoolTitle: string;
+  /** The course whose publication opened the school. */
+  courseTitle: string;
+  /** The school screen on the doctor storefront. */
+  schoolUrl: string;
+}
+
+/**
+ * 023 EARS-7 — the one letter a doctor with an active interest in a «скоро»
+ * school gets when its first course is published. A product notice: the
+ * school, the course that opened it, one action to the school screen and why
+ * the doctor gets it. DRAFT copy (variant B) — the copy and look are the
+ * owner's Stage A pick in 023 slice 3 (023-design §6).
+ */
+export function schoolOpenedMessage(content: SchoolOpenedContent): EmailMessage {
+  return composeEmail({
+    subject: `Doctor.School — школа «${content.schoolTitle}» открылась`,
+    preheader: "Школа открылась — первый курс уже доступен",
+    intro:
+      `Школа «${content.schoolTitle}» открылась: вышел первый курс — ` +
+      `«${content.courseTitle}».`,
+    paragraphs: [
+      "Вы просили сообщить, когда школа откроется. Это единственное такое " +
+        "письмо — больше писем об открытии этой школы не будет.",
+    ],
+    action: { label: "Открыть школу", url: content.schoolUrl },
+    footer: ["Команда Doctor.School"],
+  });
+}

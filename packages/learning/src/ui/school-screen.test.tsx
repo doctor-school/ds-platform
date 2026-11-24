@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LearningSchoolCourse, LearningSchoolRead } from "@ds/schemas";
 
 import { SchoolScreen, SchoolScreenSkeleton } from "./school-screen";
 import { CONFIG } from "./__tests__/fixtures";
+import { schoolInterestFetch, soonSchool } from "./__tests__/school-soon";
 
 // 023 EARS-4, EARS-5, EARS-8, EARS-22, EARS-23 — the school screen of
 // `design-source/doctor-school.dc.html`: the poster header, «О школе», the
@@ -61,6 +69,7 @@ function school(over: Partial<LearningSchoolRead> = {}): LearningSchoolRead {
       photoUrl: null,
     },
     signedIn: true,
+    interested: false,
     courses: [course(1), course(2)],
     ...over,
   };
@@ -324,5 +333,122 @@ describe("023 — the school screen", () => {
         screen.getByText("По запросу «гастро» курсов в этой школе нет. Попробуйте другое слово."),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("023 — the «скоро» school and the interest capture", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
+  });
+  const soon = (over: Partial<LearningSchoolRead> = {}) =>
+    soonSchool(school(over));
+  const PUT = `PUT /v1/me/learning/schools/${uuid(1)}/interest`;
+  const DELETE = `DELETE /v1/me/learning/schools/${uuid(1)}/interest`;
+
+  it("EARS-6: a soon school shows «Скоро» in the header, «Школа готовится» with its note, the capture and the empty events and reviews", () => {
+    render(<SchoolScreen config={CONFIG} read={soon()} />);
+    expect(screen.getByText("Скоро")).toBeInTheDocument();
+    const courses = within(screen.getByRole("region", { name: "Курсы школы" }));
+    expect(courses.getByText("Школа готовится")).toBeInTheDocument();
+    expect(
+      courses.getByText("Первые курсы готовим вместе с экспертами"),
+    ).toBeInTheDocument();
+    expect(
+      courses.getByRole("button", { name: "Сообщить об открытии" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Вебинары-разборы" })).getByText(
+        /Событий школы пока нет/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Отзывы выпускников" })).getByText(
+        /Отзывов пока нет/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("EARS-6: without a note the soon state fixes no date or season", () => {
+    const read = soon();
+    render(
+      <SchoolScreen
+        config={CONFIG}
+        read={{ ...read, school: { ...read.school, soonNote: null } }}
+      />,
+    );
+    const region = screen.getByRole("region", { name: "Курсы школы" });
+    expect(region.textContent).not.toMatch(
+      /осен|зим|весн|летом|январ|феврал|март|апрел|июн|июл|август|сентябр|октябр|ноябр|декабр|20\d\d/i,
+    );
+  });
+
+  it("EARS-6: an open school keeps its counts and shows no soon state", () => {
+    render(<SchoolScreen config={CONFIG} read={school()} />);
+    expect(screen.queryByText("Скоро")).not.toBeInTheDocument();
+    expect(screen.queryByText("Школа готовится")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Сообщить об открытии" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("EARS-7: a signed-in doctor's capture stores the interest and shows «Вы в списке»; a withdraw shows the capture again", async () => {
+    const fetch = schoolInterestFetch({ [PUT]: "active", [DELETE]: "withdrawn" });
+    render(<SchoolScreen config={CONFIG} read={soon()} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Сообщить об открытии" }));
+    });
+    expect(await screen.findByText("Вы в списке")).toBeInTheDocument();
+    expect(fetch.calls()).toEqual([PUT]);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Не сообщать" }));
+    });
+    expect(
+      await screen.findByRole("button", { name: "Сообщить об открытии" }),
+    ).toBeInTheDocument();
+    expect(fetch.calls()).toEqual([PUT, DELETE]);
+  });
+
+  it("EARS-7: a doctor already in the list sees «Вы в списке» from the read", () => {
+    render(<SchoolScreen config={CONFIG} read={soon({ interested: true })} />);
+    expect(screen.getByText("Вы в списке")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Не сообщать" })).toBeInTheDocument();
+  });
+
+  it("EARS-7: a failed interest write keeps the capture and says so", async () => {
+    schoolInterestFetch({ [PUT]: 500 });
+    render(<SchoolScreen config={CONFIG} read={soon()} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Сообщить об открытии" }));
+    });
+    expect(
+      await screen.findByText("Не удалось записать вас в список. Попробуйте ещё раз."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Вы в списке")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Сообщить об открытии" }),
+    ).toBeEnabled();
+  });
+
+  it("EARS-7: a guest's capture leads to registration with the school and the capture marker as the return target", () => {
+    render(
+      <SchoolScreen config={CONFIG} read={soon({ signedIn: false, interested: null })} />,
+    );
+    const link = screen.getByRole("link", { name: "Сообщить об открытии" });
+    expect(link).toHaveAttribute(
+      "href",
+      `/register?returnTo=${encodeURIComponent("/schools/orto?capture=interest")}`,
+    );
+    // The open school's lesson gate stays off the soon school.
+    expect(screen.queryByText(/Начать урок/)).not.toBeInTheDocument();
+  });
+
+  it("EARS-7: back from registration the same capture completes once and the marker is dropped", async () => {
+    window.history.replaceState(null, "", "/schools/orto?capture=interest");
+    const fetch = schoolInterestFetch({ [PUT]: "active" });
+    render(<SchoolScreen config={CONFIG} read={soon()} />);
+    expect(await screen.findByText("Вы в списке")).toBeInTheDocument();
+    await waitFor(() => expect(fetch.calls()).toEqual([PUT]));
+    expect(window.location.search).toBe("");
   });
 });

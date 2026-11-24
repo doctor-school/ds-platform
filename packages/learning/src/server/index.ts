@@ -8,3 +8,4 @@ export * from "./projector.js";
 export * from "./admin.service.js";
 export * from "./doctor.service.js";
 export * from "./rule-change.js";
+export * from "./school-interest.js";

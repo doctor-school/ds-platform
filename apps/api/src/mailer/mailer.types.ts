@@ -35,6 +35,17 @@ export interface CongressConfirmationRequest {
 }
 
 /** 046 EARS-14 — what the congress submission receipt is rendered from. */
+/** 023 EARS-7 — the school-opened notice to one interested doctor. */
+export interface SchoolOpenedNoticeRequest {
+  /** The doctor's account email. */
+  email: string;
+  schoolTitle: string;
+  /** The course whose publication opened the school. */
+  courseTitle: string;
+  /** The school screen on the doctor storefront. */
+  schoolUrl: string;
+}
+
 export interface CongressSubmissionReceiptRequest {
   /** The account email of the submission's author. */
   email: string;
@@ -177,6 +188,15 @@ export interface Mailer {
   sendCongressSubmissionReceipt(
     input: CongressSubmissionReceiptRequest,
   ): Promise<void>;
+
+  /**
+   * 023 EARS-7: tell a doctor with an active interest in a «скоро» school that
+   * its first course is published — a **product notice**, sent after the
+   * publication commits and off the response path. Resolves on acceptance,
+   * rejects on a relay failure after failover; MUST reject an invalid email
+   * like the receipt.
+   */
+  sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void>;
 
   /**
    * 046 EARS-29, EARS-35: send the author the letter of a committee decision

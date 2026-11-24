@@ -63,6 +63,24 @@ export interface LearningMediaPort {
   signedUrl(objectKey: string): Promise<string>;
 }
 
+/** 023 EARS-7 — what one school-opened letter is sent from (the host resolves the address). */
+export interface LearningSchoolOpenedNotice {
+  personId: string;
+  school: { slug: string; title: string };
+  /** The course whose publication opened the school. */
+  course: { title: string };
+}
+
+/**
+ * The host's product-notice sender (apps/api: the `Mailer`'s product-notice
+ * class). Called after the claiming transaction commits; a rejected letter is
+ * the host's to record — the claim is never undone, so a doctor gets the
+ * notice at most once.
+ */
+export interface LearningNoticePort {
+  schoolOpened(notices: LearningSchoolOpenedNotice[]): Promise<void>;
+}
+
 export interface LearningServerDeps {
   db: LearningDb;
   media: LearningMediaPort;
@@ -70,6 +88,8 @@ export interface LearningServerDeps {
   transaction<T>(fn: (tx: LearningTx) => Promise<T>): Promise<T>;
   points: LearningPointsPort;
   events: LearningEventBus;
+  /** 023 EARS-7 — the school-opened product notice. */
+  notices: LearningNoticePort;
   now?: () => Date;
 }
 

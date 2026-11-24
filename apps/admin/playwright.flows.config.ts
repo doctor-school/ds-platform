@@ -38,6 +38,7 @@ const stageSpecs = [
   "stage-event-lifecycle.spec.ts",
   "stage-congress-review.spec.ts",
   "stage-recording-publish.spec.ts",
+  "stage-feed-post-visibility.spec.ts",
 ];
 
 export default defineConfig({

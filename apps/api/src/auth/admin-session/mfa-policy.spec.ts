@@ -13,13 +13,16 @@ describe("011 EARS-3 — role → mfa_required policy", () => {
     // with no enrollment path — a lockout, not a hardening. `event-registrar`
     // (044 EARS-19) is a named tenant precisely because it DOES have one: it
     // enrols and is challenged on the `platform_admin` TOTP flow unchanged;
-    // `congress-program-committee` (046 EARS-26) on exactly the same terms.
+    // `congress-program-committee` (046 EARS-26) on exactly the same terms, and
+    // `learning_rules_editor` (024 EARS-30 — granted in «Доступы» «with the second
+    // factor») too.
     expect(mfaRequiredRoles()).toEqual([
       "platform_admin",
       "event-registrar",
       "congress-program-committee",
       "superadmin",
       "broadcast_director",
+      "learning_rules_editor",
     ]);
   });
 
@@ -36,6 +39,10 @@ describe("011 EARS-3 — role → mfa_required policy", () => {
     // refuses a principal the policy does not cover, so without this entry the
     // registrar would need a second, weaker door into the admin tier.
     expect(requiresMfa(["event-registrar"])).toBe(true);
+  });
+
+  it("024 EARS-30: a principal holding only learning_rules_editor requires a second factor", () => {
+    expect(requiresMfa(["learning_rules_editor"])).toBe(true);
   });
 
   it("046 EARS-26: a principal holding only congress-program-committee requires a second factor", () => {

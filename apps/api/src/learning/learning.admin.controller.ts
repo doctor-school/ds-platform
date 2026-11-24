@@ -48,7 +48,10 @@ import type { z } from "zod";
 import { Authz } from "../authz/index.js";
 import type { Role } from "../authz/authz.types.js";
 import { ObjectAlreadyExistsError } from "../storage/storage.types.js";
-import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage.types.js";
+import {
+  OBJECT_STORAGE,
+  type ObjectStorage,
+} from "../storage/storage.types.js";
 import { MediaCleanupService } from "../taxonomy/index.js";
 import {
   type IdempotencyLease,
@@ -164,7 +167,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/schools`, path: `${BASE}/schools`, payload, versioned: false },
+      {
+        method: "POST",
+        route: `${BASE}/schools`,
+        path: `${BASE}/schools`,
+        payload,
+        versioned: false,
+      },
       (_v, complete) => this.admin.createSchool(payload, complete),
     );
   }
@@ -189,7 +198,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/courses`, path: `${BASE}/courses`, payload, versioned: false },
+      {
+        method: "POST",
+        route: `${BASE}/courses`,
+        path: `${BASE}/courses`,
+        payload,
+        versioned: false,
+      },
       (_v, complete) => this.admin.createCourse(payload, complete),
     );
   }
@@ -244,7 +259,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/courses/:id/${verb}`, path: `${BASE}/courses/${id}/${verb}`, payload: {}, versioned: true },
+      {
+        method: "POST",
+        route: `${BASE}/courses/:id/${verb}`,
+        path: `${BASE}/courses/${id}/${verb}`,
+        payload: {},
+        versioned: true,
+      },
       (v, complete) => this.admin.setCourseState(id, state, v, complete),
     );
   }
@@ -263,7 +284,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/modules`, path: `${BASE}/modules`, payload, versioned: false },
+      {
+        method: "POST",
+        route: `${BASE}/modules`,
+        path: `${BASE}/modules`,
+        payload,
+        versioned: false,
+      },
       (_v, complete) => this.admin.createModule(payload, complete),
     );
   }
@@ -280,7 +307,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/lessons`, path: `${BASE}/lessons`, payload, versioned: false },
+      {
+        method: "POST",
+        route: `${BASE}/lessons`,
+        path: `${BASE}/lessons`,
+        payload,
+        versioned: false,
+      },
       (_v, complete) => this.admin.createLesson(payload, complete),
     );
   }
@@ -312,7 +345,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PATCH", route: `${BASE}/lessons/:id`, path: `${BASE}/lessons/${id}`, payload, versioned: true },
+      {
+        method: "PATCH",
+        route: `${BASE}/lessons/:id`,
+        path: `${BASE}/lessons/${id}`,
+        payload,
+        versioned: true,
+      },
       (v, complete) => this.admin.updateLesson(id, payload, v, complete),
     );
   }
@@ -352,7 +391,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/lessons/:id/${verb}`, path: `${BASE}/lessons/${id}/${verb}`, payload: {}, versioned: true },
+      {
+        method: "POST",
+        route: `${BASE}/lessons/:id/${verb}`,
+        path: `${BASE}/lessons/${id}/${verb}`,
+        payload: {},
+        versioned: true,
+      },
       (v, complete) => this.admin.setLessonState(id, state, v, complete),
     );
   }
@@ -372,7 +417,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PUT", route: `${BASE}/lessons/:id/step-order`, path: `${BASE}/lessons/${id}/step-order`, payload, versioned: true },
+      {
+        method: "PUT",
+        route: `${BASE}/lessons/:id/step-order`,
+        path: `${BASE}/lessons/${id}/step-order`,
+        payload,
+        versioned: true,
+      },
       (v, complete) =>
         this.admin.reorderSteps(id, payload.stepIds, v, complete),
     );
@@ -392,7 +443,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/steps`, path: `${BASE}/steps`, payload, versioned: false },
+      {
+        method: "POST",
+        route: `${BASE}/steps`,
+        path: `${BASE}/steps`,
+        payload,
+        versioned: false,
+      },
       (_v, complete) => this.admin.createStep(payload, complete),
     );
   }
@@ -411,7 +468,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PATCH", route: `${BASE}/steps/:id`, path: `${BASE}/steps/${id}`, payload, versioned: true },
+      {
+        method: "PATCH",
+        route: `${BASE}/steps/:id`,
+        path: `${BASE}/steps/${id}`,
+        payload,
+        versioned: true,
+      },
       (v, complete) => this.admin.updateStep(id, payload, v, complete),
     );
   }
@@ -429,7 +492,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "DELETE", route: `${BASE}/steps/:id`, path: `${BASE}/steps/${id}`, payload: {}, versioned: true },
+      {
+        method: "DELETE",
+        route: `${BASE}/steps/:id`,
+        path: `${BASE}/steps/${id}`,
+        payload: {},
+        versioned: true,
+      },
       (v, complete) => this.admin.removeStep(id, v, complete),
     );
   }
@@ -449,7 +518,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PUT", route: `${BASE}/steps/:id/source`, path: `${BASE}/steps/${id}/source`, payload, versioned: true },
+      {
+        method: "PUT",
+        route: `${BASE}/steps/:id/source`,
+        path: `${BASE}/steps/${id}/source`,
+        payload,
+        versioned: true,
+      },
       (v, complete) => this.admin.setStepSource(id, payload, v, complete),
     );
   }
@@ -488,12 +563,22 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PUT", route: `${BASE}/steps/:id/media`, path: `${BASE}/steps/${id}/media`, payload: { sha256, contentType: file.contentType }, versioned: true },
+      {
+        method: "PUT",
+        route: `${BASE}/steps/:id/media`,
+        path: `${BASE}/steps/${id}/media`,
+        payload: { sha256, contentType: file.contentType },
+        versioned: true,
+      },
       async (v, complete, lease) => {
         const key = await this.upload(lease, file, sha256);
         return this.admin.setStepMedia(
           id,
-          { ref: key, contentType: file.contentType, sizeBytes: file.body.length },
+          {
+            ref: key,
+            contentType: file.contentType,
+            sizeBytes: file.body.length,
+          },
           v,
           (tx, objectKey) =>
             this.cleanup
@@ -585,7 +670,13 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PUT", route: `${BASE}/presets/:id`, path: `${BASE}/presets/${id}`, payload, versioned: true },
+      {
+        method: "PUT",
+        route: `${BASE}/presets/:id`,
+        path: `${BASE}/presets/${id}`,
+        payload,
+        versioned: true,
+      },
       (v, complete) => this.admin.updatePreset(id, payload.values, v, complete),
     );
   }
@@ -620,7 +711,14 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "PUT", route: `${BASE}/rules/:scopeKind/:scopeId`, path: `${BASE}/rules/${kind}/${scopeId}`, payload, versioned: true, allowZero: true },
+      {
+        method: "PUT",
+        route: `${BASE}/rules/:scopeKind/:scopeId`,
+        path: `${BASE}/rules/${kind}/${scopeId}`,
+        payload,
+        versioned: true,
+        allowZero: true,
+      },
       (v, complete) =>
         this.admin.setScopeValues(kind, scopeId, payload.values, v, complete, {
           earnedProgress: payload.earnedProgress,
@@ -630,10 +728,15 @@ export class LearningAdminController {
     );
   }
 
-  /** EARS-31 — the change dialog's count: the doctors whose statuses would change; nothing is written. */
+  /**
+   * EARS-31 — the change dialog's count: the doctors whose statuses would change;
+   * nothing is written. It is still a POST on the admin tier taking the rules
+   * authority, so it revalidates that authority live (#1304) like the write it
+   * precedes: a revoked rules editor does not keep reading the impact count.
+   */
   @Post("rules/:scopeKind/:scopeId/preview")
   @HttpCode(200)
-  @Authz({ ...RULES_READ, tests: ["EARS-31"] })
+  @Authz({ ...RULES_READ, revalidate: "live", tests: ["EARS-31"] })
   @ApiOkResponse({ type: LearningRuleChangePreviewDto })
   async previewRules(
     @Param("scopeKind") rawKind: string,
@@ -642,7 +745,10 @@ export class LearningAdminController {
   ): Promise<unknown> {
     const kind = scopeKind(rawKind);
     await this.requireRulesAuthority(req, kind, scopeId);
-    const payload = parse(PreviewLearningRuleChangeRequestSchema, readJson(req));
+    const payload = parse(
+      PreviewLearningRuleChangeRequestSchema,
+      readJson(req),
+    );
     return adminCommand(() =>
       this.admin.previewScopeValues(kind, scopeId, payload.values),
     );
@@ -671,7 +777,14 @@ export class LearningAdminController {
     return this.run(
       req,
       reply,
-      { method: "POST", route: `${BASE}/rules/:scopeKind/:scopeId/apply-preset`, path: `${BASE}/rules/${kind}/${scopeId}/apply-preset`, payload, versioned: true, allowZero: true },
+      {
+        method: "POST",
+        route: `${BASE}/rules/:scopeKind/:scopeId/apply-preset`,
+        path: `${BASE}/rules/${kind}/${scopeId}/apply-preset`,
+        payload,
+        versioned: true,
+        allowZero: true,
+      },
       (v, complete) =>
         this.admin.applyPreset(kind, scopeId, payload.presetId, v, complete, {
           earnedProgress: payload.earnedProgress,
@@ -855,7 +968,8 @@ function requireVersion(
     );
   }
   // A rules layer with no row yet reads as version 0.
-  if (allowZero && /^(?:W\/)?"?0"?$/.test(raw.trim())) return { raw, version: 0 };
+  if (allowZero && /^(?:W\/)?"?0"?$/.test(raw.trim()))
+    return { raw, version: 0 };
   const version = parseIfMatchVersion(raw);
   if (version === null) {
     throw new TaxonomyError(
@@ -869,10 +983,7 @@ function requireVersion(
 function readJson(req: FastifyRequest): unknown {
   const contentType = String(req.headers["content-type"] ?? "");
   if (contentType && !contentType.includes("application/json")) {
-    throw new TaxonomyError(
-      "UNSUPPORTED_MEDIA_TYPE",
-      "use application/json",
-    );
+    throw new TaxonomyError("UNSUPPORTED_MEDIA_TYPE", "use application/json");
   }
   return req.body;
 }

@@ -177,7 +177,9 @@ world-readable. A source must already show «Работает» (an unbound sour
 ```bash
 sudo chmod -R a+rX <export folder>
 # the slot's existing compose invocation (above), with `run` instead of `up`:
-#   ... run --rm --no-deps -v <export folder>:/export:ro api #     node dist/materials/telegram/telegram-import-history.main.js #     --source t.me/<address> --export /export/result.json
+#   ... run --rm --no-deps -v <export folder>:/export:ro api \
+#     node dist/materials/telegram/telegram-import-history.main.js \
+#     --source t.me/<address> --export /export/result.json
 ```
 
 Stdout is one JSON line of counts; a second run prints `written: 0`.

@@ -170,7 +170,9 @@ export function FeedSourceRowActions({
           <DialogHeader>
             <DialogTitle>{t("feedSources.editTitle")}</DialogTitle>
             <DialogDescription>
-              {t("feedSources.editDescription", { address: label })}
+              {t(`feedSources.editDescription.${source.platform}`, {
+                address: label,
+              })}
             </DialogDescription>
           </DialogHeader>
           {editErrorKey ? (

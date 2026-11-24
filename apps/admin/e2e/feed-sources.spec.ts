@@ -361,6 +361,9 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
     await cell(admin, `feed-source-edit-${OFFICIAL}`).click();
     const dialog = admin.getByTestId("feed-source-edit-dialog");
     await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(
+      `Сейчас источник — t.me/${OFFICIAL}. Ссылки его постов в ленте поменяются на новый адрес.`,
+    );
     await expect(dialog.getByTestId("feed-source-address")).toHaveValue(
       `t.me/${OFFICIAL}`,
     );
@@ -765,13 +768,16 @@ test.describe("048 EARS-38, EARS-44, EARS-47, EARS-52 — VK on «Источни
     await expect(admin.getByText(FEED_SOURCE_ADDRESS_ERROR)).toBeVisible();
   });
 
-  test("048 EARS-38: «Изменить адрес» of a VK source refuses a post link at the field, then changes it", async () => {
+  test("048 EARS-38: «Изменить адрес» of a VK source says the entries already in the feed stay as they are, refuses a post link at the field, then changes it", async () => {
     await openSources(admin);
     await cell(admin, `feed-source-edit-${VK_OFFICIAL}`).click();
     const dialog = admin.getByTestId("feed-source-edit-dialog");
+    // EARS-38 — a VK href is built from the bound community id: an address
+    // edit rewrites no entry, so the dialog never promises new links.
     await expect(dialog).toContainText(
-      `Сейчас источник — vk.com/${VK_OFFICIAL}.`,
+      `Сейчас источник — vk.com/${VK_OFFICIAL}. Записи, уже попавшие в ленту, не изменятся.`,
     );
+    await expect(dialog).not.toContainText("Ссылки его постов");
     await expect(dialog.getByText("Адрес сообщества")).toBeVisible();
     await expect(dialog.getByTestId("feed-source-address")).toHaveValue(
       `vk.com/${VK_OFFICIAL}`,

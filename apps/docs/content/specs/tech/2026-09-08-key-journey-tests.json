@@ -74,8 +74,8 @@
       "gap": null
     },
     "A5": {
-      "status": "PARTIAL",
-      "gap": 4120
+      "status": "FULL",
+      "gap": null
     },
     "A6": {
       "status": "FULL",
@@ -1465,6 +1465,17 @@
         [
           "Feature 013 — static public Academy home",
           "048 EARS-14: on a 390 px phone the feed rail shows one row with the next card partly visible, no page scroll and no axe violation"
+        ]
+      ]
+    },
+    {
+      "rows": ["A5"],
+      "leg": "live/academy/default",
+      "file": "e2e/academy-feed-journey.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "048 EARS-14/15: a guest reads Academy and Telegram cards, pages the feed and opens a material"
         ]
       ]
     },

@@ -24,7 +24,11 @@ export const VK_WALL_PAGE = 100;
 
 // ── Parameters (built from server config and the source list only) ──────────
 
-export const VkGroupIdSchema = z.number().int().positive().max(2 ** 53 - 1);
+export const VkGroupIdSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(2 ** 53 - 1);
 
 /** `groups.getById` — a bound community id, or the stored screen name. */
 export const VkGroupRefSchema = z.union([
@@ -123,10 +127,7 @@ export type VkGroup = z.infer<typeof VkGroupSchema>;
 
 /** `groups.getById` answers `{ groups: [...] }` from 5.194 and a bare list before. */
 export const GroupsGetByIdResponseSchema = z
-  .union([
-    z.object({ groups: z.array(VkGroupSchema) }),
-    z.array(VkGroupSchema),
-  ])
+  .union([z.object({ groups: z.array(VkGroupSchema) }), z.array(VkGroupSchema)])
   .transform((r) => (Array.isArray(r) ? r : r.groups));
 
 /** How one VK API call ended — the `outcome` of its log line (EARS-51). */

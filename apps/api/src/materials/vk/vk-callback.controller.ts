@@ -33,7 +33,11 @@ const OK = "ok";
 /** The envelope fields the route reads; the object is the feed source's to validate. */
 const EnvelopeSchema = z.object({
   type: z.string().min(1).max(64),
-  group_id: z.number().int().positive().max(2 ** 53 - 1),
+  group_id: z
+    .number()
+    .int()
+    .positive()
+    .max(2 ** 53 - 1),
   event_id: z.string().max(128).optional(),
   object: z.unknown().optional(),
 });

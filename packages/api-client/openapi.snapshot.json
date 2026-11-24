@@ -15602,6 +15602,18 @@
         "tags": ["Health"]
       }
     },
+    "/v1/integrations/vk/callback": {
+      "post": {
+        "operationId": "VkCallbackController_callback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["VkCallback"]
+      }
+    },
     "/v1/learning/courses/{courseSlug}/path": {
       "get": {
         "operationId": "LearningPublicController_path",

@@ -5,7 +5,8 @@ module with the «Материалы» admin authoring surface (EARS-1, EARS-4�
 EARS-19); #3513 adds the public feed and material reads; #3993 opens slice 2
 with the «Источники» source list (EARS-20…EARS-23); #3994 adds the Telegram
 connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36); #3995 adds the
-one-off history import (EARS-30).
+one-off history import (EARS-30); #4004 opens slice 3 with the VK connector in
+`vk/` (EARS-38…EARS-45, EARS-47, EARS-51).
 
 ## What it owns
 
@@ -109,6 +110,44 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
     failure; binds the id in the same write when the channel's username
     equals the address ignoring case. The verdict is written only while the
     source is still on at the judged address, and never bumps `version`.
+- `feed_entry_vk_objects` (slice 3, #4004) — the dedup key of VK entries:
+  `(feed_source_id, object_kind post | video, vk_object_id)`; a post's own
+  videos are keyed to the post, so a video shows once (EARS-43).
+  `feed_vk_call_months` — the VK API calls per calendar month, Moscow time
+  (EARS-44). `feed_entries.removed_at` — «Удалён в VK» (EARS-45); the public
+  read keeps `removed_at IS NULL`.
+- `vk/` (slice 3, #4004) — the VK connector:
+  - `vk-api.client.ts` — the ONLY caller of `https://api.vk.com/method/*`
+    (ADR-0011 channel #11): `wall.get` and `groups.getById` only, pinned
+    `v = 5.199`, the service key in the POST body (never a URL, log line or
+    error), Zod-checked parameters and responses, one `vk_api_call` line per
+    call (method, HTTP status, VK error code, duration, outcome), the month's
+    counter incremented before each call. `vk-api.fake.ts` is its double
+    (`VK_API`).
+  - `vk-config.ts` — `VK_SERVICE_KEY`, `VK_CALLBACK_SECRET`,
+    `VK_CALLBACK_CONFIRMATION`; `null` (connector off) unless all three are
+    set: the Callback answers `404`, nothing calls VK, the check reports «VK
+    не подключён на сервере».
+  - `vk-callback.controller.ts` + `vk-callback-body.ts` — `POST
+/v1/integrations/vk/callback` (public; the body `secret` compared in
+    constant time): `401` for a wrong / missing secret or an unparsable body
+    (the module swaps in a Callback-tolerant JSON parser at init),
+    `confirmation` of a bound community → the confirmation string, every
+    other event → `ok`, `500` only when our write fails (VK retries).
+  - `vk-mapping.ts` + `vk.feed-source.ts` — the EARS-41/42 mapping and the
+    only writer of VK entries, under the source's row lock: `wall_post_new`
+    / `video_new` of a listed, bound, switched-on community; reposts,
+    `postpone` / `suggest` / `reply`, live and other video types, empty posts
+    and every other event dropped with one `vk_event_dropped` line.
+  - `vk-source-check.service.ts` — the EARS-44 check, hourly at half past
+    and at once on add / edit / switch-on; binds `vk_group_id` (and
+    `vk_last_event_at`) while unbound, writes only over the bound id it
+    judged. `FeedSourcesService` refuses an add / address edit whose
+    community is already bound to another source («Это сообщество уже есть в
+    списке») and unbinds a VK source on an address edit.
+  - `vk-wall-reconcile.service.ts` — the EARS-45 hourly reconcile by
+    `wall.get` (count 100): edits in place, missed posts written, «Удалён в
+    VK» set / cleared within the returned span; videos never reconciled.
 
 ## Properties worth stating
 

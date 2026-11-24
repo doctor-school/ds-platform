@@ -25,7 +25,9 @@ export function installVkCallbackJsonParser(instance: FastifyInstance): void {
   instance.addContentTypeParser(
     "application/json",
     { parseAs: "string" },
-    (req, body, done) => {
+    (req, raw, done) => {
+      // `parseAs: "string"` hands a string; the type also admits a Buffer.
+      const body = typeof raw === "string" ? raw : raw.toString("utf8");
       if (!isCallback(req)) {
         parseJson(req, body, done);
         return;

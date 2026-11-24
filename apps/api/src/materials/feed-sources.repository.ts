@@ -288,13 +288,19 @@ export class FeedSourcesRepository {
     return rows.map((r) => r.id);
   }
 
-  /** EARS-44 — whether another source already holds the community id. */
-  async vkGroupHeldByOther(groupId: number, exceptId: string): Promise<boolean> {
+  /** EARS-38 / EARS-44 — whether another source already holds the community id. */
+  async vkGroupHeldByOther(
+    groupId: number,
+    exceptId: string | null,
+  ): Promise<boolean> {
     const [row] = await this.handle
       .select({ id: feedSources.id })
       .from(feedSources)
       .where(
-        and(eq(feedSources.vkGroupId, groupId), ne(feedSources.id, exceptId)),
+        and(
+          eq(feedSources.vkGroupId, groupId),
+          exceptId === null ? undefined : ne(feedSources.id, exceptId),
+        ),
       )
       .limit(1);
     return row !== undefined;
@@ -304,9 +310,11 @@ export class FeedSourcesRepository {
    * EARS-44 — write a VK check's verdict: `status`, `status_reason`,
    * `checked_at` and, while unbound, the community id with
    * `vk_last_event_at` set to the binding time (in the same write). Applied
-   * only while the source is still switched on at the address the check
-   * judged, so an «Изменить адрес» or «Выключить» that raced it wins. Not an
-   * administrator edit, so the admin ETag (`version`) is not bumped.
+   * only while the source is still switched on at the address and with the
+   * bound id the check judged (`judgedGroupId`), so an «Изменить адрес» or
+   * «Выключить» that raced it wins and a bound id is never overwritten or
+   * silently kept for another community. Not an administrator edit, so the
+   * admin ETag (`version`) is not bumped.
    */
   async writeVkCheck(
     tx: FeedSourcesTx,
@@ -318,14 +326,13 @@ export class FeedSourcesRepository {
       checkedAt: Date;
       bindGroupId: number | null;
     },
+    judgedGroupId: number | null,
   ): Promise<FeedSource | undefined> {
+    // A bind is only ever written over an unbound row (the guard below).
     const bind =
-      verdict.bindGroupId === null
+      verdict.bindGroupId === null || judgedGroupId !== null
         ? {}
-        : {
-            vkGroupId: sql`coalesce(${feedSources.vkGroupId}, ${String(verdict.bindGroupId)}::bigint)`,
-            vkLastEventAt: sql`CASE WHEN ${feedSources.vkGroupId} IS NULL THEN now() ELSE ${feedSources.vkLastEventAt} END`,
-          };
+        : { vkGroupId: verdict.bindGroupId, vkLastEventAt: sql`now()` };
     const [row] = await tx
       .update(feedSources)
       .set({
@@ -340,6 +347,9 @@ export class FeedSourcesRepository {
           eq(feedSources.platform, "vk"),
           eq(feedSources.enabled, true),
           eq(feedSources.address, address),
+          judgedGroupId === null
+            ? isNull(feedSources.vkGroupId)
+            : eq(feedSources.vkGroupId, judgedGroupId),
         ),
       )
       .returning();
@@ -395,7 +405,13 @@ export class FeedSourcesRepository {
     patch: Partial<
       Pick<
         FeedSource,
-        "address" | "enabled" | "status" | "statusReason" | "checkedAt"
+        | "address"
+        | "enabled"
+        | "status"
+        | "statusReason"
+        | "checkedAt"
+        | "vkGroupId"
+        | "vkLastEventAt"
       >
     >,
   ): Promise<FeedSource | undefined> {

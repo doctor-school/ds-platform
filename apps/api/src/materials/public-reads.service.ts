@@ -59,7 +59,11 @@ export async function toFeedCard(
       external: true,
     };
   }
-  if (row.sourcePlatform !== "academy" || row.kind === "post") {
+  if (
+    row.sourcePlatform !== "academy" ||
+    row.kind === "post" ||
+    row.kind === "video"
+  ) {
     // The read serves only `FEED_CARD_PLATFORMS` (048-design §Delivery
     // slices (slice 2)), and the connector writes a Telegram entry only as a
     // `post`; this is the last guard should the stored rows and the card

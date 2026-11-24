@@ -12,17 +12,10 @@ import type { VkImage, VkVideo, VkWallPost } from "./vk-api.types.js";
 export const VK_PREVIEW_MAX_WIDTH = 1280;
 
 export type VkPostDropReason =
-  | "repost"
-  | "not_published"
-  | "empty"
-  | "other_owner";
+  "repost" | "not_published" | "empty" | "other_owner";
 
 export type VkVideoDropReason =
-  | "other_owner"
-  | "live"
-  | "other_video_type"
-  | "no_title"
-  | "incomplete";
+  "other_owner" | "live" | "other_video_type" | "no_title" | "incomplete";
 
 export interface VkPostCard {
   postId: number;

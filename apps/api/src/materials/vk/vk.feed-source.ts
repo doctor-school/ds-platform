@@ -99,7 +99,13 @@ export class VkFeedSource {
         if (event.type === "wall_post_new") {
           const post = VkWallPostSchema.safeParse(event.object);
           if (!post.success) return { kind: "dropped", reason: "malformed" };
-          written = await this.writePost(tx, source, groupId, post.data, "keep");
+          written = await this.writePost(
+            tx,
+            source,
+            groupId,
+            post.data,
+            "keep",
+          );
         } else {
           const video = VkVideoSchema.safeParse(event.object);
           if (!video.success) return { kind: "dropped", reason: "malformed" };

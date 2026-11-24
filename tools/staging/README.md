@@ -168,6 +168,22 @@ sudoedit /etc/ds-platform/slots/$SLOT.telegram.env   # TELEGRAM_BOT_TOKEN=<the s
 #   ... up -d --no-deps --force-recreate api
 ```
 
+**History import on a slot (048 EARS-30).** The one-off import runs from the slot's
+own api image — its entry is compiled into `dist/`, so no tsx and no repo checkout are
+needed — in a one-off container of the api service, with the Telegram Desktop export
+folder mounted read-only. The image runs as `node`, so the folder must be
+world-readable. A source must already show «Работает» (an unbound source is refused):
+
+```bash
+sudo chmod -R a+rX <export folder>
+# the slot's existing compose invocation (above), with `run` instead of `up`:
+#   ... run --rm --no-deps -v <export folder>:/export:ro api \
+#     node dist/materials/telegram/telegram-import-history.main.js \
+#     --source t.me/<address> --export /export/result.json
+```
+
+Stdout is one JSON line of counts; a second run prints `written: 0`.
+
 Moving the connector to another slot: remove the file from the old slot and recreate
 its api first, then place it on the new slot. On its first poll the api deletes any
 webhook the bot still has (keeping its pending updates), so no separate registration

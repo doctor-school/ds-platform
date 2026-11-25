@@ -53,7 +53,7 @@ The page, top to bottom, follows the canvas switch defaults (#1799: «its switch
 **Partner (US-1, US-2, US-8):**
 
 1. The visitor opens `/` → the «Партнёрам» card reads «K партнёров · прозрачная модель».
-2. The visitor taps «Как это работает» in the hero or in the «Инвесторам» persona block → the 034 investor page with its «Обсудить проект» form into the shared application queue.
+2. The visitor taps «Как это работает» in the hero or in the «Инвесторам» persona block → `/investors`, the 034 investor page, with its «Обсудить проект» form into the shared application queue.
 
 **Content (US-4, US-5, US-6):** «Что мы делаем» → a project card → `/projects/{slug}`, or «Все проекты →» → `/projects`; an event card → its event page, or «Все события» → `/webinars`; a material card → its reading page or its original.
 
@@ -71,7 +71,7 @@ The page, top to bottom, follows the canvas switch defaults (#1799: «its switch
 - `/` on the Academy renders the six parts above in the canvas order, for a guest and a signed-in visitor alike; the doctor storefront's `/` is untouched.
 - The hero's three numbers are computed from the platform at the moment of the request: projects in production — public projects at the stage «проект идёт» (030); experts — published experts (012 registry); partners — published organisations (032 EARS-12). Nobody types them; a failed or zero count is left out, never shown as «0» or as a stale figure.
 - «Что мы делаем» is the 030 home block, «Ближайшие эфиры» is the shared 019 events block with a cap, the rail is the 048 rail — each with its own states; the home adds no second implementation of any of them.
-- Both «Экспертам» entries lead to `/apply`; both partner entries lead to the 034 page; no entry leads to a dead link or an in-page placeholder.
+- Both «Экспертам» entries lead to `/apply`; both partner entries lead to `/investors` (034); no entry leads to a dead link or an in-page placeholder.
 - The mission, the evolutionary goal and «Кто мы» use the owner's texts with no «готовится» mark and with no statement about money: «бесплатное» / «бесплатным» is removed from them (owner, chat 2026-11-10: «вообще убираем эти фразы… Просто убрать и всё»).
 - The 013 sections built on fixtures — «Что такое Doctor.School», «Зачем», the fixture experts, the fixture events, the fixture projects, «Выгоды», «Форматы» — and their fixture data are gone from the home.
 - At a phone width there is no horizontal page scroll, every action is keyboard-reachable, and the page passes the `playwright-axe` gate.

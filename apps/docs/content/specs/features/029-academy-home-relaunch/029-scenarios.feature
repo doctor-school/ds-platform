@@ -46,9 +46,9 @@ Feature: 029 — Academy home relaunch after the narrowing to backstage
     Given the partner entries are delivered
     And a guest opens the Academy home
     When the guest taps "Как это работает" in the "Партнёрам" card
-    Then the guest is on the investor page
+    Then the guest is on "/investors"
     When the guest returns and taps "Как это работает" in the "Инвесторам" block
-    Then the guest is on the investor page
+    Then the guest is on "/investors"
     And the home has no partnership form
 
   @rule @EARS-5

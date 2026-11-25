@@ -13,7 +13,7 @@ A key is a track label without the `track:` prefix; a new track needs only a new
 ```yaml
 academy:
   goal: Новая главная Академии и посты из соцсетей в ленте
-  queue: [3403, 1802, 1824, 3506, 1799]
+  queue: [1799, 1802, 1824, 3506, 3403]
 doctor:
   goal: Выложить курс — врач проходит его на сайте
   queue: [2272, 1503, 1792, 1793, 1497, 1500, 1501]

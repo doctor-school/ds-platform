@@ -46,6 +46,8 @@ import {
   slotLiveStandEnv,
   SUMMARY_REPORTER_PATH,
   summarizeReport,
+  suiteStatusDescription,
+  suiteStatusDescriptionFromDir,
 } from "./e2e-stage.mjs";
 import { boxObservingGrep } from "./box-observing.mjs";
 import {
@@ -2736,5 +2738,81 @@ describe("the PR-slot run in Actions (#4202)", () => {
     assert.match(body, /passed 0 · failed 0 · flaky 0 · skipped 0/);
     assert.match(body, /- … and 11 more/);
     assert.equal((body.match(/```/g) ?? []).length, 2);
+  });
+});
+
+describe("suiteStatusDescription — the stage-suite commit status (#4222)", () => {
+  const report = (...tests) => ({
+    suites: [{ specs: tests.map((status) => ({ tests: [{ projectName: "p", status }] })) }],
+  });
+
+  it("an all-green run keeps today's wording, live legs counted in", () => {
+    assert.equal(
+      suiteStatusDescription({
+        suite: report("expected", "expected", "skipped"),
+        live: [{ name: "live/academy/default", report: report("expected") }],
+      }),
+      "3 passed, 0 failed, 1 skipped",
+    );
+  });
+
+  it("a failing live tier counts as failed and is named", () => {
+    assert.equal(
+      suiteStatusDescription({
+        suite: report("expected", "skipped"),
+        live: [
+          { name: "live/doctor/room", report: report("expected") },
+          { name: "live/academy/default", report: report("expected", "unexpected") },
+        ],
+      }),
+      "3 passed, 1 failed (live/academy/default), 1 skipped",
+    );
+  });
+
+  it("a missing suite report and a leg that never wrote one still yield a description", () => {
+    assert.equal(
+      suiteStatusDescription({ suite: undefined, live: [{ name: "live/doctor/room" }] }),
+      "0 passed, 0 failed, 0 skipped",
+    );
+    assert.equal(suiteStatusDescription({}), "0 passed, 0 failed, 0 skipped");
+  });
+
+  it("stays within GitHub's 140-char cap, dropping tier names from the end deterministically", () => {
+    const live = Array.from({ length: 12 }, (_, i) => ({
+      name: `live/doctor/some-long-tier-name-${i}`,
+      report: report("unexpected"),
+    }));
+    const text = suiteStatusDescription({ suite: report("expected"), live });
+    assert.ok(text.length <= 140, text);
+    assert.match(
+      text,
+      /^1 passed, 12 failed \(live\/doctor\/some-long-tier-name-0, .* \+\d+ more\), 0 skipped$/,
+    );
+    assert.equal(suiteStatusDescription({ suite: report("expected"), live }), text);
+  });
+
+  it("reads the suite report and each live leg's report out of the report dir", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ds-4222-status-"));
+    try {
+      const write = (leg, value) => {
+        const legDir = leg ? path.join(dir, leg) : dir;
+        mkdirSync(legDir, { recursive: true });
+        writeFileSync(path.join(legDir, "results.json"), JSON.stringify(value));
+      };
+      write(undefined, report("expected", "expected", "skipped"));
+      write("live-academy-default", report("unexpected"));
+      write("axe-doctor", report("expected"));
+      const tiers = [{ name: "live/academy/default" }, { name: "live/doctor/room" }];
+      assert.equal(
+        suiteStatusDescriptionFromDir(dir, tiers),
+        "2 passed, 1 failed (live/academy/default), 1 skipped",
+      );
+      assert.equal(
+        suiteStatusDescriptionFromDir(path.join(dir, "absent"), tiers),
+        "0 passed, 0 failed, 0 skipped",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

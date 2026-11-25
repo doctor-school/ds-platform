@@ -311,7 +311,10 @@ slot=pr-<N> -f sha=<head SHA>` plus the filters you passed; branch and SHA come 
   ssh key on a runner that executed PR code. `--local` reproduces it.
 - **`--local`** keeps the workstation run, for debugging a single spec
   (`pnpm e2e:stage pr-<N> --local --grep "…"`); it is also what the Actions job itself
-  runs. `--report-dir` / `--verdict-file` need it.
+  runs. `--report-dir` / `--verdict-file` need it. `--grep` narrows the live-tier legs
+  as well as the suite: every live-tier config spreads `standRunFilter()`
+  (`packages/e2e/lib/stand-run-filter.ts`), so a targeted run executes only the matching
+  tests instead of whole legs.
 - **The `main` slot** is the release check: the `stage.yml` suite job runs it in Actions
   for every `main` target and posts the `stage-suite` status the Actions release
   pre-flight requires; `pnpm deploy:prod` runs it on the PC only for a break-glass hotfix

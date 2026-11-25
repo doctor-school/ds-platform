@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 // This explicit config never silently falls back to the CI upstream double.
 // See events-mobile.spec.ts ENV SET and run both real lifecycle phases.
@@ -23,6 +24,8 @@ for (const name of ["E2E_EVENTS_LOADED_PATH", "E2E_EVENTS_EMPTY_PATH"]) {
 process.env.E2E_EVENTS_REAL_STAND = "1";
 
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: "events-mobile.spec.ts",
   workers: 1,

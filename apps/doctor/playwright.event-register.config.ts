@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * 005 EARS-1/2/3/4 (#2005) — the DOCTOR host LIVE-STAND tier for one-tap эфир
@@ -30,6 +31,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   pnpm --filter @ds/doctor exec playwright test --config=playwright.event-register.config.ts
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   // Playwright normalises the tested path to POSIX separators before matching,
   // so `/` here is correct on Windows and Linux alike (no drive letters).

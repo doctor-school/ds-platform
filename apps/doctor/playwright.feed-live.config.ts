@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 // The doctor specialty feed against the real app, API and seeded Postgres.
 // See the ENV SET of `e2e/feed-adjacent.spec.ts`.
@@ -15,6 +16,8 @@ if (missing.length)
 process.env.E2E_FEED_ADJACENT_REAL = "1";
 
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: [
     "feed-adjacent.spec.ts",

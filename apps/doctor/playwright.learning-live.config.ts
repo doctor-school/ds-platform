@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * 024 (#4011) — the doctor course path / step screens LIVE tier, with the
@@ -11,6 +12,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * Run recipe: `e2e/learning-path-live.spec.ts` docblock.
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch:
     /(learning-path(-volume)?|learning-rule-change|school-volume|school-interest)-live\.spec\.ts$/,

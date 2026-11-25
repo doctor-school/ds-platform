@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * 020 EARS-1 (#1764, slice 3) — the doctor event-page LIVE tier.
@@ -21,6 +22,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * (`tools/staging/live-tiers.mjs` → `seededEnv`, #2996).
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   // 020 EARS-1 (`event-page.spec.ts`) + 020 EARS-2 (`event-page-open-part.spec.ts`)
   // + #3889 the canvas-structure check (`event-page-canvas-structure-live.spec.ts`).

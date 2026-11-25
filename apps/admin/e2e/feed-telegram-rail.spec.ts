@@ -168,6 +168,19 @@ async function setPalette(page: Page, palette: "light" | "dark") {
   await page.evaluate((mode) => {
     document.documentElement.classList.toggle("dark", mode === "dark");
   }, palette);
+  // The flip starts the primitives' colour transitions (Button
+  // `transition-all`, Input `transition-colors`); axe and the shots must read
+  // the settled palette, not a mid-fade mix of the two (#4260). A looping
+  // animation never finishes, so only finite ones are waited out.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (a) =>
+          a.playState !== "running" ||
+          a.effect?.getTiming().iterations === Infinity,
+      ),
+  );
 }
 
 test.describe("048 EARS-33 / EARS-34 / EARS-35 — Telegram cards in the Academy rail", () => {

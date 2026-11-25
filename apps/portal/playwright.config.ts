@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Portal browser-E2E config (#131 / #574). This is the REAL-Zitadel tier of the
@@ -129,11 +130,10 @@ export default defineConfig({
   fullyParallel: false,
   workers,
   forbidOnly: !!process.env.CI,
-  // `E2E_GREP_INVERT`: the box-observing tests a PR-slot Actions run leaves out by
-  // name (`tools/staging/box-observing.mjs`, #4202).
-  ...(process.env.E2E_GREP_INVERT
-    ? { grepInvert: new RegExp(process.env.E2E_GREP_INVERT) }
-    : {}),
+  // `E2E_GREP` (`pnpm e2e:stage --grep`, #4096) narrows this leg; `E2E_GREP_INVERT`
+  // leaves out the box-observing tests a PR-slot Actions run cannot run
+  // (`tools/staging/box-observing.mjs`, #4202).
+  ...standRunFilter(),
   retries: 0,
   reporter: [["list"]],
   timeout: 120_000,

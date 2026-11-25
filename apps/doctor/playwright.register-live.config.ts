@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Doctor-storefront LIVE-STAND registration tier (#2027 wave 1, rows 73 + 77).
@@ -29,6 +30,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   pnpm --filter @ds/doctor test:e2e:register-live
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch:
     /(^|[/\\])(register-existing|signed-in-landing-live|account-auth-paths-live)\.spec\.ts$/,

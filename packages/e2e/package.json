@@ -14,6 +14,7 @@
     "./sign-in": "./lib/sign-in.ts",
     "./live-stand-env": "./lib/live-stand-env.ts",
     "./stand-http-credentials": "./lib/stand-http-credentials.ts",
+    "./stand-run-filter": "./lib/stand-run-filter.ts",
     "./account-auth-paths": "./lib/account-auth-paths.ts",
     "./owned-phone-confirmation": "./lib/owned-phone-confirmation.ts",
     "./sms-sink": "./lib/sms-sink.ts",

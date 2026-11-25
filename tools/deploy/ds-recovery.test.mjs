@@ -140,6 +140,7 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
         // curl's own failure: -w still writes 000, the exit status names the cause.
         '[[ -n ${STUB_CURL_EXIT:-} ]] && { printf 000; exit "$STUB_CURL_EXIT"; }',
         '[[ -n ${STUB_CURL_CODE:-} ]] && { printf %s "$STUB_CURL_CODE"; exit 0; }',
+        '[[ -n ${STUB_CURL_DOWN_HOST:-} && $url == "https://$STUB_CURL_DOWN_HOST/"* ]] && { printf 503; exit 0; }',
         'obj="$STUB_DIR/bucket/${url#https://*/}"',
         "case $method in",
         '  PUT) mkdir -p "$(dirname "$obj")"; cp -- "$upload" "$obj"; printf 200 ;;',
@@ -639,5 +640,63 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
     const r = recovery(["install-age"]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, "ds-recovery: age v1.1.1 present\n");
+  });
+
+  // --- #3670: a copy of every bundle in each offsite repo's bucket -----------------
+  const OFFSITE_ENV = [
+    "PGBACKREST_REPO2_S3_KEY=offsite-key-2",
+    "PGBACKREST_REPO2_S3_KEY_SECRET=offsite-secret-value",
+    "PGBACKREST_REPO2_S3_ENDPOINT=s3.offsite.test",
+    `PGBACKREST_REPO2_CIPHER_PASS=${"c".repeat(64)}`,
+    "",
+  ].join("\n");
+  const enableOffsite = () => {
+    const conf = join(data, "home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf");
+    mkdirSync(dirname(conf), { recursive: true });
+    copyFileSync(resolve(here, "../../infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf"), conf);
+    writeFileSync(join(data, "etc/ds-platform/data.env"), SECRETS["data.env"] + OFFSITE_ENV);
+  };
+  const OFFSITE_KEY_RE =
+    /^bbm-ds-pgbackrest\/recovery-bundle\/(api-prod|data-prod)\/([0-9]{8}T[0-9]{6}Z\.(tar\.age|manifest\.json)|latest\.json)$/;
+
+  it("3670: recovery-bundle also stores both boxes' bundles in each on offsite repo's bucket, with that repo's key", () => {
+    enableOffsite();
+    const r = read("recovery-bundle");
+    assert.equal(r.status, 0, r.stderr);
+    const keys = bucket();
+    assert.equal(keys.filter((k) => k.startsWith("ds-backups/")).length, 6, keys.join(", "));
+    const offsite = keys.filter((k) => k.startsWith("bbm-ds-pgbackrest/"));
+    assert.equal(offsite.length, 6, keys.join(", "));
+    for (const k of offsite) assert.match(k, OFFSITE_KEY_RE);
+    for (const k of offsite) assert.equal(object(k), object(k.replace("bbm-ds-pgbackrest/", "ds-backups/")));
+    assert.ok(
+      log("curl").split("\n").some((l) => l.includes("https://s3.offsite.test/bbm-ds-pgbackrest/recovery-bundle/")),
+    );
+    assert.match(readFileSync(join(dir, "curl-config.seen"), "utf8"), /^user = "offsite-key-2:offsite-secret-value"$/m);
+    noLeak(r.stdout + r.stderr, "the verb's output");
+    assert.equal(recovery(["offsite-repos"], data).stdout, "2\n");
+  });
+
+  it("3670: an offsite outage keeps repo1's copy, names the repo and fails the verb", () => {
+    enableOffsite();
+    const r = read("recovery-bundle", { STUB_CURL_DOWN_HOST: "s3.offsite.test" });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /ds-recovery: the upload to the repo2 bucket failed \(HTTP 503\)/);
+    assert.equal(bucket().filter((k) => k.startsWith("ds-backups/")).length, 6, "repo1 holds both boxes' copies");
+  });
+
+  it("3670: latest reads a named offsite repo, and refuses one that is off", () => {
+    enableOffsite();
+    assert.equal(read("recovery-bundle").status, 0);
+    rmSync(join(dir, "bucket/ds-backups"), { recursive: true, force: true });
+    const out = join(dir, "latest.json");
+    const found = recovery(["latest", "data-prod", out, "2"], data);
+    assert.equal(found.status, 0, found.stderr);
+    assert.equal(found.stdout, "FOUND\n");
+    assert.equal(JSON.parse(readFileSync(out, "utf8")).box, "data-prod");
+    assert.equal(recovery(["latest", "data-prod", out], data).stdout, "MISSING\n", "repo1's copy is gone");
+    const off = recovery(["latest", "data-prod", out, "3"], data);
+    assert.equal(off.status, 1);
+    assert.match(off.stderr, /repo3 is not on/);
   });
 });

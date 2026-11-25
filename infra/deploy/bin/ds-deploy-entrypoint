@@ -1832,13 +1832,16 @@ PY
 data_verb() {
   local n=${#words[@]}
   case "$verb" in
-    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema | recovery-bundle | recovery-check | read-host-state)
+    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema | recovery-bundle | read-host-state)
       ((n == 1)) || reject "usage: $verb" ;;
     recovery-put)
       [[ $n == 4 && ${words[1]} == api-prod && ${words[2]} =~ $RECOVERY_STAMP_RE && ${words[3]} =~ ^(bundle|manifest)$ ]] ||
         reject "usage: recovery-put api-prod <yyyymmddthhmmssz> bundle|manifest" ;;
     recovery-latest)
-      [[ $n == 2 && ${words[1]} == api-prod ]] || reject "usage: recovery-latest api-prod" ;;
+      [[ ($n == 2 || ($n == 3 && ${words[2]} =~ ^[23]$)) && ${words[1]} == api-prod ]] ||
+        reject "usage: recovery-latest api-prod [2|3]" ;;
+    recovery-check)
+      ((n == 1)) || [[ $n == 2 && ${words[1]} =~ ^[23]$ ]] || reject "usage: recovery-check [2|3]" ;;
     read-observe)
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
     secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
@@ -1907,9 +1910,9 @@ data_verb() {
     rehearse-restore) rehearse "${words[1]}" --restore-only ;;
     rehearsal-status) rehearsal_status "${words[1]}" </dev/null ;;
     recovery-bundle) recovery_bundle </dev/null ;;
-    recovery-check) recovery_check </dev/null ;;
+    recovery-check) recovery_check "${words[1]-}" </dev/null ;;
     recovery-put) recovery_put "${words[2]}" "${words[3]}" ;;
-    recovery-latest) recovery_latest </dev/null ;;
+    recovery-latest) recovery_latest "${words[2]-}" </dev/null ;;
     # #4144: no release check — the host state answers during a release too.
     read-host-state) exec sudo python3 -I -X utf8 -c "$HOST_STATE_PY" data "$ROOT" "$DATA_COMPOSE" </dev/null ;;
     secret-recipient) secret_recipient ds-data-prod-secret-intake </dev/null ;;
@@ -1933,16 +1936,31 @@ recovery_bundle() {
   recovery_work
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   members=$("$DS_RECOVERY" bundle data-prod "$RECOVERY_CUSTODIANS" "$recovery_dir" "$stamp")
-  "$DS_RECOVERY" upload data-prod "$stamp" bundle "$recovery_dir/bundle.tar.age"
-  "$DS_RECOVERY" upload data-prod "$stamp" manifest "$recovery_dir/manifest.json"
+  recovery_store data-prod "$stamp" "$recovery_dir/bundle.tar.age" "$recovery_dir/manifest.json"
   printf 'data-prod STORED %s members %s
 ' "$stamp" "$members"
+  ((recovery_offsite_failed == 0)) || exit 1
 }
+# #3670: a bundle and its manifest go to repo1's bucket, then to each offsite repo's
+# bucket the box has turned on (RECOVERY.md §2), so the passes survive the loss of
+# Timeweb. repo1 failing stops the verb; an offsite copy failing is ds-recovery's
+# reason on stderr, the other copies are still made, and the verb exits 1.
+recovery_offsite_failed=0
+recovery_store() { # <box> <stamp> <bundle file> <manifest file>
+  local n
+  "$DS_RECOVERY" upload "$1" "$2" bundle "$3"
+  "$DS_RECOVERY" upload "$1" "$2" manifest "$4"
+  for n in $("$DS_RECOVERY" offsite-repos); do
+    { "$DS_RECOVERY" upload "$1" "$2" bundle "$3" "$n" && "$DS_RECOVERY" upload "$1" "$2" manifest "$4" "$n"; } ||
+      recovery_offsite_failed=1
+  done
+}
+# recovery-check [<repo>]: the latest data-prod manifest of repo1, or of offsite repo 2|3.
 recovery_check() {
-  local found
+  local found repo=${1-}
   recovery_work
   "$DS_RECOVERY" custodians "$RECOVERY_CUSTODIANS"
-  found=$("$DS_RECOVERY" latest data-prod "$recovery_dir/latest.json")
+  found=$("$DS_RECOVERY" latest data-prod "$recovery_dir/latest.json" ${repo:+"$repo"})
   if [[ $found != FOUND ]]; then
     echo "data-prod MISSING"
     exit 1
@@ -1954,12 +1972,20 @@ recovery_put() {
   local stamp=${1^^} kind=$2
   recovery_work
   head -c 1048577 >"$recovery_dir/$kind"
+  local n
   "$DS_RECOVERY" upload api-prod "$stamp" "$kind" "$recovery_dir/$kind" </dev/null
+  # #3670: and each offsite copy, as recovery_store. An offsite failure here never
+  # fails the put: ds-api-prod stops at a failed put, which would leave repo1 without
+  # the manifest. data-prod's own copy, made next to the same buckets, fails the verb.
+  for n in $("$DS_RECOVERY" offsite-repos </dev/null); do
+    "$DS_RECOVERY" upload api-prod "$stamp" "$kind" "$recovery_dir/$kind" "$n" </dev/null || true
+  done
 }
+# recovery-latest api-prod [<repo>]
 recovery_latest() {
-  local found
+  local found repo=${1-}
   recovery_work
-  found=$("$DS_RECOVERY" latest api-prod "$recovery_dir/latest.json")
+  found=$("$DS_RECOVERY" latest api-prod "$recovery_dir/latest.json" ${repo:+"$repo"})
   if [[ $found == FOUND ]]; then cat -- "$recovery_dir/latest.json"; else echo MISSING; fi
 }
 

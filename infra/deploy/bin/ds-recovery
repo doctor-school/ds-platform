@@ -21,8 +21,9 @@
 #
 #   ds-recovery install-age
 #   ds-recovery bundle  <box> <custodians> <work-dir> <stamp>   → stdout: members count
-#   ds-recovery upload  <box> <stamp> bundle|manifest <file>     (ds-data-prod only)
-#   ds-recovery latest  <box> <out-file>                         (ds-data-prod only) → stdout: FOUND | MISSING
+#   ds-recovery offsite-repos                                    (ds-data-prod only) → stdout: the on offsite repos
+#   ds-recovery upload  <box> <stamp> bundle|manifest <file> [<repo>] (ds-data-prod only)
+#   ds-recovery latest  <box> <out-file> [<repo>]                (ds-data-prod only) → stdout: FOUND | MISSING
 #   ds-recovery custodians <custodians>                          (the fail-closed gate alone)
 #   ds-recovery check   <box> <custodians> <manifest> [<max-days>] → status lines
 #
@@ -234,6 +235,33 @@ py() { python3 -I -c "$PY" "$@"; }
 
 # --- S3 (ds-data-prod: the pgBackRest bucket, its credentials from data.env) ---------
 s3_value() { sed -n "s/^$1=//p" "$DATA_ENV" | tail -n 1 | tr -d '\r'; }
+# #3670: the bucket a copy goes to. 1 is the Timeweb repo; 2 and 3 are the offsite
+# repos, each written with its own S3 key, so a bundle copy survives the loss of
+# Timeweb. The ciphertext is age's to the custodians: no copy is readable without
+# their identities, wherever it is stored.
+REPO=1
+PGBACKREST_CONF=$ROOT/home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
+conf_value() { sed -n "s/^#repo${REPO}: repo${REPO}-$1=//p" "$PGBACKREST_CONF" 2>/dev/null | tail -n 1 | tr -d '\r'; }
+# The offsite repos data.env turns on: all four names set, as pgbackrest-offsite.sh.
+offsite_repos() {
+  local n v ok
+  for n in 2 3; do
+    ok=1
+    for v in S3_KEY S3_KEY_SECRET S3_ENDPOINT CIPHER_PASS; do
+      [[ -n $(s3_value "PGBACKREST_REPO${n}_$v") ]] || ok=0
+    done
+    ((ok == 1)) && printf '%s\n' "$n"
+  done
+  return 0
+}
+# The bucket a failure names: repo1's keeps its wording ("the bucket").
+bucket_name() { [[ $REPO == 1 ]] && printf 'the bucket' || printf 'the repo%s bucket' "$REPO"; }
+set_repo() { # [<repo>]
+  [[ -z ${1-} ]] && return 0
+  [[ $1 =~ ^[23]$ ]] || usage "<repo> is 2 or 3"
+  [[ -f $DATA_ENV && " $(offsite_repos | tr '\n' ' ')" == *" $1 "* ]] || fail "repo$1 is not on (data.env lacks its names)"
+  REPO=$1
+}
 # s3_origin <repo1-s3-endpoint> prints `host[:port]`. pgBackRest parses the endpoint as
 # a URL with an optional scheme (src/common/io/http/url.c), so `host`, `host:port` and
 # `https://host[:port]`, with one optional trailing `/`, all name the same bucket here.
@@ -253,13 +281,19 @@ s3() {
   local method=$1 key=$2 file=$3 bucket endpoint region access secret cfg payload code
   [[ $key == "$PREFIX/"* && $key != *..* ]] || fail "an object key outside $PREFIX/"
   [[ -f $DATA_ENV ]] || refuse "no $DATA_ENV: the upload runs on ds-data-prod only"
-  bucket=$(s3_value PGBACKREST_REPO1_S3_BUCKET)
-  endpoint=$(s3_value PGBACKREST_REPO1_S3_ENDPOINT)
-  region=$(s3_value PGBACKREST_REPO1_S3_REGION)
-  access=$(s3_value PGBACKREST_REPO1_S3_KEY)
-  secret=$(s3_value PGBACKREST_REPO1_S3_KEY_SECRET)
+  if [[ $REPO == 1 ]]; then
+    bucket=$(s3_value PGBACKREST_REPO1_S3_BUCKET)
+    region=$(s3_value PGBACKREST_REPO1_S3_REGION)
+  else
+    # An offsite repo's bucket and region are its committed policy, as pgBackRest's.
+    bucket=$(conf_value "s3-bucket")
+    region=$(conf_value "s3-region")
+  fi
+  endpoint=$(s3_value "PGBACKREST_REPO${REPO}_S3_ENDPOINT")
+  access=$(s3_value "PGBACKREST_REPO${REPO}_S3_KEY")
+  secret=$(s3_value "PGBACKREST_REPO${REPO}_S3_KEY_SECRET")
   [[ -n $bucket && -n $endpoint && -n $region && -n $access && -n $secret ]] ||
-    fail "data.env lacks the PGBACKREST_REPO1_S3_* settings"
+    fail "data.env lacks the PGBACKREST_REPO${REPO}_S3_* settings"
   endpoint=$(s3_origin "$endpoint") || exit 1
   cfg=$(mktemp)
   printf 'user = "%s:%s"\n' "$access" "$secret" >"$cfg"
@@ -285,7 +319,7 @@ s3_why() { [[ $1 == "curl exit "* ]] && printf '%s' "$1" || printf 'HTTP %s' "$1
 s3_put() { # <key> <file>
   local code
   code=$(s3 PUT "$1" "$2")
-  [[ $code == 200 ]] || fail "the upload to the bucket failed ($(s3_why "$code"))"
+  [[ $code == 200 ]] || fail "the upload to $(bucket_name) failed ($(s3_why "$code"))"
 }
 
 # The stored size of an object, or nothing when it is absent.
@@ -295,7 +329,7 @@ s3_size() { # <key> <work-dir>
   case $code in
     200) tr -d '\r' <"$2/head" | sed -n 's/^[Cc]ontent-[Ll]ength: *\([0-9][0-9]*\)$/\1/p' | tail -n 1 ;;
     404) ;;
-    *) fail "the bucket read failed ($(s3_why "$code"))" ;;
+    *) fail "$(bucket_name) read failed ($(s3_why "$code"))" ;;
   esac
 }
 
@@ -364,12 +398,20 @@ case $cmd in
     printf '%s\n' "${#members[@]}"
     ;;
 
+  offsite-repos)
+    (($# == 1)) || usage "offsite-repos"
+    require_data_box
+    [[ -f $DATA_ENV ]] || refuse "no $DATA_ENV: the upload runs on ds-data-prod only"
+    offsite_repos
+    ;;
+
   upload)
-    (($# == 5)) || usage "upload <box> <stamp> bundle|manifest <file>"
+    (($# == 5 || $# == 6)) || usage "upload <box> <stamp> bundle|manifest <file> [<repo>]"
     box=$2 stamp=$3 kind=$4 file=$5
     check_box "$box"
     check_stamp "$stamp"
     require_data_box
+    set_repo "${6-}"
     [[ -f $file ]] || usage "<file> must exist"
     size=$(stat -c %s -- "$file")
     ((size > 0 && size <= MAX_OBJECT_BYTES)) || fail "the $kind is empty or larger than $MAX_OBJECT_BYTES bytes"
@@ -384,7 +426,7 @@ case $cmd in
         [[ $(py field "$file" "$box" object) == "$(object_key "$box" "$stamp" bundle)" ]] ||
           fail "the manifest names another bundle object"
         stored=$(s3_size "$(object_key "$box" "$stamp" bundle)" "$work")
-        [[ -n $stored ]] || fail "the bundle of $stamp is not in the bucket"
+        [[ -n $stored ]] || fail "the bundle of $stamp is not in $(bucket_name)"
         [[ $stored == "$(py field "$file" "$box" bytes)" ]] || fail "the stored bundle size differs from the manifest"
         s3_put "$(object_key "$box" "$stamp" manifest)" "$file"
         s3_put "$(object_key "$box" "$stamp" latest)" "$file" ;;
@@ -393,17 +435,18 @@ case $cmd in
     ;;
 
   latest)
-    (($# == 3)) || usage "latest <box> <out-file>"
+    (($# == 3 || $# == 4)) || usage "latest <box> <out-file> [<repo>]"
     box=$2 out=$3
     check_box "$box"
     require_data_box
+    set_repo "${4-}"
     work=$(mktemp -d)
     trap 'rm -rf -- "${work:-}"' EXIT
     code=$(s3 GET "$(object_key "$box" x latest)" "$work/latest.json")
     case $code in
       200) ;;
       404) echo MISSING; exit 0 ;;
-      *) fail "the bucket read failed ($(s3_why "$code"))" ;;
+      *) fail "$(bucket_name) read failed ($(s3_why "$code"))" ;;
     esac
     object=$(py field "$work/latest.json" "$box" object)
     [[ $object =~ ^recovery-bundle/$box/[0-9]{8}T[0-9]{6}Z\.tar\.age$ ]] || fail "the manifest names an unexpected object"
@@ -430,5 +473,5 @@ case $cmd in
     py check "$box" "$ENV_DIR" "$FINGERPRINT_KEY" "$custodians" "$manifest" "$max_days" "$NOW"
     ;;
 
-  *) usage "install-age | bundle | upload | latest | custodians | check" ;;
+  *) usage "install-age | bundle | offsite-repos | upload | latest | custodians | check" ;;
 esac

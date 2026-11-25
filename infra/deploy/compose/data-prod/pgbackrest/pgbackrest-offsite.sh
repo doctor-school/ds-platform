@@ -13,8 +13,11 @@
 set -eu
 conf=${1:-/etc/pgbackrest/pgbackrest.conf}
 out=${2:-/etc/pgbackrest/conf.d/offsite.conf}
+# The repos to consider (repo-check.sh scopes its verdict to the rotation's own).
+repos=${3:-2 3}
 body=
-for n in 2 3; do
+for n in $repos; do
+  case $n in 2 | 3) ;; *) echo "pgbackrest-offsite: repo${n} is not an offsite repo" >&2; exit 2 ;; esac
   have=0
   for v in S3_KEY S3_KEY_SECRET S3_ENDPOINT CIPHER_PASS; do
     eval "val=\${PGBACKREST_REPO${n}_${v}:-}"

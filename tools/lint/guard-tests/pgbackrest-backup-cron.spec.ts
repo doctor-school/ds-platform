@@ -104,7 +104,7 @@ describe("pgBackRest scheduled backup wrapper", () => {
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(
-      "postgres pgbackrest --stanza=ds --type=full backup",
+      "postgres pgbackrest --stanza=ds --repo=1 --type=full backup",
     );
   });
 
@@ -280,22 +280,78 @@ describe("3670: offsite pgBackRest repos follow their data.env names", () => {
     expect(both.stdout).toContain("postgres pgbackrest --stanza=ds --repo=3 --type=full backup");
   });
 
-  it("repo-check.sh re-derives the include, creates missing stanzas, then checks — and fails with them", () => {
-    const log = (rc: string) =>
-      `#!/usr/bin/env bash\necho "pgbackrest $*" >> "$STUB_LOG"\n[[ $* == *check* ]] && exit ${rc}\nexit 0\n`;
-    for (const rc of ["0", "1"]) {
-      const { root, bin } = fixtureBin([["pgbackrest", log(rc)]]);
-      copyFileSync(REPO_CHECK_SCRIPT, join(bin, "repo-check.sh"));
-      copyFileSync(OFFSITE_SCRIPT, join(bin, "pgbackrest-offsite.sh"));
-      const stubLog = join(root, "calls.log");
-      const r = spawnSync(POSIX_SHELL, [toPosixPath(join(bin, "repo-check.sh"))], {
-        env: { PATH: `${toPosixPath(bin)}:/usr/bin:/bin`, STUB_LOG: toPosixPath(stubLog) },
+  it("backup.sh full offsite <repo> backs up that enabled repo only, and refuses one that is off", () => {
+    const { root, bin } = fixtureBin([["gosu", '#!/usr/bin/env bash\nprintf "%s\n" "$*"\n']]);
+    copyFileSync(BACKUP_SCRIPT, join(bin, "backup.sh"));
+    const include = join(root, "offsite.conf");
+    writeFileSync(include, ["[global]", ...committedPolicy(2), ""].join("\n"));
+    const runBackup = (...repos: string[]) =>
+      spawnSync(POSIX_SHELL, [toPosixPath(join(bin, "backup.sh")), "full", "offsite", ...repos], {
+        env: {
+          PATH: "/usr/bin:/bin",
+          DS_PGBACKREST_ENV_FILE: toPosixPath(join(root, "none.env")),
+          DS_PGBACKREST_OFFSITE_INCLUDE: toPosixPath(include),
+        },
         encoding: "utf8",
       });
+    const two = runBackup("2");
+    expect(two.status, two.stderr).toBe(0);
+    expect(two.stdout).toContain("postgres pgbackrest --stanza=ds --repo=2 --type=full backup");
+    const three = runBackup("3");
+    expect(three.status).toBe(1);
+    expect(three.stderr).toMatch(/repo3 is not on/);
+    expect(three.stdout).not.toContain("pgbackrest --stanza");
+  });
+
+  // A stub pgbackrest that logs its argv and the scratch include it was pointed at.
+  function repoCheck(args: string[], env: Record<string, string>, checkRc = "0") {
+    const stub =
+      '#!/usr/bin/env bash\necho "pgbackrest $*" >> "$STUB_LOG"\n' +
+      'for a; do [[ $a == --config-include-path=* ]] && cat "${a#*=}"/*.conf >> "$STUB_LOG" 2>/dev/null; done\n' +
+      `[[ $* == *" check" ]] && exit ${checkRc}\nexit 0\n`;
+    const { root, bin } = fixtureBin([["pgbackrest", stub]]);
+    copyFileSync(REPO_CHECK_SCRIPT, join(bin, "repo-check.sh"));
+    copyFileSync(OFFSITE_SCRIPT, join(bin, "pgbackrest-offsite.sh"));
+    const stubLog = join(root, "calls.log");
+    const r = spawnSync(POSIX_SHELL, [toPosixPath(join(bin, "repo-check.sh")), ...args], {
+      env: {
+        PATH: `${toPosixPath(bin)}:/usr/bin:/bin`,
+        STUB_LOG: toPosixPath(stubLog),
+        DS_PGBACKREST_CONF: toPosixPath(PGBACKREST_CONF),
+        DS_PGBACKREST_OFFSITE_INCLUDE: toPosixPath(join(root, "offsite.conf")),
+        ...env,
+      },
+      encoding: "utf8",
+    });
+    const calls = existsSync(stubLog) ? readFileSync(stubLog, "utf8") : "";
+    return { r, calls, live: join(root, "offsite.conf") };
+  }
+  const scoped = /^pgbackrest --stanza=ds --config-include-path=\S+ (stanza-create|check)$/gm;
+
+  it("repo-check.sh re-derives the live include, then creates and checks repo1 alone by default — and fails with it", () => {
+    for (const rc of ["0", "1"]) {
+      const { r, calls, live } = repoCheck([], { ...OFFSITE_NAMES(2) }, rc);
       expect(r.status, r.stderr).toBe(Number(rc));
-      expect(readFileSync(stubLog, "utf8")).toBe(
-        "pgbackrest --stanza=ds stanza-create\npgbackrest --stanza=ds check\n",
-      );
+      expect([...calls.matchAll(scoped)].map((m) => m[1])).toEqual(["stanza-create", "check"]);
+      // The container's own include keeps repo2 on; the verdict reads none of it.
+      expect(readFileSync(live, "utf8")).toContain("repo2-type=s3");
+      expect(calls).not.toMatch(/repo2-/);
     }
+  });
+
+  it("repo-check.sh <repo> adds only that repo's policy: an enabled repo3 is not checked by a repo2 rotation", () => {
+    const { r, calls } = repoCheck(["2"], { ...OFFSITE_NAMES(2), ...OFFSITE_NAMES(3) });
+    expect(r.status, r.stderr).toBe(0);
+    expect(calls).toContain("repo2-type=s3");
+    expect(calls).not.toMatch(/repo3-/);
+  });
+
+  it("repo-check.sh <repo> fails, checking nothing, when the rotation left that repo off", () => {
+    const partial: Record<string, string> = { ...OFFSITE_NAMES(2) };
+    delete partial.PGBACKREST_REPO2_S3_ENDPOINT;
+    const { r, calls } = repoCheck(["2"], partial);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/repo2 is not on/);
+    expect(calls).toBe("");
   });
 });

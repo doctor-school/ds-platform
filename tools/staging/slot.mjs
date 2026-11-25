@@ -110,6 +110,7 @@ import {
   unionUris,
 } from "./idp.mjs";
 import { STG_INFRA_COMPOSE_PATH, applyStageEdgeConfig } from "./edge-config.mjs";
+import { convergeHoldCheck, readHoldScript } from "./slot-hold.mjs";
 
 /** Raised for an unusable input or plan — the caller must fail closed. */
 export class SlotError extends Error {
@@ -3567,6 +3568,20 @@ async function main() {
         : options.imagesFile;
     console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${source})`);
     for (const name of recordedImageNames(images)) console.log(`  ${name}: ${images[name]}`);
+  }
+  // #4259: one run owns slot `main` at a time — a converge of it (the release driver's
+  // or an operator's) refuses while an operator `e2e:stage main` run holds it.
+  if (
+    options.slot === "main" &&
+    (COMMANDS_WITH_SLOT_AND_REF.has(options.command) || options.command === "reset")
+  ) {
+    const hold = convergeHoldCheck({
+      text: await sshCapture(STAGE_1, readHoldScript()),
+      now: Date.now(),
+      command: options.command,
+    });
+    if (hold.refusal) throw new SlotError(hold.refusal);
+    if (hold.note) console.log(hold.note);
   }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();

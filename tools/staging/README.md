@@ -585,6 +585,32 @@ while it is open the command prints
 `axe leg skipped: #1692 open` and runs the suite alone, because a known-red axe leg would
 train the operator to ignore the leg.
 
+### One run owns slot `main` (#4259)
+
+Slot `main` is driven by one run at a time: either the automatic `stage.yml` converge
+plus its suite, or a workstation `pnpm e2e:stage main` run. A converge recreates the
+containers and flushes the slot's redis, so an overlap renders false server errors in the
+other run (#4096). `tools/staging/slot-hold.mjs` holds the decision:
+
+- **The automatic side** is held by its `stage.yml` run itself — the `stage-main` Actions
+  concurrency group already serialises those runs, so any run of a `main` push that is not
+  `completed` (queued, pending or in progress) holds the slot for both its jobs.
+- **A workstation run of `main`** records its hold on the box,
+  `/var/lib/ds-platform/slot-holds/main.json` (root-owned, written through `sudo` over the
+  operator's ssh): the holder (`operator <user>@<host> e2e:stage main (pid N)`), since when,
+  and a stale bound. It takes the hold first, then reads `gh run list`; it refuses with
+  exit 2, naming the holder and since when, while another operator's hold is live or a
+  `stage.yml` run of `main` is not completed, and drops its hold when it ends (Ctrl-C too).
+  The Actions suite job (`GITHUB_ACTIONS=true`) takes no hold: it runs inside its own run.
+- **The converge** (`slot.mjs up|sync|reset main`, the release driver's unit included)
+  refuses while an operator hold is live, naming it.
+- **Stale holders** never wedge the slot: an operator hold is stale 2 h after it was taken,
+  a `stage.yml` run 160 min after it was created (its two job limits, 55 + 90 min, plus
+  15 min); a stale or unreadable record is reclaimed with a line naming whose hold it was.
+
+A run that cannot read the box or `gh run list` refuses rather than guessing. PR slots
+(`pr-<N>`) take no hold.
+
 ### The live-tier legs (#3168)
 
 The storefronts own Playwright configs that boot **no** `webServer` and drive a real

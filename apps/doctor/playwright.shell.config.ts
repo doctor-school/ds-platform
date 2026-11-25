@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Doctor-storefront LIVE-STAND shell tier (#2180) — the sibling of the portal's
@@ -28,6 +29,8 @@ const phoneProofEnabled = Boolean(process.env.E2E_SMS_SINK_URL?.trim());
 if (phoneProofEnabled) process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
 
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: [
     "shell-live.spec.ts",

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * 006 · 020 (#1912, #1722 slice 4) — the DOCTOR host's LIVE-STAND room tier.
@@ -31,6 +32,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   pnpm --filter @ds/doctor exec playwright test --config=playwright.room.config.ts
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   // The files of this tier: the behaviour specs, the a11y twin and the room's
   // canvas-structure check (#3892). Playwright

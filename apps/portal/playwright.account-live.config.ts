@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Academy LIVE-STAND `/account` auth-path tier (#3151).
@@ -20,6 +21,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   pnpm --filter @ds/portal test:e2e:account-live
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: /(^|[/\\])account-auth-paths-live\.spec\.ts$/,
   // Live accounts and one shared Mailpit inbox: do not race them.

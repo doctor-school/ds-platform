@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Plain `@playwright/test` FLOW specs for the admin app — the browser half of a
@@ -42,6 +43,8 @@ const stageSpecs = [
 ];
 
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: stage ? stageSpecs : "*.spec.ts",
   // The a11y scan is its own gate with its own config and its own meaning of

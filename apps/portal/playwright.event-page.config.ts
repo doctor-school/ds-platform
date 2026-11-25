@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Academy event-page LIVE tier (#2996) — the twin of the doctor host's
@@ -34,8 +35,11 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   pnpm --filter @ds/portal test:e2e:event-page
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
-  testMatch: /(^|[/\\])(event-page\.e2e|event-page-020\.e2e|event-page-canvas-structure\.e2e|webinar-archive)\.spec\.ts$/,
+  testMatch:
+    /(^|[/\\])(event-page\.e2e|event-page-020\.e2e|event-page-canvas-structure\.e2e|webinar-archive)\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

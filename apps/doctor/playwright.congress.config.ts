@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { standRunFilter } from "@ds/e2e/stand-run-filter";
 
 /**
  * Doctor-storefront LIVE-STAND tier for «Мои заявки на Конгресс» (046 V-15 and
@@ -22,6 +23,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   DATABASE_URL=<branch database> pnpm --filter @ds/doctor test:e2e:congress
  */
 export default defineConfig({
+  // `pnpm e2e:stage --grep` narrows this leg; the box-observing tests stay out (#4096).
+  ...standRunFilter(),
   testDir: "./e2e",
   testMatch: [
     ...(process.env.E2E_DOCTOR_CONGRESS_SLUG

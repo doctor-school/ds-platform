@@ -333,8 +333,9 @@ function media(durationSec: number | null, ended: boolean): ProviderMedia | null
  *   `playerState` 0 (ended) in `infoDelivery` `info.playerState` or
  *   `onStateChange` `info`.
  * - **rutube** — `player:durationChange` `data.duration`; `player:playComplete`
- *   (the video and its ads finished). Rutube documents no `ended` value of
- *   `player:changeState` (only playing / paused / stopped), so it is not read.
+ *   (the video and its ads finished). `player:changeState` `stopped` is the
+ *   documented end of the video itself, but it is deliberately not read: the
+ *   end counts once playback, ads included, is complete (`playComplete`).
  * - **vk** — every JS API event carries the player state, `duration` included;
  *   the `ended` event is the end of playback (only with `js_api=1`, always set).
  * - **cdnvideo** — none.

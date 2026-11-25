@@ -30,6 +30,7 @@ import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   clampReportedPosition,
   elementType,
+  mediaLengthAtEnd,
   videoDurationSec,
   videoStepTargetSec,
   watchedPercent,
@@ -674,10 +675,13 @@ export class LearningDoctorService {
           .orderBy(asc(learningFacts.occurredAt))
           .limit(1);
         data["reportedSec"] = fact.data.positionSec;
-        // The provider-reported media length is kept as reported: it only
-        // shortens the target (videoTargetSec), the clamp below is unchanged.
-        if (fact.data.mediaDurationSec !== undefined)
-          data["mediaDurationSec"] = fact.data.mediaDurationSec;
+        // The provider-reported media length is kept only when reported with
+        // the end (mediaLengthAtEnd): a partial length never lowers the target.
+        // It only shortens the target (videoTargetSec), never under half the
+        // typed length; the clamp below still uses the typed length, and the
+        // read caps the counted position at the target.
+        const mediaSec = mediaLengthAtEnd(fact.data.positionSec, fact.data.mediaDurationSec);
+        if (mediaSec !== undefined) data["mediaDurationSec"] = mediaSec;
         data["positionSec"] = clampReportedPosition({
           reportedSec: fact.data.positionSec,
           durationSec: videoDurationSec(step),

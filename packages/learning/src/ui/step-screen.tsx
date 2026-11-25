@@ -348,9 +348,11 @@ function VideoBody({
   // seek that answer stays below the clock, and measuring from it would send on
   // every tick. A refused attempt does not reset it either.
   const sent = useRef(body.positionSec);
-  // #4060 — the media length the provider's own player reported (whole
-  // seconds), or null. The step ends at the shorter of it and the read's
-  // length; the server decides how far it may shorten the target.
+  // #4060 — the longest media length the provider's own player reported
+  // (whole seconds), or null: a shorter one reported later — a partial or
+  // streaming length, an ad's — never shortens the media. The step ends at the
+  // shorter of it and the read's length; the server decides how far it may
+  // shorten the target.
   const media = useRef<number | null>(null);
   const endSec = useCallback(
     () => (media.current === null ? body.durationSec : Math.min(media.current, body.durationSec)),
@@ -396,8 +398,11 @@ function VideoBody({
             source: "web",
             kind: "position",
             clientOccurredAt: new Date().toISOString(),
+            // The length goes out only with the end of the media: the server
+            // keeps a length only when the position has reached it.
             data:
-              media.current === null
+              media.current === null ||
+              positionSec < media.current - VIDEO_END_WINDOW_SEC
                 ? { positionSec }
                 : { positionSec, mediaDurationSec: media.current },
           })
@@ -449,12 +454,14 @@ function VideoBody({
     [endSec, report, due],
   );
 
-  // #4060 — the provider's media length and «ended». An end with no length
-  // known makes the last clock position the length: the player is at its end.
+  // #4060 — the provider's media length and «ended». Fallback: an «ended»
+  // with no length ever reported sends the last clock position as
+  // `mediaDurationSec` — a client-derived length, not the provider's; the
+  // player is at its end, and the server floors it at half the typed length.
   const onMedia = useCallback(
     (m: ProviderMedia) => {
       if (m.durationSec !== null && Math.floor(m.durationSec) >= 1)
-        media.current = Math.floor(m.durationSec);
+        media.current = Math.max(media.current ?? 0, Math.floor(m.durationSec));
       if (!m.ended) return;
       if (media.current === null && latest.current >= 1) media.current = latest.current;
       const end = endSec();

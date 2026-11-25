@@ -260,10 +260,37 @@ describe("024 EARS-15…18 — the step screen", () => {
     post({ type: "player:playComplete", data: {} });
     await waitFor(() => expect(bodiesOf(fetch, FACTS)).toHaveLength(2));
     const facts = bodiesOf(fetch, FACTS) as { data: { positionSec: number; mediaDurationSec?: number } }[];
+    // The length goes out only with the end: a mid-play report carries none.
     expect(facts.map((f) => f.data)).toEqual([
-      { positionSec: 85, mediaDurationSec: 90 },
+      { positionSec: 85 },
       { positionSec: 90, mediaDurationSec: 90 },
     ]);
+  });
+
+  it("EARS-10: a shorter length reported later (an ad, a partial stream) does not shorten the media — the longest reported length is the end (#4060)", async () => {
+    const fetch = stubFetch({
+      [FACTS]: () => ({ outcome: "recorded", changed: [], progress: { positionSec: 90, watchedPercent: 100 } }),
+    });
+    renderStep(videoStep());
+    fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+    const iframe = screen.getByTestId("recording-player-rutube") as HTMLIFrameElement;
+    const post = (message: unknown) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://rutube.ru",
+            data: JSON.stringify(message),
+            source: iframe.contentWindow,
+          }),
+        );
+      });
+    post({ type: "player:durationChange", data: { duration: 90.4 } });
+    post({ type: "player:durationChange", data: { duration: 15 } });
+    post({ type: "player:currentTime", data: { time: 89 } });
+    post({ type: "player:playComplete", data: {} });
+    await waitFor(() => expect(bodiesOf(fetch, FACTS)).toHaveLength(1));
+    const facts = bodiesOf(fetch, FACTS) as { data: { positionSec: number; mediaDurationSec?: number } }[];
+    expect(facts.map((f) => f.data)).toEqual([{ positionSec: 90, mediaDurationSec: 90 }]);
   });
 
   it("EARS-16: one tap on «Смотреть видео» mounts the player already playing — no second tap on the provider's play", () => {

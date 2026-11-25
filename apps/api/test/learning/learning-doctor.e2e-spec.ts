@@ -607,6 +607,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(read.body.step.state.status).not.toBe("done");
     });
 
+    it("EARS-10: a media length reported before the position reaches it (a partial or streaming length) does not shorten the target", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      const at = withMedia(typed, d.headers);
+      // An early, partial length: the position is nowhere near it.
+      expect((await at(0, 30)).status).toBe(200);
+      expect((await stepRead(typed, d.headers)).body.body.durationSec).toBe(300);
+      h.advanceClock(120);
+      // The real length, reported with the end, is the one that counts.
+      const end = await at(240, 240);
+      expect(end.body.progress).toEqual({ positionSec: 240, watchedPercent: 100 });
+      expect((await stepRead(typed, d.headers)).body.body.durationSec).toBe(240);
+      const rows = await storedFacts(d.personId, typed.videoId);
+      expect(rows.map((r) => r.data["mediaDurationSec"])).toEqual([undefined, 240]);
+    });
+
     it("EARS-10: a media length longer than the typed one changes nothing; a malformed one is 400", async () => {
       const d = await doctor(h);
       const typed = await buildCourse(h, { durationSec: 300 });

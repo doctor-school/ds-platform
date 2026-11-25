@@ -525,8 +525,14 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    same reporter, and the HTML + JSON report is written only into the report dir. The
    step summary records the run's peak memory (`/usr/bin/time -v` max RSS and sampled
    `free -m`), the number `E2E_WORKERS` is set from.
-3. Always, pass or fail, the report dir is streamed as a tar to `upload-report <sha>`:
-   it lands on the box at `/var/lib/ds-platform/e2e-reports/<sha>/` (14-day retention).
+3. Always, pass or fail, the report dir is streamed as a tar to
+   `upload-report <sha> attempt-<N>-run-<id>` (`GITHUB_RUN_ATTEMPT`, `GITHUB_RUN_ID`;
+   `reportAttemptKey` / `boxReportDir` in `e2e-stage.mjs`): it lands on the box at
+   `/var/lib/ds-platform/e2e-reports/<sha>/attempt-<N>-run-<id>/`, so a re-run on the
+   same SHA keeps the failed attempt's report beside its own; the box refuses an
+   attempt dir that already exists (#4250). The latest attempt is the highest run id,
+   then the highest attempt (`latestReportAttempt`); a SHA dir is pruned 14 days after
+   its newest attempt.
    The axe legs write their own JSON + HTML + traces under `axe-<host>/` in the same dir.
    A failed upload is a warning and a step-summary line, never the suite verdict.
    Nothing is uploaded as an Actions artifact — the repository's logs and artifacts are

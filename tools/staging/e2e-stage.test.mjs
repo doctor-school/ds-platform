@@ -48,6 +48,11 @@ import {
   summarizeReport,
   suiteStatusDescription,
   suiteStatusDescriptionFromDir,
+  BOX_REPORTS_ROOT,
+  boxReportDir,
+  latestReportAttempt,
+  REPORT_ATTEMPT_RE,
+  reportAttemptKey,
 } from "./e2e-stage.mjs";
 import { boxObservingGrep } from "./box-observing.mjs";
 import {
@@ -2853,5 +2858,60 @@ describe("suiteStatusDescription — the stage-suite commit status (#4222)", () 
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("4250: every stage-suite attempt keeps its own report dir on the box", () => {
+  const SHA_A = "0123456789abcdef0123456789abcdef01234567";
+
+  it("two attempts of one run on one SHA land in two distinct dirs", () => {
+    const first = boxReportDir(SHA_A, reportAttemptKey({ runAttempt: "1", runId: "19876543210" }));
+    const rerun = boxReportDir(SHA_A, reportAttemptKey({ runAttempt: "2", runId: "19876543210" }));
+    assert.equal(first, `${BOX_REPORTS_ROOT}/${SHA_A}/attempt-1-run-19876543210/`);
+    assert.equal(rerun, `${BOX_REPORTS_ROOT}/${SHA_A}/attempt-2-run-19876543210/`);
+    assert.notEqual(first, rerun);
+  });
+
+  it("a new run on the same SHA is a distinct dir too", () => {
+    assert.notEqual(
+      reportAttemptKey({ runAttempt: 1, runId: 100 }),
+      reportAttemptKey({ runAttempt: 1, runId: 101 }),
+    );
+  });
+
+  it("refuses a missing or non-numeric run attempt or id, so no dir is shared by accident", () => {
+    for (const bad of [
+      { runAttempt: undefined, runId: "1" },
+      { runAttempt: "1", runId: "" },
+      { runAttempt: "0", runId: "1" },
+      { runAttempt: "1", runId: "1;id" },
+      { runAttempt: "1/..", runId: "1" },
+    ]) {
+      assert.throws(() => reportAttemptKey(bad), /positive integers/, JSON.stringify(bad));
+    }
+    assert.throws(() => boxReportDir("main", "attempt-1-run-1"), /bad sha/);
+    assert.throws(() => boxReportDir(SHA_A, "latest"), /bad report attempt key/);
+  });
+
+  it("the key fits the forced command's word charset", () => {
+    const key = reportAttemptKey({ runAttempt: 3, runId: 42 });
+    assert.match(`upload-report ${SHA_A} ${key}`, /^[a-z0-9-]+( [a-z0-9-]+)*$/);
+    assert.ok(REPORT_ATTEMPT_RE.test(key));
+  });
+
+  it("the reader resolves the latest attempt: highest run, then highest attempt", () => {
+    assert.equal(
+      latestReportAttempt(["attempt-1-run-100", "attempt-2-run-100", "attempt-10-run-100"]),
+      "attempt-10-run-100",
+      "numeric, not lexical",
+    );
+    assert.equal(latestReportAttempt(["attempt-3-run-100", "attempt-1-run-101"]), "attempt-1-run-101");
+    assert.equal(
+      latestReportAttempt(["results.json", "attempt-1-run-9", "index.html"]),
+      "attempt-1-run-9",
+      "a pre-4250 flat report's files are not attempts",
+    );
+    assert.equal(latestReportAttempt(["results.json"]), null);
+    assert.equal(latestReportAttempt([]), null);
   });
 });

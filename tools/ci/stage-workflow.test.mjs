@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -95,7 +96,27 @@ describe("stage.yml", () => {
       (s) => s.name === "Ship the report to the box",
     );
     assert.equal(ship.if, "always()");
-    assert.match(ship.run, /upload-report \$SHA/);
+    assert.match(ship.run, /"upload-report \$SHA \$key"/);
+  });
+
+  it("4250: ships each attempt to its own box dir, keyed by e2e-stage.mjs", () => {
+    const ship = stage.jobs.suite.steps.find((s) => s.name === "Ship the report to the box");
+    const m = ship.run.match(/node --input-type=module -e '([\s\S]*?)' "\$SHA"/);
+    assert.ok(m, "the key comes from tools/staging/e2e-stage.mjs");
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const out = (attempt) =>
+      execFileSync(process.execPath, ["--input-type=module", "-e", m[1], sha], {
+        cwd: fileURLToPath(new URL("../..", import.meta.url)),
+        env: { ...process.env, GITHUB_RUN_ATTEMPT: attempt, GITHUB_RUN_ID: "19876543210" },
+        encoding: "utf8",
+      }).trim();
+    assert.equal(
+      out("1"),
+      `attempt-1-run-19876543210 /var/lib/ds-platform/e2e-reports/${sha}/attempt-1-run-19876543210/`,
+    );
+    assert.notEqual(out("2"), out("1"), "a re-run is a new dir");
+    assert.match(ship.run, /echo "report: \$box_dir on the stage box"/);
+    assert.doesNotMatch(ship.run, /e2e-reports\/\$SHA\//, "no flat per-SHA path left");
   });
 
   it("scopes staff credentials to the timed suite invocation", () => {

@@ -31,12 +31,14 @@ import { BOXES, SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-sec
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 import { HOST_STATE_FIELDS } from "./lib/prod-read.mjs";
+import { REPORT_ATTEMPT_RE } from "../staging/e2e-stage.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
 const READ_ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-read-entrypoint");
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
 const SHA = "0123456789abcdef0123456789abcdef01234567";
+const ATTEMPT = "attempt-1-run-19876543210";
 
 const toolsPresent =
   process.platform !== "win32" &&
@@ -161,6 +163,13 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   for (const name of ["ENV_RE", "SHA_RE"]) {
     assert.equal(pick(ENTRYPOINT, name), pick(DS_RELEASE, name), `${name} is one definition`);
   }
+});
+
+test("4250: the box checks the report attempt key with the workflow's own pattern", () => {
+  const line = readFileSync(ENTRYPOINT, "utf8")
+    .split("\n")
+    .find((l) => l.startsWith("REPORT_ATTEMPT_RE="));
+  assert.equal(line, `REPORT_ATTEMPT_RE='${REPORT_ATTEMPT_RE.source}'`);
 });
 
 test("4144: both boxes run one host-state probe, which reads three fixed files and no secret, env or config", () => {
@@ -527,7 +536,11 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ["an extra argument", `status prod ${SHA} extra`],
     ["a missing argument", "status prod"],
     ["release with an extra argument", `release prod ${SHA} --retry-failed`],
-    ["upload-report with an extra argument", `upload-report ${SHA} x`],
+    ["upload-report with an extra argument", `upload-report ${SHA} ${ATTEMPT} x`],
+    ["upload-report without an attempt key (the pre-4250 overwrite form)", `upload-report ${SHA}`],
+    ["upload-report with attempt 0", `upload-report ${SHA} attempt-0-run-1`],
+    ["upload-report with a key that is not an attempt", `upload-report ${SHA} latest`],
+    ["upload-report with a run-less key", `upload-report ${SHA} attempt-1`],
     ["an unknown env", `status production ${SHA}`],
     ["stage-pr-0", `status stage-pr-0 ${SHA}`],
     ["a short sha", "status prod 0123456"],
@@ -561,16 +574,16 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report refuses on a box whose role is not stage, or has none", () => {
     const archive = tarArchive([{ name: "report/index.json", body: "{}" }]);
-    let r = run(`upload-report ${SHA}`, { input: archive });
+    let r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: archive });
     assert.equal(r.status, 3);
     assert.match(r.stderr, /stage box only/);
     setRole("prod");
-    r = run(`upload-report ${SHA}`, { input: archive });
+    r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: archive });
     assert.equal(r.status, 3);
     assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports")), "nothing written");
   });
 
-  it("upload-report stores the stream under the sha and prunes reports past 14 days", () => {
+  it("upload-report stores the stream under the sha and attempt, and prunes SHA dirs past 14 days", () => {
     setRole("stage");
     const reports = join(root, "var/lib/ds-platform/e2e-reports");
     const old = join(reports, "a".repeat(40));
@@ -586,13 +599,44 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       { name: "./trace/", type: "5" },
       { name: "./trace/t.zip", body: "zip" },
     ]);
-    const r = run(`upload-report ${SHA}`, { input: archive });
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: archive });
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, `ds-deploy-entrypoint: report ${SHA} stored\n`);
-    assert.equal(readFileSync(join(reports, SHA, "results.json"), "utf8"), '{"ok":true}');
-    assert.equal(readFileSync(join(reports, SHA, "trace/t.zip"), "utf8"), "zip");
+    assert.equal(r.stdout, `ds-deploy-entrypoint: report ${SHA} ${ATTEMPT} stored\n`);
+    assert.equal(readFileSync(join(reports, SHA, ATTEMPT, "results.json"), "utf8"), '{"ok":true}');
+    assert.equal(readFileSync(join(reports, SHA, ATTEMPT, "trace/t.zip"), "utf8"), "zip");
     assert.deepEqual(readdirSync(reports).sort(), ["b".repeat(40), SHA].sort());
     assert.match(log("sudo"), /python3 -I -c /, "validated and extracted by tarfile");
+  });
+
+  it("4250: a re-run on the same SHA lands beside the failed attempt, and a stored attempt is never overwritten", () => {
+    setRole("stage");
+    const reports = join(root, "var/lib/ds-platform/e2e-reports");
+    const failed = tarArchive([{ name: "results.json", body: '{"failed":1}' }]);
+    const green = tarArchive([{ name: "results.json", body: '{"failed":0}' }]);
+    const rerun = "attempt-2-run-19876543210";
+    assert.equal(run(`upload-report ${SHA} ${ATTEMPT}`, { input: failed }).status, 0);
+    const r = run(`upload-report ${SHA} ${rerun}`, { input: green });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readdirSync(join(reports, SHA)).sort(), [ATTEMPT, rerun]);
+    assert.equal(readFileSync(join(reports, SHA, ATTEMPT, "results.json"), "utf8"), '{"failed":1}');
+    assert.equal(readFileSync(join(reports, SHA, rerun, "results.json"), "utf8"), '{"failed":0}');
+
+    const again = run(`upload-report ${SHA} ${ATTEMPT}`, { input: green });
+    assert.equal(again.status, 3, again.stderr);
+    assert.match(again.stderr, /already stored \(an attempt is never overwritten\)/);
+    assert.equal(readFileSync(join(reports, SHA, ATTEMPT, "results.json"), "utf8"), '{"failed":1}', "kept");
+  });
+
+  it("4250: a refused upload leaves earlier attempts of its SHA in place", () => {
+    setRole("stage");
+    const reports = join(root, "var/lib/ds-platform/e2e-reports");
+    const ok = run(`upload-report ${SHA} ${ATTEMPT}`, { input: tarArchive([{ name: "r.json", body: "{}" }]) });
+    assert.equal(ok.status, 0, ok.stderr);
+    const r = run(`upload-report ${SHA} attempt-2-run-19876543210`, {
+      input: tarArchive([{ name: "../x", body: "x" }]),
+    });
+    assert.equal(r.status, 3, r.stderr);
+    assert.deepEqual(readdirSync(join(reports, SHA)), [ATTEMPT]);
   });
 
   const unsafe = [
@@ -606,7 +650,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   for (const [what, entries] of unsafe) {
     it(`upload-report refuses an archive with ${what} and extracts nothing`, () => {
       setRole("stage");
-      const r = run(`upload-report ${SHA}`, { input: tarArchive(entries) });
+      const r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: tarArchive(entries) });
       assert.equal(r.status, 3, r.stderr);
       assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports", SHA)), "no report dir");
       assert.doesNotMatch(log("sudo"), /tar -xf/);
@@ -637,7 +681,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   for (const [what, env, entries] of overCap) {
     it(`upload-report rejects ${what}: exit 2, auth.warning, nothing extracted, no temp left`, () => {
       setRole("stage");
-      const r = run(`upload-report ${SHA}`, { input: tarArchive(entries), env });
+      const r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: tarArchive(entries), env });
       assert.equal(r.status, 2, r.stderr);
       assert.match(r.stderr, /^ds-deploy-entrypoint: rejected: the report/);
       assert.match(log("logger"), new RegExp(`auth\\.warning rejected: upload-report ${SHA}`));
@@ -653,7 +697,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report reads the stream into a temp file beside the reports, never /tmp", () => {
     setRole("stage");
-    const r = run(`upload-report ${SHA}`, { input: tarArchive([{ name: "r.json", body: "{}" }]) });
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: tarArchive([{ name: "r.json", body: "{}" }]) });
     assert.equal(r.status, 0, r.stderr);
     assert.match(log("sudo"), new RegExp(`mktemp -p ${`${root}/var/lib/ds-platform`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
     assert.deepEqual(readdirSync(parent()).sort(), ["e2e-reports"]);
@@ -661,7 +705,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report: an owner name with spaces cannot shift the size past the unpacked cap", () => {
     setRole("stage");
-    const r = run(`upload-report ${SHA}`, {
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, {
       input: tarArchive([{ name: "big.bin", body: "x".repeat(1200), uname: "a b 1 2 3" }]),
       env: { DS_ENTRYPOINT_MAX_UNPACKED_BYTES: "1000" },
     });
@@ -672,7 +716,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report refuses a compressed (gzip) archive: plain tar only", () => {
     setRole("stage");
-    const r = run(`upload-report ${SHA}`, {
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, {
       input: gzipSync(tarArchive([{ name: "r.json", body: "{}" }])),
     });
     assert.equal(r.status, 3, r.stderr);
@@ -682,7 +726,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report refuses when the reports filesystem lacks room for the unpacked report", () => {
     setRole("stage");
-    const r = run(`upload-report ${SHA}`, {
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, {
       input: tarArchive([{ name: "r.json", body: "{}" }]),
       env: { DS_ENTRYPOINT_FREE_MARGIN_BYTES: String(2 ** 62) },
     });
@@ -693,7 +737,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("upload-report refuses a stream that is not a tar archive", () => {
     setRole("stage");
-    const r = run(`upload-report ${SHA}`, { input: Buffer.from("not a tar stream at all\n") });
+    const r = run(`upload-report ${SHA} ${ATTEMPT}`, { input: Buffer.from("not a tar stream at all\n") });
     assert.equal(r.status, 3);
     assert.doesNotMatch(log("sudo"), /tar -xf/);
   });

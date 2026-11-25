@@ -48,6 +48,8 @@ import {
   summarizeReport,
   suiteStatusDescription,
   suiteStatusDescriptionFromDir,
+  statusVerdict,
+  STATUS_VERDICT_FILE,
   BOX_REPORTS_ROOT,
   boxReportDir,
   latestReportAttempt,
@@ -2864,15 +2866,196 @@ describe("suiteStatusDescription — the stage-suite commit status (#4222)", () 
       const tiers = [{ name: "live/academy/default" }, { name: "live/doctor/room" }];
       assert.equal(
         suiteStatusDescriptionFromDir(dir, tiers),
-        "2 passed, 1 failed (live/academy/default), 1 skipped",
+        "2 passed, 1 failed (live/academy/default), 1 skipped; verdict file missing",
       );
       assert.equal(
         suiteStatusDescriptionFromDir(path.join(dir, "absent"), tiers),
-        "suite report missing; live: 0 passed, 0 failed, 0 skipped",
+        "suite report missing; live: 0 passed, 0 failed, 0 skipped; verdict file missing",
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("suiteStatusDescription — every red verdict source names itself (#4252)", () => {
+  const ENV = { STAGE_BASIC_AUTH_PASS: "s3cret" };
+  const report = (...tests) => ({
+    suites: [{ specs: tests.map((status) => ({ tests: [{ projectName: "p", status }] })) }],
+  });
+  const green = report("expected", "expected", "skipped");
+
+  it("an all-green verdict keeps today's wording", () => {
+    const verdict = { died: [], exited: [], keyJourneyRows: [], axeBlocking: [] };
+    assert.equal(
+      suiteStatusDescription({ suite: green, live: [], verdict }),
+      "2 passed, 0 failed, 1 skipped",
+    );
+  });
+
+  it("(a) a live leg that died before writing its report is named", () => {
+    assert.equal(
+      suiteStatusDescription({
+        suite: green,
+        live: [{ name: "live/doctor/room" }],
+        verdict: { died: ["live/doctor/room"] },
+      }),
+      "2 passed, 0 failed, 1 skipped; live/doctor/room died",
+    );
+    assert.equal(
+      suiteStatusDescription({ suite: green, verdict: { exited: ["live/admin/staff"] } }),
+      "2 passed, 0 failed, 1 skipped; live/admin/staff exited non-zero",
+    );
+  });
+
+  it("(b) the failed key-journey register rows are named", () => {
+    assert.equal(
+      suiteStatusDescription({ suite: green, verdict: { keyJourneyRows: ["D8", "A3"] } }),
+      "2 passed, 0 failed, 1 skipped; key-journey D8,A3 failed",
+    );
+  });
+
+  it("(c) a blocking axe leg is named", () => {
+    assert.equal(
+      suiteStatusDescription({ suite: green, verdict: { axeBlocking: ["axe/academy"] } }),
+      "2 passed, 0 failed, 1 skipped; axe/academy blocking",
+    );
+  });
+
+  it("(d) the count-only fallback says the live tiers failed", () => {
+    const live = Array.from({ length: 30 }, (_, i) => ({
+      name: `live/doctor/an-extremely-long-tier-name-number-${i}`,
+      report: report("unexpected"),
+    }));
+    const text = suiteStatusDescription({ suite: report("expected"), live });
+    assert.ok(text.length <= 140, text);
+    assert.match(text, /live tiers failed\)|\+\d+ more\)/);
+    const hidden = suiteStatusDescription({
+      suite: report("expected"),
+      live: [{ name: "x".repeat(140), report: report("unexpected") }],
+    });
+    assert.equal(hidden, "1 passed, 1 failed (1 live tier failed), 0 skipped");
+  });
+
+  it("all sources together stay within 140 chars, truncating deterministically with +N more", () => {
+    const verdict = {
+      died: Array.from({ length: 6 }, (_, i) => `live/doctor/died-tier-${i}`),
+      exited: [],
+      keyJourneyRows: ["D1", "D2", "D3", "A1", "A2", "S1"],
+      axeBlocking: ["axe/academy", "axe/doctor"],
+    };
+    const live = [{ name: "live/academy/default", report: report("unexpected") }];
+    const text = suiteStatusDescription({ suite: green, live, verdict });
+    assert.ok(text.length <= 140, text);
+    assert.match(text, /^2 passed, 1 failed \(live\/academy\/default\), 1 skipped; /);
+    assert.match(text, /\+\d+ more/);
+    assert.equal(suiteStatusDescription({ suite: green, live, verdict }), text);
+    const small = suiteStatusDescription({
+      suite: green,
+      verdict: { died: ["live/doctor/room"], keyJourneyRows: ["D8", "A3"], axeBlocking: ["axe/academy"] },
+    });
+    assert.equal(
+      small,
+      "2 passed, 0 failed, 1 skipped; live/doctor/room died; key-journey D8,A3 failed; axe/academy blocking",
+    );
+  });
+
+  it("statusVerdict folds the runner's leg verdicts into the persisted shape", () => {
+    assert.deepEqual(
+      statusVerdict({
+        legs: [
+          { name: "suite", ok: false },
+          { name: "axe/academy", ok: false },
+          { name: "axe/doctor", ok: true },
+          { name: "key journeys", ok: false, failures: ["x", "y"], rows: ["D8", "A3"] },
+        ],
+        live: [
+          { name: "live/doctor/room", state: "fail", died: true, failed: 0 },
+          { name: "live/admin/staff", state: "fail", died: false, failed: 0 },
+          { name: "live/academy/default", state: "fail", died: false, failed: 2 },
+          { name: "live/doctor/register-live", state: "pass", died: false, failed: 0 },
+        ],
+        suiteFailed: 3,
+      }),
+      {
+        died: ["live/doctor/room"],
+        exited: ["live/admin/staff"],
+        keyJourneyRows: ["D8", "A3"],
+        axeBlocking: ["axe/academy"],
+        suiteExited: false,
+      },
+    );
+  });
+
+  it("a suite that exited non-zero with no failed test is named", () => {
+    const leg = { name: "suite", ok: false };
+    assert.equal(statusVerdict({ legs: [leg], suiteFailed: 0 }).suiteExited, true);
+    assert.equal(statusVerdict({ legs: [leg], suiteFailed: 2 }).suiteExited, false);
+    assert.equal(statusVerdict({ legs: [{ name: "suite", ok: true }], suiteFailed: 0 }).suiteExited, false);
+    assert.equal(
+      suiteStatusDescription({ suite: green, verdict: { suiteExited: true } }),
+      "2 passed, 0 failed, 1 skipped; suite exited non-zero",
+    );
+  });
+
+  it("every group keeps its marker within 140 chars: all 13 live tiers, key journeys, axe, missing suite", () => {
+    assert.equal(LIVE_TIERS.length, 13);
+    const names = LIVE_TIERS.map((t) => t.name);
+    const live = names.slice(0, 5).map((name) => ({ name, report: report("unexpected") }));
+    const verdict = {
+      died: names.slice(5, 9),
+      exited: names.slice(9, 13),
+      keyJourneyRows: ["D8", "A3"],
+      axeBlocking: ["axe/academy"],
+      suiteExited: true,
+    };
+    for (const suite of [undefined, report("expected"), big()]) {
+      const text = suiteStatusDescription({ suite, live, verdict });
+      assert.ok(text.length <= 140, `${text.length}: ${text}`);
+      for (const marker of [/failed \(/, /died/, /; (?!suite)[^;]*exited/, /K(?:J|ey-journey)/i, /axe/, /suite exited/])
+        assert.match(text, marker, text);
+      if (suite === undefined) assert.match(text, /^suite report missing/);
+      assert.equal(suiteStatusDescription({ suite, live, verdict }), text);
+    }
+    function big() {
+      return report(...Array(1130).fill("expected"), ...Array(12).fill("unexpected"), ...Array(838).fill("skipped"));
+    }
+  });
+
+  it("reads the persisted verdict out of the report dir", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ds-4252-status-"));
+    try {
+      writeFileSync(path.join(dir, "results.json"), JSON.stringify(green));
+      writeFileSync(
+        path.join(dir, STATUS_VERDICT_FILE),
+        JSON.stringify({ died: ["live/doctor/room"], keyJourneyRows: ["D8"], axeBlocking: [] }),
+      );
+      assert.equal(
+        suiteStatusDescriptionFromDir(dir, [{ name: "live/doctor/room" }]),
+        "2 passed, 0 failed, 1 skipped; live/doctor/room died; key-journey D8 failed",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("the runner writes the verdict next to the suite report, a dead live leg included", async () => {
+    const removed = [];
+    const { effects, writes } = harness({
+      removeReport: (file) => removed.push(file),
+      run: (argv) => ({
+        status: argv.join(" ") === "pnpm --filter @ds/portal exec bddgen" ? 1 : 0,
+      }),
+      readReport: (file) => (isLiveReport(file) ? undefined : LIVE_GREEN),
+    });
+    await runE2eStage(["pr-3168", "--local", "--project", "academy", "--report-dir", "r"], {
+      env: ENV,
+      effects,
+    });
+    const written = writes.filter((w) => path.basename(w.file) === STATUS_VERDICT_FILE);
+    assert.equal(written.length, 1);
+    assert.ok(removed.includes(written[0].file), "a stale verdict is removed before the run");
+    assert.ok(JSON.parse(written[0].content).died.includes("live/academy/default"));
   });
 });
 

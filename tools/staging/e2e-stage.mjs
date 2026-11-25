@@ -536,6 +536,8 @@ export function liveLegVerdict({ name, plan, status, report }) {
       ok: true,
       state: "skipped",
       launched: false,
+      died: false,
+      failed: 0,
       detail: `skipped — ${plan.reason}`,
     };
   }
@@ -564,6 +566,8 @@ export function liveLegVerdict({ name, plan, status, report }) {
     ok: state !== "fail",
     state,
     launched: true,
+    died: diedBeforeTests,
+    failed,
     detail: diedBeforeTests
       ? `runner exited ${status} before any test ran${notRun}`
       : `ran ${passed} passed / ${failed} failed / ${skipped} skipped${notRun}`,
@@ -673,21 +677,56 @@ export function summarizeReport(report) {
   };
 }
 
+/**
+ * The red verdicts the counts cannot show (#4252), as the runner computed them:
+ * live legs that died before any test (`liveLegVerdict`'s `died`), live legs that
+ * exited non-zero with no failed test, the key-journey register rows whose citation
+ * failed (`keyJourneyVerdict`'s `rows`, §6.7), the axe legs that failed, and a suite
+ * leg that exited non-zero with no failed test (`suiteFailed` is its report's failed
+ * count) — a spec that fails to import, a global-setup error. Written to
+ * `STATUS_VERDICT_FILE` beside the suite report for the status step to read.
+ */
+export function statusVerdict({ legs = [], live = [], suiteFailed = 0 } = {}) {
+  const suite = legs.find((leg) => leg.name === "suite");
+  return {
+    died: live.filter((leg) => leg.state === "fail" && leg.died).map((leg) => leg.name),
+    exited: live
+      .filter((leg) => leg.state === "fail" && !leg.died && leg.failed === 0)
+      .map((leg) => leg.name),
+    keyJourneyRows: legs.flatMap((leg) => (leg.name === "key journeys" ? (leg.rows ?? []) : [])),
+    axeBlocking: legs
+      .filter((leg) => leg.name.startsWith("axe/") && !leg.ok)
+      .map((leg) => leg.name),
+    suiteExited: suite !== undefined && !suite.ok && suiteFailed === 0,
+  };
+}
+
+/** `statusVerdict`'s file, at the root of the run's report dir. */
+export const STATUS_VERDICT_FILE = "status-verdict.json";
+
 /** GitHub refuses a commit-status description longer than this. */
 const STATUS_DESCRIPTION_MAX = 140;
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
 /**
- * The `stage-suite` commit-status description (#4222): the suite report's counts
- * plus every live leg's, with the live tiers that failed named in their run order,
- * e.g. `292 passed, 1 failed (live/academy/default), 838 skipped`. Counting goes
- * through `summarizeReport`, so a flaky test is a failure here too. `live` is
- * `[{ name, report }]`; a missing report (a leg skipped or never launched) counts
- * nothing; a missing suite report (`suite` undefined) prefixes the counts with
- * `suite report missing; live: `. The description never decides `state` — the
- * suite step's outcome does.
- * Past 140 chars, tier names drop from the end into `+N more`.
+ * The `stage-suite` commit-status description (#4222, #4252): the suite report's
+ * counts plus every live leg's, with the live tiers that failed named in their run
+ * order, then each red verdict the counts cannot show (`statusVerdict`), e.g.
+ * `292 passed, 1 failed (live/academy/default), 838 skipped; live/doctor/room died;
+ * key-journey D8,A3 failed; axe/academy blocking`. `verdict.missing` (no verdict
+ * file) adds `; verdict file missing`. Counting goes through `summarizeReport`, so a
+ * flaky test is a failure here too. `live` is `[{ name, report }]`; a missing report
+ * (a leg skipped or never launched) counts nothing; a missing suite report (`suite`
+ * undefined) prefixes the counts with `suite report missing; live: `. The
+ * description never decides `state` — the suite step's outcome does.
+ * Past 140 chars it degrades deterministically and never drops a group: names drop
+ * from the end (axe first, failing tiers last) into `+N more`, a group with no name
+ * left shows its count, then every group takes its short form
+ * (`; 4 died; 4 exited; KJ 2 rows; 1 axe blocking`), then the counts and the prefix
+ * shorten (`no suite report; 1130p/12f/838s`).
  */
-export function suiteStatusDescription({ suite, live = [] } = {}) {
+export function suiteStatusDescription({ suite, live = [], verdict = {} } = {}) {
   const totals = { passed: 0, failed: 0, skipped: 0 };
   const add = (report) => {
     const delta = { passed: 0, failed: 0, skipped: 0 };
@@ -697,35 +736,106 @@ export function suiteStatusDescription({ suite, live = [] } = {}) {
     for (const key of Object.keys(totals)) totals[key] += delta[key];
     return delta;
   };
-  // A suite that died before writing its report must not read as a clean count
-  // of whatever live legs ran.
-  const prefix = suite === undefined ? "suite report missing; live: " : "";
   add(suite);
   const failing = live
     .filter((leg) => add(leg.report).failed > 0)
     .map((leg) => leg.name);
-  const render = (shown) => {
-    const more = failing.length - shown;
-    const names = failing.slice(0, shown).join(", ");
-    const list =
-      shown === 0
-        ? more > 0
-          ? ` (${more} live tiers)`
-          : ""
-        : ` (${names}${more > 0 ? ` +${more} more` : ""})`;
-    return `${prefix}${totals.passed} passed, ${totals.failed} failed${list}, ${totals.skipped} skipped`;
+  const list = (names) => (Array.isArray(names) ? names : []);
+  const flag = (on, text, short) =>
+    on === true ? [{ names: [], full: () => text, count: () => text, short: () => short }] : [];
+  // The failing live tiers sit inside the counts; every other group follows them.
+  // Each named group has three forms: with the shown names, as a count, and short.
+  const tiers = {
+    names: failing,
+    sep: ", ",
+    full: (text) => ` (${text})`,
+    count: (n) => ` (${plural(n, "live tier", "live tiers")} failed)`,
+    short: (n) => ` (${plural(n, "tier", "tiers")})`,
   };
-  for (let shown = failing.length; shown > 0; shown -= 1) {
-    const text = render(shown);
-    if (text.length <= STATUS_DESCRIPTION_MAX) return text;
-  }
-  return render(0);
+  const groups = [
+    {
+      names: list(verdict.died),
+      sep: ", ",
+      full: (text) => `; ${text} died`,
+      count: (n) => `; ${plural(n, "live tier", "live tiers")} died`,
+      short: (n) => `; ${n} died`,
+    },
+    {
+      names: list(verdict.exited),
+      sep: ", ",
+      full: (text) => `; ${text} exited non-zero`,
+      count: (n) => `; ${plural(n, "live tier", "live tiers")} exited non-zero`,
+      short: (n) => `; ${n} exited`,
+    },
+    {
+      names: list(verdict.keyJourneyRows),
+      sep: ",",
+      full: (text) => `; key-journey ${text} failed`,
+      count: (n) => `; key-journey ${plural(n, "row", "rows")} failed`,
+      short: (n) => `; KJ ${plural(n, "row", "rows")}`,
+    },
+    {
+      names: list(verdict.axeBlocking),
+      sep: ", ",
+      full: (text) => `; ${text} blocking`,
+      count: (n) => `; ${plural(n, "axe leg", "axe legs")} blocking`,
+      short: (n) => `; ${n} axe blocking`,
+    },
+  ].filter((g) => g.names.length > 0);
+  const flags = [
+    ...flag(verdict.suiteExited, "; suite exited non-zero", "; suite exited"),
+    ...flag(verdict.missing, "; verdict file missing", "; no verdict file"),
+  ];
+  const assemble = (form, compact = false) => {
+    const prefix =
+      suite === undefined ? (compact ? "no suite report; " : "suite report missing; live: ") : "";
+    const counts = compact
+      ? `${totals.passed}p/${totals.failed}f/${totals.skipped}s`
+      : `${totals.passed} passed, ${totals.failed} failed`;
+    const tail = compact ? "" : `, ${totals.skipped} skipped`;
+    const inner = failing.length > 0 ? form(tiers) : "";
+    const rest = groups.map((g) => form(g)).join("");
+    return `${prefix}${counts}${inner}${tail}${rest}${flags.map((g) => g.full()).join("")}`;
+  };
+  // Names share one budget, spent in group order (failing tiers first).
+  const named = (budget) => {
+    const ordered = [...(failing.length > 0 ? [tiers] : []), ...groups];
+    const shownOf = new Map();
+    let left = budget;
+    for (const g of ordered) {
+      const shown = Math.min(g.names.length, left);
+      shownOf.set(g, shown);
+      left -= shown;
+    }
+    return (g) => {
+      const shown = shownOf.get(g);
+      const more = g.names.length - shown;
+      if (shown === 0) return g.count(g.names.length);
+      return g.full(`${g.names.slice(0, shown).join(g.sep)}${more > 0 ? ` +${more} more` : ""}`);
+    };
+  };
+  const total = failing.length + groups.reduce((n, g) => n + g.names.length, 0);
+  const candidates = [];
+  for (let budget = total; budget >= 0; budget -= 1) candidates.push(assemble(named(budget)));
+  const short = (g) => g.short(g.names.length);
+  const shortFlags = (text) => {
+    let out = text;
+    for (const g of flags) out = out.replace(g.full(), g.short());
+    return out;
+  };
+  candidates.push(shortFlags(assemble(short)), shortFlags(assemble(short, true)));
+  return (
+    candidates.find((text) => text.length <= STATUS_DESCRIPTION_MAX) ??
+    candidates[candidates.length - 1]
+  );
 }
 
 /**
  * `suiteStatusDescription` over a `--report-dir`: the suite's `results.json` at its
- * root and each live tier's at `liveLegReporting`'s directory — the files the run
- * already wrote. An unreadable or absent file counts nothing.
+ * root, each live tier's at `liveLegReporting`'s directory, and the runner's
+ * `STATUS_VERDICT_FILE` — the files the run already wrote. An unreadable or absent
+ * report counts nothing; an absent verdict file (the runner stopped before its
+ * verdict) says so.
  */
 export function suiteStatusDescriptionFromDir(reportDir, liveTiers = LIVE_TIERS) {
   const read = (file) => {
@@ -743,6 +853,7 @@ export function suiteStatusDescriptionFromDir(reportDir, liveTiers = LIVE_TIERS)
         path.join(liveLegReporting({}, reportDir, tier.name).dir, "results.json"),
       ),
     })),
+    verdict: read(path.join(reportDir, STATUS_VERDICT_FILE)) ?? { missing: true },
   });
 }
 
@@ -773,6 +884,7 @@ export function keyJourneyVerdict(citations, reports) {
     for (const suite of report?.suites ?? []) walk(suite);
   }
   const failures = [];
+  const failedRows = [];
   const seen = new Set();
   for (const citation of citations) {
     const { rows, leg, file, project, title } = citation;
@@ -807,12 +919,14 @@ export function keyJourneyVerdict(citations, reports) {
     )
       reason =
         "no single successful execution (skipped, expected failure or retry)";
-    if (reason)
+    if (reason) {
       failures.push(
         `${rows.join(",")} ${leg} [${project}] ${file} > ${title.join(" > ")}: ${reason}`,
       );
+      for (const id of rows) if (!failedRows.includes(id)) failedRows.push(id);
+    }
   }
-  return { name: "key journeys", ok: failures.length === 0, failures };
+  return { name: "key journeys", ok: failures.length === 0, failures, rows: failedRows };
 }
 
 export function keyJourneyTests(manifest) {
@@ -1769,6 +1883,8 @@ async function runOnSlot({ options, env, effects, liveTiers, recordVerdict }) {
   const legs = [];
   const reports = new Map();
   const suiteReport = path.join(suiteEnv.E2E_REPORT_DIR, "results.json");
+  const verdictFile = path.join(suiteEnv.E2E_REPORT_DIR, STATUS_VERDICT_FILE);
+  effects.removeReport(verdictFile);
   const suiteArgv = ["pnpm", "--filter", "@ds/e2e", "test:e2e"];
   if (options.project) suiteArgv.push("--project", options.project);
   effects.removeReport(suiteReport);
@@ -1939,6 +2055,10 @@ async function runOnSlot({ options, env, effects, liveTiers, recordVerdict }) {
   });
   effects.log(block);
   recordVerdict(block);
+  effects.writeFile(
+    verdictFile,
+    `${JSON.stringify(statusVerdict({ legs, live, suiteFailed: summary.failed }))}\n`,
+  );
   return exitCodeFor({ preflightOk: true, legs: [...legs, ...live] });
 }
 

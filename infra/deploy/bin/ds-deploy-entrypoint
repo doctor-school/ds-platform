@@ -918,9 +918,24 @@ ABS_PATH = re.compile("(/[A-Za-z0-9_.-]+)+")
 REL_PATH = re.compile("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")
 ENV_NAME = re.compile("[A-Za-z_][A-Za-z0-9_]{0,127}")
 ROLES = ("postgres", "pgbackrest")
-# #4068: the data.env names secret-apply may replace, and the shape of their values.
-SECRET_KEYS = ("PGBACKREST_REPO1_S3_KEY", "PGBACKREST_REPO1_S3_KEY_SECRET")
+# #4068: the shape of a supplied S3 key value.
 SECRET_VALUE = re.compile("[A-Za-z0-9+/=_.-]{8,256}")
+# #4068, #3670: the names data-secret-apply may set in data.env — NAME: (file, value
+# shape, generator), pinned equal to tools/deploy/data-secret.mjs BOXES.data. A None
+# shape takes no supplied value: an offsite repo's cipher pass is generated here only,
+# so it never exists at that repo's provider.
+DATA_SECRETS = {
+    "PGBACKREST_REPO1_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO1_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_ENDPOINT": ("data", r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[1-9][0-9]{0,4})?", None),
+    "PGBACKREST_REPO2_CIPHER_PASS": ("data", None, "hex32"),
+    "PGBACKREST_REPO3_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO3_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO3_S3_ENDPOINT": ("data", r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[1-9][0-9]{0,4})?", None),
+    "PGBACKREST_REPO3_CIPHER_PASS": ("data", None, "hex32"),
+}
 SECRET_MAX_AGE = 6 * 3600
 # #4153: the names api-secret-apply may set on ds-api-prod — NAME: (file, value shape,
 # generator) — pinned equal to tools/deploy/data-secret.mjs BOXES.api. `api`: api.env,
@@ -944,7 +959,7 @@ API_SECRETS = {
 }
 # secret-stage's boxes: NAME → (file tag, compiled shape, generator).
 SECRET_BOXES = {
-    "data": {name: ("data", SECRET_VALUE, None) for name in SECRET_KEYS},
+    "data": {name: (tag, shape and re.compile(shape), gen) for name, (tag, shape, gen) in DATA_SECRETS.items()},
     "api": {name: (tag, re.compile(shape), gen) for name, (tag, shape, gen) in API_SECRETS.items()},
 }
 SECRET_FILE_LABELS = {"data": "data.env", "api": "api.env", "compose": "the compose .env"}
@@ -1074,9 +1089,9 @@ if action == "secret-stage":
     # "sha": <live sha>, "nonce": <32 hex>, "values": {NAME: value}} (#4153: plus an
     # optional "generate": [NAME]); argv: the box (SECRET_BOXES), the sha the apply was
     # called with, the applied record, the pending record, then <file tag> <file>
-    # <staged copy> per file. Only the box's names: on data each replaces the one NAME=
-    # line data.env already holds; on api it replaces its one line or is appended, and a
-    # generated name must be absent or empty. Neither a value nor a line of a file is
+    # <staged copy> per file. Only the box's names: each replaces its one NAME= line or
+    # is appended (#3670: an offsite repo's names are new to data.env), and a generated
+    # name must be absent or empty. Neither a value nor a line of a file is
     # ever printed. One use per ciphertext: it names the SHA it is for, and its
     # createdAt must be newer than the one the last rotation unit recorded once its
     # verdict stood. The last applied ciphertext itself exits 4: the apply attaches to
@@ -1096,7 +1111,7 @@ if action == "secret-stage":
     except ValueError:
         stop(2, "the secret is not one JSON object")
     fields = {"schema", "createdAt", "sha", "nonce", "values"}
-    check(isinstance(req, dict) and fields <= set(req) <= fields | ({"generate"} if box == "api" else set()))
+    check(isinstance(req, dict) and fields <= set(req) <= fields | {"generate"})
     check(type(req["schema"]) is int and req["schema"] == 1)
     check(isinstance(req["sha"], str) and SHA40.fullmatch(req["sha"]) is not None)
     check(isinstance(req["nonce"], str) and NONCE.fullmatch(req["nonce"]) is not None)
@@ -1131,9 +1146,12 @@ if action == "secret-stage":
           and all(isinstance(g, str) and g in table and table[g][2] and g not in values for g in generate))
     check(bool(values) or bool(generate))
     for name, value in values.items():
+        if table[name][1] is None:
+            stop(2, name + " is generated on the box only: give it as <generate>")
         if not (isinstance(value, str) and table[name][1].fullmatch(value)):
             stop(2, "the value of " + name + " is not " +
-                 ("8-256 characters of A-Z a-z 0-9 + / = _ . -" if box == "data" else "its allowed shape"))
+                 ("8-256 characters of A-Z a-z 0-9 + / = _ . -"
+                  if table[name][1].pattern == SECRET_VALUE.pattern else "its allowed shape"))
     lines = {}
     for tag in sorted({table[name][0] for name in list(values) + generate}):
         try:
@@ -1144,7 +1162,7 @@ if action == "secret-stage":
     for name in sorted(list(values) + generate):
         tag = table[name][0]
         held = [line for line in lines[tag] if line.startswith(name + "=")]
-        if (box == "data" and len(held) != 1) or len(held) > 1:
+        if len(held) > 1:
             stop(3, "%s holds %d %s= lines, not one" % (SECRET_FILE_LABELS[tag], len(held), name))
         if name in generate:
             if held and held[0] != name + "=":
@@ -1354,7 +1372,7 @@ data_storage_driver() {
 # command secret-apply's unit recreates postgres + pgbackrest with (#4068).
 DATA_UP_PERSISTENCE='docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest'
 # The S3 repository check of the running pgbackrest container (the box-key runbook's).
-DATA_PGBACKREST_CHECK='docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check'
+DATA_PGBACKREST_CHECK='docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh'
 
 # The durable step units of data-prod: the step script is fixed here; ds-release
 # copies it root-only and runs it in ds-prod-<sha12>-<step>.

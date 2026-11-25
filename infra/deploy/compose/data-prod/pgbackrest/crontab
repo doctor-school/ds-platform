@@ -2,6 +2,11 @@
 # the container, so these are MSK). Each job drops to the `postgres` user via gosu
 # inside backup.sh. Full daily 02:30 (inside the 02:00–06:00 MSK maintenance window,
 # ADR-0012 §5); incremental every 6h at 00/06/12/18 (no overlap with the full).
+# Offsite repos (#3670, only those pgbackrest-offsite.sh enabled): a weekly full on
+# Sunday 04:30 and an incremental 04:30 Mon-Sat — after the 02:30 full, before the
+# 06:00 incremental; their 35-day time retention lives in pgbackrest.conf.
 # Output → the container log (docker compose logs pgbackrest) + /var/log/pgbackrest.
 30 2 * * * /usr/local/bin/backup.sh full >> /var/log/pgbackrest/cron.log 2>&1
 0 0,6,12,18 * * * /usr/local/bin/backup.sh incr >> /var/log/pgbackrest/cron.log 2>&1
+30 4 * * 0 /usr/local/bin/backup.sh full offsite >> /var/log/pgbackrest/cron.log 2>&1
+30 4 * * 1-6 /usr/local/bin/backup.sh incr offsite >> /var/log/pgbackrest/cron.log 2>&1

@@ -68,7 +68,10 @@ export default function ApplicationsListPage() {
     method: "get",
   });
   const page = request.isError ? undefined : result.data;
-  const nextCursor = page?.nextCursor ?? null;
+  // While the next page is in flight the hook still holds the previous page's
+  // answer; its cursor must not be filed under the page being read, or the
+  // pager would offer a page that repeats the current one.
+  const nextCursor = request.isFetching ? null : (page?.nextCursor ?? null);
   useEffect(() => {
     setCursors((known) => rememberNextCursor(known, query.page, nextCursor));
   }, [nextCursor, query.page]);
@@ -170,7 +173,7 @@ export default function ApplicationsListPage() {
     {
       key: "submittedAt",
       header: t("applications.columns.submittedAt"),
-      width: "16%",
+      width: "20%",
       fullValue: (row) => formatMskDateTime(row.submittedAt),
       render: (row) => (
         <span className="text-muted-foreground">
@@ -241,13 +244,16 @@ export default function ApplicationsListPage() {
           title={t("applications.listTitle")}
           description={t("applications.listDescription")}
           caption={t("applications.tableCaption")}
+          // The queue API takes no text query — a search box would be a dead
+          // control (012 EARS-23); «Вид» and «Статус» are the only facets.
+          searchable={false}
           filterable={false}
           extraFilters={extraFilters}
           extraApplied={extraApplied}
           onResetExtra={() => changeFilter(FILTER_INITIAL)}
           record={{
             header: t("applications.columns.kind"),
-            width: "16%",
+            width: "12%",
             title: (row) => (
               <span data-testid={`row-${row.id}`}>{row.kindLabel}</span>
             ),

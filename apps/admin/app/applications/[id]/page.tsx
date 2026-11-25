@@ -285,7 +285,7 @@ function ApplicationBody({
         data-testid="application-detail-header"
       >
         <h1
-          className="min-w-0 break-words text-xl font-extrabold text-foreground"
+          className="min-w-0 wrap-anywhere text-xl font-extrabold text-foreground"
           data-testid="application-heading"
         >
           {detail.subjectLine ?? detail.kindLabel}
@@ -345,7 +345,7 @@ function ApplicationBody({
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <Section title={t("applications.detail.sentFields")}>
             {detail.fields.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -380,7 +380,7 @@ function ApplicationBody({
                         t("applications.detail.noteAuthorUnknown")}{" "}
                       · {formatMskDateTime(item.createdAt)}
                     </p>
-                    <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                    <p className="whitespace-pre-wrap wrap-anywhere text-sm text-foreground">
                       {item.body}
                     </p>
                   </li>
@@ -437,7 +437,7 @@ function ApplicationBody({
           </Section>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <Section title={t("applications.detail.statusSection")}>
             <p className="mb-3 text-sm text-muted-foreground">
               {detail.statusChangedAt
@@ -621,7 +621,7 @@ function FieldList({
       {rows.map(([label, value, key]) => (
         <div key={key} className="flex flex-col gap-0.5">
           <dt className="text-caption text-muted-foreground">{label}</dt>
-          <dd className="whitespace-pre-wrap break-words text-sm text-foreground">
+          <dd className="whitespace-pre-wrap wrap-anywhere text-sm text-foreground">
             {value}
           </dd>
         </div>

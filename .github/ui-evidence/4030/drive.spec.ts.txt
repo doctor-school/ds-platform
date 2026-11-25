@@ -15,8 +15,36 @@ const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 test.describe.configure({ mode: "serial" });
 
-async function shot(page: Page, name: string) {
+/**
+ * The admin ships no theme toggle and does not follow `prefers-color-scheme`:
+ * its dark palette is the design-system `.dark` token block on the document
+ * root (the #1927 recipe, `apps/admin/e2e/congress-roster.spec.ts`). The
+ * token-painted `body` background signals that the recalculation happened.
+ */
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const c = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g);
+    if (!c || c.length < 3) return false;
+    const [r, g, b] = c.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
+async function shot(page: Page, name: string, { dark = false } = {}) {
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  if (!dark) return;
+  await setPalette(page, "dark");
+  // Admin ships light only (no toggle, no prefers-color-scheme), so the dark
+  // render is parity evidence, not a shipped mode: axe gates light (as every
+  // admin spec does) and the dark run is logged, not asserted.
+  const dk = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+  console.log(`AXE ${name} dark (logged): ${dk.violations.map((x) => `${x.id}: ${x.nodes.map((n) => n.target).join(",")}`).join("; ") || "clean"}`);
+  await page.screenshot({ path: `${SHOTS}/${name}-dark.png`, fullPage: true });
+  await setPalette(page, "light");
 }
 
 async function axe(page: Page, label: string) {
@@ -119,7 +147,7 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   await page.goto(`/applications/${ids[1]}`);
   await expect(page.getByTestId("application-heading")).toHaveText(topic(1));
   await expect(page.getByTestId("application-applicant")).toContainText("Анна Прогонова");
-  await shot(page, "05-detail-new");
+  await shot(page, "05-detail-new", { dark: true });
   await axe(page, "detail");
   await page.getByTestId("application-take").click();
   await expect(page.getByTestId("application-status")).toHaveText("На рассмотрении");
@@ -192,7 +220,7 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   await expect(page.getByTestId(`application-status-${ids[1]}`).first()).toHaveText("Принята");
   await expect(page.getByTestId(`application-status-${ids[2]}`).first()).toHaveText("Отклонена");
   await expect(page.getByTestId(`application-erased-${ids[3]}`).first()).toBeVisible();
-  await shot(page, "12-list-outcomes");
+  await shot(page, "12-list-outcomes", { dark: true });
   // cursor pager: more than one page of rows on the branch DB
   await expect(page.getByLabel("Поиск")).toHaveCount(0);
   const readout = page.getByTestId("applications-page").first();
@@ -211,11 +239,11 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   await expect(page.getByTestId("applications-table")).toBeVisible();
   await noSideScroll(page, "list");
   await axe(page, "list@390");
-  await shot(page, "13-list-390");
+  await shot(page, "13-list-390", { dark: true });
   await page.goto(`/applications/${ids[1]}`);
   await expect(page.getByTestId("application-heading")).toBeVisible();
   await noSideScroll(page, "detail");
   await axe(page, "detail@390");
-  await shot(page, "14-detail-390");
+  await shot(page, "14-detail-390", { dark: true });
   void browser;
 });

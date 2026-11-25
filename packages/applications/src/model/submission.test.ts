@@ -2,7 +2,6 @@ import {
   type ApplicationsFailure,
   classifyFailure,
   keyReuseOutcome,
-  type OwnApplicationsRead,
   type SubmissionState,
   startSubmission,
   submissionReducer,
@@ -148,28 +147,32 @@ describe("033 lost reply, edited retry", () => {
     expect(s.phase).toBe("sent");
   });
 
-  it("EARS-8: the re-read fails or finds none — the server-failure state with a new key, so the next send can succeed", () => {
-    const reads: OwnApplicationsRead[] = [
-      { ok: false },
-      { ok: true, list: { items: [] } },
-    ];
-    for (const read of reads) {
-      const next = keys();
-      let s = submissionReducer(
-        startSubmission(next),
-        { type: "submit" },
-        next,
-      );
-      const used = s.idempotencyKey;
-      const event = keyReuseOutcome(read);
-      expect(event).toEqual({ type: "rekey" });
-      s = submissionReducer(s, event, next);
-      expect(s.phase).toBe("unavailable");
-      expect(s.idempotencyKey).not.toBe(used);
-      s = submissionReducer(s, { type: "submit" }, next);
-      expect(s.phase).toBe("sending");
-      expect(s.idempotencyKey).not.toBe(used);
-    }
+  it("EARS-8: the re-read fails — the server-failure state with the same key, so a retry re-reads and never creates a second application", () => {
+    const next = keys();
+    let s = submissionReducer(startSubmission(next), { type: "submit" }, next);
+    const used = s.idempotencyKey;
+    const event = keyReuseOutcome({ ok: false });
+    expect(event).toEqual({ type: "failed", failure: { kind: "unavailable" } });
+    s = submissionReducer(s, event, next);
+    expect(s.phase).toBe("unavailable");
+    expect(s.idempotencyKey).toBe(used);
+    s = submissionReducer(s, { type: "submit" }, next);
+    expect(s.phase).toBe("sending");
+    expect(s.idempotencyKey).toBe(used);
+  });
+
+  it("EARS-8: the re-read succeeds with no open application — the server-failure state with a new key, so the next send can succeed", () => {
+    const next = keys();
+    let s = submissionReducer(startSubmission(next), { type: "submit" }, next);
+    const used = s.idempotencyKey;
+    const event = keyReuseOutcome({ ok: true, list: { items: [] } });
+    expect(event).toEqual({ type: "rekey" });
+    s = submissionReducer(s, event, next);
+    expect(s.phase).toBe("unavailable");
+    expect(s.idempotencyKey).not.toBe(used);
+    s = submissionReducer(s, { type: "submit" }, next);
+    expect(s.phase).toBe("sending");
+    expect(s.idempotencyKey).not.toBe(used);
   });
 });
 

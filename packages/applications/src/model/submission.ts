@@ -14,7 +14,7 @@ const defaultKey: KeyFactory = () => crypto.randomUUID();
  * EARS-8, EARS-9 — one form instance's submission. The key is minted when the
  * form opens and kept through every retry of that instance; «Отправить ещё
  * одну заявку» mints a new one, and so does a key the server already holds
- * for another body when no open application confirms it (`rekey`).
+ * when the re-read succeeds and finds no open application under it (`rekey`).
  */
 export type SubmissionState =
   | { phase: "editing"; idempotencyKey: string }
@@ -49,7 +49,10 @@ export type SubmissionEvent =
   | { type: "submit" }
   | { type: "failed"; failure: ApplicationsFailure }
   | { type: "succeeded"; result: AuthorApplicationIntakeResult }
-  /** EARS-8 — the key is spent and nothing confirms it: a new key, retry offered. */
+  /**
+   * EARS-8 — the key is spent and a successful re-read finds no open
+   * application (it was closed or erased): a new key, retry offered.
+   */
   | { type: "rekey" }
   | { type: "another" };
 
@@ -138,11 +141,15 @@ export function showRepeatBanner(read: OwnApplicationsRead): boolean {
 /**
  * EARS-8, EARS-9 — settles a `422 IDEMPOTENCY_KEY_REUSED` from the re-read: an
  * open application means the earlier send was stored, so the page shows
- * «Заявка отправлена»; a failed read or none found offers the retry with a
- * new key, never an error that repeats on every send.
+ * «Заявка отправлена». A failed read is the server-failure state with the
+ * same key: the 422 proves the application is stored, so a retry must re-read
+ * rather than create a second one (033 «One submission is one application»).
+ * A read that succeeds with none offers the retry with a new key, never an
+ * error that repeats on every send.
  */
 export function keyReuseOutcome(read: OwnApplicationsRead): SubmissionEvent {
-  const stored = read.ok ? read.list.items[0] : undefined;
+  if (!read.ok) return { type: "failed", failure: { kind: "unavailable" } };
+  const stored = read.list.items[0];
   return stored
     ? {
         type: "succeeded",

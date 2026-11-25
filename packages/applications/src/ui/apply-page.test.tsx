@@ -310,6 +310,25 @@ describe("ApplyPage", () => {
     expect(keyOf(posts()[1]!)).not.toBe(keyOf(posts()[0]!));
   });
 
+  it("EARS-8: a 422 IDEMPOTENCY_KEY_REUSED whose re-read fails shows the server-failure state, and the retry keeps the key", async () => {
+    const user = userEvent.setup();
+    answerPost = () =>
+      json(422, { problems: [{ code: "IDEMPOTENCY_KEY_REUSED" }] });
+    answerRead = () => Promise.reject(new TypeError("network"));
+    render(<ApplyPage {...props()} />);
+    await fillValid(user);
+    await user.click(screen.getByRole("button", { name: copy.form.submit }));
+    expect(await screen.findByText(copy.unavailable.lead)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Тема/)).toHaveValue("Ортобиология");
+
+    await user.click(
+      screen.getByRole("button", { name: copy.unavailable.retry }),
+    );
+    expect(await screen.findByText(copy.unavailable.lead)).toBeInTheDocument();
+    expect(posts()).toHaveLength(2);
+    expect(keyOf(posts()[1]!)).toBe(keyOf(posts()[0]!));
+  });
+
   it("EARS-9: a success replaces the form with «Заявка отправлена»; «ещё одну» opens an empty form with a new key", async () => {
     const user = userEvent.setup();
     render(<ApplyPage {...props()} />);

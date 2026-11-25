@@ -101,6 +101,18 @@ export async function deleteUserFixture(
          (SELECT id FROM registrations WHERE user_id = $1)`,
       [row.id],
     );
+    // 033 (#4028) — an application names its applicant and its consent row
+    // (both FK `ON DELETE RESTRICT`); an erased one keeps only the consent
+    // link, so it is found through that. Its notes go first.
+    const ofUser = `SELECT id FROM applications WHERE applicant_user_id = $1
+       OR consent_record_id IN (SELECT id FROM consent_records WHERE user_id = $1)`;
+    await pool.query(
+      `DELETE FROM application_notes WHERE application_id IN (${ofUser})`,
+      [row.id],
+    );
+    await pool.query(`DELETE FROM applications WHERE id IN (${ofUser})`, [
+      row.id,
+    ]);
     for (const table of USER_CHILDREN)
       await pool.query(`DELETE FROM ${table} WHERE user_id = $1`, [row.id]);
     await pool.query("DELETE FROM users WHERE id = $1", [row.id]);

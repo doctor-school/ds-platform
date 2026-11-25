@@ -124,8 +124,9 @@ describe("@ds/legal-content loader", () => {
     ]);
   });
 
-  it("028 EARS-9: the real documents directory publishes privacy-policy, consent-photo-video and the congress submission consent", () => {
+  it("028 EARS-9: the real documents directory publishes privacy-policy, consent-photo-video, the congress submission consent and the author application consent", () => {
     expect(listDocuments().map((entry) => entry.slug)).toEqual([
+      "consent-author-application",
       "consent-congress-submissions",
       "consent-photo-video",
       "privacy-policy",

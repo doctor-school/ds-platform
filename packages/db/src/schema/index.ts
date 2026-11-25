@@ -20,3 +20,4 @@ export * from "./sign-in-host-records.js";
 export * from "./materials.js";
 export * from "./points-ledger.js";
 export * from "./learning.js";
+export * from "./applications.js";

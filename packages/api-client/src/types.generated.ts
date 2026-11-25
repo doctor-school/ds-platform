@@ -2452,6 +2452,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/applications/author": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ApplicationsMeController_submitAuthor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/birth-date": {
         parameters: {
             query?: never;
@@ -3589,6 +3605,28 @@ export interface components {
         AdminMfaReverifyRequestDto: {
             code: string;
             endpoint: string;
+        };
+        ApplicationRefusalDto: {
+            problems: {
+                /** @enum {string} */
+                code: "IDEMPOTENCY_KEY_REQUIRED" | "IDEMPOTENCY_KEY_INVALID" | "IDEMPOTENCY_KEY_REUSED" | "CONSENT_VERSION_NOT_CURRENT" | "CONSENT_DOCUMENT_UNAVAILABLE" | "SPECIALTY_UNKNOWN";
+                field?: string;
+            }[];
+        };
+        AuthorApplicationIntakeDto: {
+            about?: string;
+            consentVersion: string;
+            /** @enum {string} */
+            format: "course_series" | "single_lesson" | "podcast" | "talk";
+            specialtyCode?: string;
+            specialtyOther?: string;
+            topic: string;
+        };
+        AuthorApplicationIntakeResultDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            submittedAt: string;
         };
         ConfigureStreamRequestDto: {
             embedRef: string;
@@ -9783,6 +9821,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningSchoolReadDto"];
+                };
+            };
+        };
+    };
+    ApplicationsMeController_submitAuthor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorApplicationIntakeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorApplicationIntakeResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRefusalDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRefusalDto"];
                 };
             };
         };

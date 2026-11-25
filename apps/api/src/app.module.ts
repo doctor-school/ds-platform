@@ -27,6 +27,7 @@ import { CongressModule } from "./congress/congress.module.js";
 
 import { StaffAccessModule } from "./staff-access/staff-access.module.js";
 import { LearningModule } from "./learning/learning.module.js";
+import { ApplicationsModule } from "./applications/applications.module.js";
 import { PointsModule } from "./points/points.module.js";
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { PointsModule } from "./points/points.module.js";
     // 024 — the learning path (#4011): structure, rules, facts and the course
     // path; records its completions through the 025 PointsEngine above.
     LearningModule,
+    ApplicationsModule,
     HealthModule,
     ReadinessModule,
   ],

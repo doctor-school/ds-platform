@@ -3549,6 +3549,12 @@ describe("#4172 golden volume covers the schema", () => {
       "023 EARS-23 rating; nothing reads it yet — seed with its first read",
     learning_feedback:
       "023 EARS-23 feedback; nothing reads it yet — seed with its first read",
+    // 033 queue core (#4028): the intake writes, nothing reads yet — the admin
+    // queue (#4030) and the page banner (#4031) are the first reads.
+    applications:
+      "033 queue core; nothing reads it yet — seed with its first read (the admin queue #4030)",
+    application_notes:
+      "033 notes; the writer and reader are the admin queue (#4030) — seed with it",
   };
 
   const tables: PgTable[] = (Object.values(schema) as unknown[]).filter(
@@ -3894,9 +3900,9 @@ describe("024 EARS-24, EARS-29–31 (#4012) golden long-path results", () => {
     // and the recompute moved no status: no completion-kept fact, no status
     // naming the change. The other long path carries no change at all.
     for (const f of attemptFacts)
-      expect(
-        (f.data as { score: number }).score,
-      ).toBeGreaterThanOrEqual(GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK);
+      expect((f.data as { score: number }).score).toBeGreaterThanOrEqual(
+        GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK,
+      );
     expect(
       dataset.learningFacts.filter((f) => f.kind === "completion-kept"),
     ).toEqual([]);

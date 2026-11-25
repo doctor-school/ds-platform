@@ -38,9 +38,9 @@ submitted_at)` is a year old is closed with outcome `expired`,
 - **Account erasure (EARS-24).** `eraseApplicationsOfAccount(userId, tx)` runs
   the tombstone on every not-yet-erased application of the account in the
   caller's transaction. It is the `applications` mechanism of the ADR-0009
-  design §3 matrix; the ADR-0009 erasure executor (not on `main` yet) calls it.
-  Until then an account-erasure request is served by the administrator erasure
-  of EARS-20 on each of the subject's applications.
+  design §3 matrix; the ADR-0009 erasure executor, tracked in #816, calls it.
+  Until #816 lands an account-erasure request is served by the administrator
+  erasure of EARS-20 on each of the subject's applications.
 
 The purge runs one minute after boot and then every 24 hours (a release
 restarts the api, so an interval alone could never fire); both steps are

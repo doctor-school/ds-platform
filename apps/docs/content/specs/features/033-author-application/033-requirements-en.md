@@ -2,7 +2,7 @@
 title: "033 — Author application: the «Подать заявку» page and the shared application queue (Requirements, slice 1)"
 description: "Requirements for slice 1 of feature 033: the Academy page «Подать заявку» at academy.doctor.school/apply with its path of the application and author terms as text, the account gate for a guest with return to the form, the form of a signed-in expert (topic, specialty from the Минздрав book or «Другое», format, about) with the purpose-bound personal-data consent, one application per submission, the confirmation state and the «previous application in work» banner; the one admin application queue that also receives the 034 investor requests and the migrated interim partnership requests — list, detail, statuses with an outcome, internal notes, platform-administrator-only access with the second factor and the 010 change audit; the team notification and the «Заявка получена» receipt that never lose an application; bot protection of every public intake; retention and erasure under ADR-0009."
 slug: 033-author-application
-status: Draft
+status: In dev
 issues: [4028, 4029, 4030, 4031, 4032, 4033, 4034]
 surface: user-facing
 storefronts: academy-only

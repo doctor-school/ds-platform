@@ -1,0 +1,118 @@
+import { test } from "@playwright/test";
+
+const OUT = process.env.CAPTURE_OUT!;
+const LABEL = process.env.CAPTURE_LABEL!; // main | head
+const total = 37;
+const card = (i: number) => ({
+  kind: "news",
+  id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+  title: `Материал ленты ${String(i + 1).padStart(2, "0")}`,
+  publishedAt: new Date(Date.UTC(2026, 9, 27, 9) - i * 3_600_000).toISOString(),
+  image: null,
+  source: { platform: "academy", name: "Академия" },
+  partner: null,
+  href: `/materials/feed-${i + 1}`,
+});
+
+for (const { w, h } of [{ w: 1440, h: 1300 }, { w: 390, h: 844 }])
+  for (const theme of ["light", "dark"] as const)
+    test(`${w} ${theme}`, async ({ page }) => {
+      await page.route((u) => u.pathname === "/v1/public/feed", async (route) => {
+        const url = new URL(route.request().url());
+        const from = Number(url.searchParams.get("cursor") ?? "0");
+        const limit = Number(url.searchParams.get("limit"));
+        const to = Math.min(total, from + limit);
+        if (from > 0) await new Promise((d) => setTimeout(d, 250));
+        await route.fulfill({
+          json: {
+            data: Array.from({ length: to - from }, (_, i) => card(from + i)),
+            nextCursor: to < total ? String(to) : null,
+          },
+        });
+      });
+      // Deterministic #4230 race: right after a later page's JSON lands (the
+      // rail's handler runs a few microtasks later), and before React's
+      // scheduled re-render, one scroll frame reaches the rail.
+      await page.addInitScript(() => {
+        const orig = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const res = await orig(input, init);
+          const u = String(input instanceof Request ? input.url : input);
+          if (!u.includes("/v1/public/feed") || !u.includes("cursor=")) return res;
+          const json = res.json.bind(res);
+          res.json = async () => {
+            const data = await json();
+            let p = Promise.resolve();
+            for (let i = 0; i < 12; i++) p = p.then(() => undefined);
+            void p.then(() =>
+              document
+                .querySelector('[role="region"][aria-label*="листайте"]')
+                ?.dispatchEvent(new Event("scroll")),
+            );
+            return data;
+          };
+          return res;
+        };
+      });
+      await page.setViewportSize({ width: w, height: h });
+      await page.emulateMedia({ colorScheme: theme });
+      await page.goto("/");
+      await page.evaluate((t) => document.documentElement.classList.toggle("dark", t === "dark"), theme);
+      const rail = page.getByRole("region", { name: /листайте/ });
+      await rail.locator("[data-slot] > a").first().waitFor();
+      await rail.scrollIntoViewIfNeeded();
+      const next = page.getByRole("button", { name: "Дальше, к более ранним материалам" });
+      const idle = () =>
+        page.waitForFunction(
+          () => document.querySelector('[role="region"][aria-label*="листайте"]')?.getAttribute("aria-busy") !== "true",
+        );
+      // Page to the end: → on desktop, swipe-like scroll to the end on a phone.
+      for (let i = 0; i < 20; i++) {
+        if (w > 600) {
+          if (!(await next.isEnabled())) break;
+          await next.click();
+        } else {
+          const done = await rail.evaluate((el) => {
+            const end = el.scrollLeft >= el.scrollWidth - el.clientWidth - 4;
+            el.scrollTo({ left: el.scrollWidth, behavior: "auto" });
+            return end && el.getAttribute("aria-busy") !== "true";
+          });
+          if (done) break;
+        }
+        await page.waitForTimeout(700);
+        await idle();
+      }
+      await page.waitForTimeout(800);
+      const titles = await rail.locator("[data-slot] > a").evaluateAll((as) =>
+        as.map((a) => (a.textContent ?? "").match(/Материал ленты (\d{2})/)?.[1] ?? "?"),
+      );
+      const dupes = titles.filter((t, i) => titles.indexOf(t) !== i);
+      console.log(`CAPTURE ${LABEL} ${w} ${theme}: cards=${titles.length} duplicates=${dupes.length} [${[...new Set(dupes)].join(",")}]`);
+      // Bring the first duplicated card (or the end) into view for the shot.
+      if (dupes.length)
+        await rail.evaluate((el, n) => {
+          const as = [...el.querySelectorAll("[data-slot] > a")];
+          const seen = new Set<string>();
+          for (const a of as) {
+            const t = (a.textContent ?? "").match(/Материал ленты (\d{2})/)?.[1] ?? "";
+            if (seen.has(t)) {
+              const slot = a.parentElement as HTMLElement;
+              // The first repeated card sits at the left edge, its first copy
+              // one rail-width earlier, so both copies show in one shot.
+              el.style.scrollSnapType = "none";
+              el.scrollLeft += slot.getBoundingClientRect().left - el.getBoundingClientRect().left - el.clientWidth / 2;
+              return;
+            }
+            seen.add(t);
+          }
+        }, 0);
+      else
+        await rail.evaluate((el) => el.scrollTo({ left: el.scrollWidth, behavior: "auto" }));
+      await page.waitForTimeout(500);
+      console.log("POS", JSON.stringify(await rail.evaluate((el) => { const r = el.getBoundingClientRect(); return { l: el.scrollLeft, max: el.scrollWidth - el.clientWidth, w: el.clientWidth, seen: [...el.querySelectorAll("[data-slot] > a")].filter((a) => { const b = a.getBoundingClientRect(); return b.right > r.left && b.left < r.right; }).map((a) => (a.textContent ?? "").match(/ленты (\d{2})/)?.[1]) }; })));
+      const section = rail.locator("xpath=ancestor::section[1]");
+      await (await section.count() ? section : rail).screenshot({
+        path: `${OUT}/${LABEL}-feed-rail-paged-${w}-${theme}.png`,
+        animations: "disabled",
+      });
+    });

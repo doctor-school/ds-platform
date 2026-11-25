@@ -3553,6 +3553,12 @@ describe("#4172 golden volume covers the schema", () => {
       "023 EARS-23 rating; nothing reads it yet — seed with its first read",
     learning_feedback:
       "023 EARS-23 feedback; nothing reads it yet — seed with its first read",
+    // 033 queue core (#4028): the intake writes, nothing reads yet — the admin
+    // queue (#4030) and the page banner (#4031) are the first reads.
+    applications:
+      "033 queue core; nothing reads it yet — seed with its first read (the admin queue #4030)",
+    application_notes:
+      "033 notes; the writer and reader are the admin queue (#4030) — seed with it",
   };
 
   const tables: PgTable[] = (Object.values(schema) as unknown[]).filter(

@@ -118,6 +118,88 @@
         "required": ["code", "endpoint"],
         "type": "object"
       },
+      "ApplicationRefusalDto": {
+        "properties": {
+          "problems": {
+            "items": {
+              "properties": {
+                "code": {
+                  "enum": [
+                    "IDEMPOTENCY_KEY_REQUIRED",
+                    "IDEMPOTENCY_KEY_INVALID",
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "CONSENT_VERSION_NOT_CURRENT",
+                    "CONSENT_DOCUMENT_UNAVAILABLE",
+                    "SPECIALTY_UNKNOWN"
+                  ],
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                }
+              },
+              "required": ["code"],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": ["problems"],
+        "type": "object"
+      },
+      "AuthorApplicationIntakeDto": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "consentVersion": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "format": {
+            "enum": ["course_series", "single_lesson", "podcast", "talk"],
+            "type": "string"
+          },
+          "specialtyCode": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "specialtyOther": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["topic", "format", "consentVersion"],
+        "type": "object"
+      },
+      "AuthorApplicationIntakeResultDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "submittedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          }
+        },
+        "required": ["id", "submittedAt"],
+        "type": "object"
+      },
       "ConfigureStreamRequestDto": {
         "properties": {
           "embedRef": {
@@ -15900,6 +15982,55 @@
           }
         },
         "tags": ["LearningPublic"]
+      }
+    },
+    "/v1/me/applications/author": {
+      "post": {
+        "operationId": "ApplicationsMeController_submitAuthor",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorApplicationIntakeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorApplicationIntakeResultDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["ApplicationsMe"]
       }
     },
     "/v1/me/birth-date": {

@@ -26,7 +26,7 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 
 - **US-1** — As a **representative of an organisation** (a pharma company, a medical-equipment maker, an investor in BBM's evolutionary goal — owner REQ-9), I open «Как это работает» from the Academy home and understand how participation works: what I invest in, who produces the education, how it reaches doctors and how I see the result. _(Clinics and other institutions as an audience — agent-proposed — UNCONFIRMED; the owner's REQ-9 list names neither.)_
 - **US-2** — As a **representative**, I see concretely what an investor gets (doctor-attention analytics, participant composition without contact data, surveys and research, an annual exclusive on a project) and how the relationship is formalised (a contract outside the platform, transparent project accounting on it), so I can decide whether to talk. _(Copy from the canvas `academy-invest.dc.html` — content, final wording an owner pass.)_
-- **US-3** — As a **representative**, I reach the «Обсудить проект» form from the page (the closing block and any «Обсудить проект» button lead to the same form) and send a short request: organisation, full name, role in the organisation, work email, phone, my task. _(Field set from the owner-drawn R4 canvas `academy-invest.dc.html`, vendored in #1451: organisation, full name, work email required; role, phone optional.)_
+- **US-3** — As a **representative**, I reach the «Обсудить проект» form from the page (the closing block and any «Обсудить проект» button lead to the same form) and send a short request: organisation, full name, role in the organisation, work email, phone, my task. _(Field set from the owner-drawn R4 canvas `academy-invest.dc.html`, vendored in #1451: organisation, full name, work email required; role, phone and task optional.)_
 - **US-4** — As a **representative**, I send the request without creating an account — the investor cabinet is for organisations already working with the Academy. _(agent-proposed — UNCONFIRMED.)_
 - **US-5** — As a **representative**, I give explicit consent to the processing of the personal data in my request, with a link to the policy, before I can send it (152-ФЗ; ADR-0016 §7). _(Lead-asserted legal constraint, as in 013 — UNCONFIRMED by the owner.)_
 - **US-6** — As a **representative**, invalid or missing fields are explained next to the field without losing the rest of my input; a server failure keeps my input and lets me retry. _(lead decision, UX mechanics; the invest canvas draws no form-error or failure state; owner sees it at Stage A.)_
@@ -45,11 +45,11 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 
 **Branches:** missing required field → inline message, nothing sent; server failure → plain message, input kept, retry; double submission → one request. _(lead decision, `033-design.md` decision 3; owner sees it at Stage A.)_
 
-**Administrator (US-8):** notification → queue filtered «Заявки инвесторов» → open → contact the representative outside the platform → status and note per 033.
+**Administrator (US-8):** notification → queue filtered by the kind «Инвесторы» → open → contact the representative outside the platform → status and note per 033.
 
 ## Product acceptance criteria
 
-- `academy.doctor.school` serves a real investor page; the home «Инвесторам / Партнёрам → Как это работает» entries lead to it.
+- `academy.doctor.school/investors` serves a real investor page; the home «Инвесторам / Партнёрам → Как это работает» entries lead to it (the entries are the 029 home's).
 - The page presents the model, what the investor gets and how the relationship is formalised; it promises no on-platform payment.
 - The «Обсудить проект» form needs no account; organisation, full name and work email are required (owner-drawn R4 canvas); validation messages say what to fix and keep other input; a server failure keeps input and offers retry _(lead decision, as US-6)_.
 - The public no-account form is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are. _(lead decision, security posture.)_

@@ -168,11 +168,9 @@ services:
       # (SMARTCAPTCHA_SERVER_KEY). Empty ⇒ inactive placeholder. A key change
       # needs a container recreate, never a rebuild.
       SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
-      # Feature 013 EARS-6: fail-closed private JSON persistence. This named
-      # volume is mounted into portal only; the image pre-creates the mount point
-      # node-owned with 0700 and each record is written 0600.
-      ACADEMY_SUBMISSIONS_DIR: /var/lib/ds-platform/academy-submissions
     volumes:
+      # Retired interim file store (033 EARS-18): the portal no longer writes here;
+      # kept mounted until the prod import + owner-gated volume removal, #4262.
       - academy_partnership_submissions:/var/lib/ds-platform/academy-submissions
     depends_on:
       api:

@@ -234,7 +234,7 @@ describe("1468: every env variable the api/admin/storefronts refuse to run witho
         ).matchAll(/^\s+([A-Z][A-Z0-9_]+):[ \t]*(?!\$\{)(\S.*)$/gm),
       ].map((m) => m[1]!),
     );
-    expect(pinned).toContain("ACADEMY_SUBMISSIONS_DIR");
+    expect(pinned).toContain("CONTOUR_MANIFEST");
     const contract = new Set(RUNTIME_ENV_CONTRACT.variables.map((v) => v.name));
     const missing: string[] = [];
     for (const dir of SCANNED) {

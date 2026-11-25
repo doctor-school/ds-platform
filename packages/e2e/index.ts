@@ -42,7 +42,6 @@ export {
   offlineSoldOutFindings,
 } from "./lib/event-page-honesty.js";
 export {
-  readStagePartnershipFaultCount,
   readStagePartnershipObservation,
   stageAcademyAddress,
   stagePartnershipUnavailableOrigin,

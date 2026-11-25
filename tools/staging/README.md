@@ -384,23 +384,24 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
-### Academy partnership storage failure (#4121)
+### Academy partnership intake failure (#4121, 033 EARS-18)
 
-The Academy live tier submits the real form on the guest portal. Its acceptance
-case checks that a retry after a lost response leaves one private synthetic
-record. For the failure case the slot runs the same portal image as
-`<slot>-portal-partnership-unavailable` with `ACADEMY_SUBMISSIONS_DIR=/dev/null`
-and no submissions volume or credentials. Its own healthcheck requires the guest
-home to respond and the storage target to be a character device. The normal slot
-health gate checks both portals against the same SHA-tagged image.
+The Academy live tier submits the real form on the guest portal; it posts into
+the api's application queue (`POST /v1/public/applications/partnership`). Its
+acceptance case checks that a retry after a lost response leaves exactly one
+`partnership` row for the run's synthetic contact. For the failure case the slot
+runs the same portal image as `<slot>-portal-partnership-unavailable`, with
+`extra_hosts: api:127.0.0.1`: its BFF rewrite target `api` resolves to the
+container's own loopback, where nothing listens, so the intake POST really fails
+server-side. The fixture carries no volume or credentials. Its own healthcheck
+requires the guest home to respond and `api` to resolve to loopback. The normal
+slot health gate checks both portals against the same SHA-tagged image.
 
 The shared stage edge routes `academy-partnership-unavailable-<slot>.<domain>`
 through the usual staging gate for the home and its assets. All other routes
-return 404. The browser test observes an actual POST response, checks retained
-form values, and requires one new persistence failure in the fixture. The normal
-portal's store must have zero records for that run's synthetic contact both
-before and after. The fixture observation returns an exact fixed-marker count
-from at most 200 recent log lines with a 20-second CI read timeout.
+return 404. The browser test observes the actual intake POST answering `5xx`
+from the fixture origin and checks the retained form values. The slot's queue
+must have zero rows for that run's synthetic contact both before and after.
 
 A PR preview does not update the shared edge. Before the new static edge config
 is on stage, an authorized operator can verify the preview's real fixture over

@@ -1,75 +1,57 @@
 ---
 title: "Academy partnership submissions operations"
-description: "Operating the portal-only private JSON volume used by the Academy partnership form."
+description: "The retired Academy partnership file store: its remaining records and their import into the application queue."
 lang: en
 ---
 
 # Academy partnership submissions operations
 
-This runbook covers the private JSON records created by the public Academy
-partnership form. Canon: [Feature 013 design](../specs/features/013-academy-home/013-design.md)
-and ADR-0011. The **Tech Lead / System Architect** owns the production storage in
+This runbook covers the private JSON records the public Academy partnership
+form wrote before it moved into the application queue (033 EARS-18: the form
+posts to `POST /v1/public/applications/partnership`, and the portal writes no
+file). Canon: [Feature 013 design](../specs/features/013-academy-home/013-design.md),
+[033 design](../specs/features/033-author-application/033-design.md) and
+ADR-0011. The **Tech Lead / System Architect** owns the production storage in
 Phase 0.
 
 ## Storage contract
 
-| Property             | Production value                                  |
-| -------------------- | ------------------------------------------------- |
-| Writer               | `portal` only                                     |
-| Environment variable | `ACADEMY_SUBMISSIONS_DIR`                         |
-| Container path       | `/var/lib/ds-platform/academy-submissions`        |
-| Compose volume       | `academy_partnership_submissions`                 |
-| Directory mode       | `0700`, owned by the non-root portal runtime user |
-| Record mode          | `0600`                                            |
-| Record name          | `<idempotency-key>.json`                          |
+| Property       | Production value                                  |
+| -------------- | ------------------------------------------------- |
+| Writer         | none — retired; the records are read-only now     |
+| Container path | `/var/lib/ds-platform/academy-submissions`        |
+| Compose volume | `academy_partnership_submissions`                 |
+| Directory mode | `0700`, owned by the non-root portal runtime user |
+| Record mode    | `0600`                                            |
+| Record name    | `<idempotency-key>.json`                          |
 
-The portal fails closed when the configured directory is missing, relative,
-symlinked, owned by another user, or has wider permissions. A record is fsynced
-to a private staging file and atomically linked into its final UUID destination;
-a failed write must leave no partial JSON record. There is no public read/list
-route and no other service mounts this volume.
+The volume stays mounted into `portal` only until the import below is verified
+and the owner-gated removal (#4262) is done; no other service mounts it, and
+there is no public read/list route.
 
-## Post-deploy verification
+## Metadata checks
 
-Run these checks on `api-prod` from the directory containing the production
-Compose file. They inspect metadata only and must not print record contents:
+Run these on `api-prod` from the directory containing the production Compose
+file. They inspect metadata only and must not print record contents:
 
 ```bash
 docker compose exec -T portal sh -lc \
-  'test "$ACADEMY_SUBMISSIONS_DIR" = /var/lib/ds-platform/academy-submissions && \
-   test -d "$ACADEMY_SUBMISSIONS_DIR" && \
-   test "$(stat -c %a "$ACADEMY_SUBMISSIONS_DIR")" = 700 && \
-   test "$(stat -c %u "$ACADEMY_SUBMISSIONS_DIR")" = "$(id -u)"'
+  'd=/var/lib/ds-platform/academy-submissions && test -d "$d" && \
+   test "$(stat -c %a "$d")" = 700 && test "$(stat -c %u "$d")" = "$(id -u)"'
 
 docker inspect "$(docker compose ps -q portal)" \
   --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}'
 ```
 
-The mount listing must contain exactly the Academy volume at the configured
-path for this feature. Confirm the Compose model does not attach that volume to
-`api`, `admin`, or any other service before applying an infrastructure change.
-
-For a non-PII liveness signal, count records without reading them:
+To count the records without reading them:
 
 ```bash
 docker compose exec -T portal sh -lc \
-  'find "$ACADEMY_SUBMISSIONS_DIR" -maxdepth 1 -type f -name "*.json" | wc -l'
+  'find /var/lib/ds-platform/academy-submissions -maxdepth 1 -type f -name "*.json" | wc -l'
 ```
 
-## Failure handling
-
-- **Form reports the approved save error:** inspect portal logs for the generic
-  persistence failure, then check mount presence, directory ownership/mode, and
-  free space. Never log or paste a submitted payload while diagnosing.
-- **Directory permissions differ:** stop and restore the image/volume ownership
-  contract. Never use `chmod 777` or mount the volume into another service.
-- **A `.tmp` file remains after an interrupted process:** do not delete it during
-  the first investigation. Confirm no portal process is writing it, record its
-  metadata, and take an approved same-zone recovery copy before any destructive
-  cleanup.
-- **Volume is unavailable or full:** the form remains fail-closed and must not
-  show success. Restore the same named volume or capacity, then re-run the
-  metadata checks above; exact client retries remain idempotent.
+Never chmod the directory, mount the volume into another service, or delete a
+file (a leftover `.tmp` included) before the import is verified.
 
 ## Import into the application queue (033 EARS-19)
 
@@ -90,7 +72,7 @@ Run order on production, each step only after the previous one is verified:
 
 1. Release the portal whose form posts to `POST /v1/public/applications/partnership`
    — from then on no new file is written here.
-2. Count the records (the liveness command above).
+2. Count the records (the count command above).
 3. Run the import in a one-off api container with this volume mounted read-only.
    The records are `0700`/`0600` for the portal runtime user, so the container
    must run as that same uid (`--user "$(docker compose exec -T portal id -u)"`):
@@ -103,7 +85,7 @@ Run order on production, each step only after the previous one is verified:
    that `invalid` is empty; an invalid name is investigated before going on,
    never deleted.
 5. Removing the volume from Compose (and the volume itself) is an irreversible
-   data action: it waits for the owner's explicit «go», recorded on #4032.
+   data action: it waits for the owner's explicit «go», tracked on #4262.
 
 ## Retention, backup, and withdrawal
 
@@ -116,7 +98,7 @@ copy that includes the Docker volume must remain in the approved same-zone/RF
 perimeter and inherit the same access and withdrawal handling under ADR-0011.
 Do not export the volume to a workstation, analytics tool, messenger, or public
 object store. A restore must preserve the directory owner/mode and file mode,
-then pass the post-deploy checks before portal traffic is considered healthy.
+then pass the metadata checks above.
 
 Withdrawal is a controlled destructive operation: verify the request and exact
 record target without exposing unrelated payloads, confirm the live and backup

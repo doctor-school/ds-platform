@@ -5,9 +5,13 @@ import {
   chooseStageObserve,
 } from "./stage-observe.js";
 
+/**
+ * 033 EARS-18 — the synthetic contact's `partnership` rows in the slot's queue,
+ * and whether the one row is exactly what the stage journey submitted.
+ */
 interface PartnershipObservation {
   count: number;
-  privateRecord: boolean;
+  exactRow: boolean;
 }
 
 const SYNTHETIC_CONTACT =
@@ -68,14 +72,13 @@ function resultOf(output: string): PartnershipObservation {
     typeof result.count !== "number" ||
     !Number.isSafeInteger(result.count) ||
     result.count < 0 ||
-    typeof result.privateRecord !== "boolean" ||
-    (result.privateRecord && result.count !== 1)
+    typeof result.exactRow !== "boolean" ||
+    (result.exactRow && result.count !== 1)
   ) {
     throw new Error(FAILURE);
   }
-  return { count: result.count, privateRecord: result.privateRecord };
+  return { count: result.count, exactRow: result.exactRow };
 }
-
 async function stageOperator(stage: StageAddress) {
   const staging = await import(
     new URL("../../../tools/staging/slot.mjs", import.meta.url).href
@@ -105,37 +108,65 @@ async function stageOperator(stage: StageAddress) {
   ) {
     throw new Error(FAILURE);
   }
-  return { capture, captureScript, quoteCommand: staging.quoteCommand };
+  return {
+    captureScript,
+    quoteCommand: staging.quoteCommand,
+    postgresContainer: staging.POSTGRES_CONTAINER as string,
+    database: staging.slotDatabaseName(stage.slot) as string,
+  };
 }
 
 async function readWithOperator(
   stage: StageAddress,
   contact: string,
 ): Promise<string> {
-  const { capture } = await stageOperator(stage);
+  const { captureScript, quoteCommand, postgresContainer, database } =
+    await stageOperator(stage);
   // The CI key uses the box-global installed entrypoint. PR slots deliberately
-  // never install it (#3125); the operator executes this same fixed predicate
-  // from the checked-out source inside that one slot's portal.
+  // never install it (#3125); the operator runs this same fixed SELECT from the
+  // checked-out source, read-only, against that one slot's database.
   const entrypoint = await readFile(
     new URL("../../../infra/deploy/bin/ds-deploy-entrypoint", import.meta.url),
     "utf8",
   );
-  const script = entrypoint
+  const select = entrypoint
     .replaceAll("\r\n", "\n")
     .match(
-      /\nread -r -d '' OBSERVE_PARTNERSHIP_JS <<'JS' \|\| true\n([\s\S]*?)\nJS\n/,
+      /\nread -r -d '' OBSERVE_PARTNERSHIP_SQL <<'SQL' \|\| true\n([\s\S]*?)\nSQL\n/,
     )?.[1];
-  if (!script) throw new Error(FAILURE);
-  return capture([
+  if (!select) throw new Error(FAILURE);
+  const sql = [
+    "BEGIN READ ONLY;",
+    "SET LOCAL statement_timeout = '5s';",
+    `SELECT row_to_json(observed) FROM (\n${select}\n) observed;`,
+    "ROLLBACK;",
+    "",
+  ].join("\n");
+  const psql = quoteCommand([
     "sudo",
     "docker",
     "exec",
-    `${stage.slot}-portal`,
-    "node",
+    "-i",
     "-e",
-    script,
-    contact,
+    "PGCLIENTENCODING=UTF8",
+    postgresContainer,
+    "psql",
+    "-X",
+    "-qAt",
+    "-U",
+    "ds",
+    "-d",
+    database,
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-v",
+    `contact=${contact}`,
+    "-f",
+    "-",
   ]);
+  return captureScript(
+    `printf '%s' ${quoteCommand([sql])} | ${psql}`,
+  );
 }
 
 export async function readStagePartnershipObservation(
@@ -159,44 +190,6 @@ export async function readStagePartnershipObservation(
     return resultOf(await readWithOperator(stage, contact));
   } catch {
     // Never expose a transport reply or stderr in an Actions report.
-    throw new Error(FAILURE);
-  }
-}
-
-export async function readStagePartnershipFaultCount(
-  academyBaseUrl: string,
-): Promise<number> {
-  try {
-    const stage = stageAcademyAddress(academyBaseUrl);
-    if (!stage) throw new Error(FAILURE);
-    const observe = chooseStageObserve();
-    let output: string;
-    if (observe) {
-      await assertObservedMainOrigin(observe, stage.origin, stage.slot);
-      output = await observe("academy-partnership-fault-count", {});
-    } else {
-      const { captureScript, quoteCommand } = await stageOperator(stage);
-      const logs = quoteCommand([
-        "sudo",
-        "docker",
-        "logs",
-        "--tail",
-        "200",
-        `${stage.slot}-portal-partnership-unavailable`,
-      ]);
-      const count = quoteCommand([
-        "awk",
-        '$0 == "[academy-partnership] persistence_failed" { n++ } END { print n + 0 }',
-      ]);
-      output = await captureScript(`set -o pipefail\n${logs} 2>&1 | ${count}`);
-    }
-    const digits = output.trim();
-    const count = Number(digits);
-    if (!/^\d{1,3}$/.test(digits) || count > 200) {
-      throw new Error(FAILURE);
-    }
-    return count;
-  } catch {
     throw new Error(FAILURE);
   }
 }

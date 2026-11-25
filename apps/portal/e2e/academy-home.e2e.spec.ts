@@ -710,7 +710,7 @@ test.describe("Feature 013 — static public Academy home", () => {
         ? () => readStagePartnershipObservation(stage.origin, stageContact)
         : undefined;
     if (observe) {
-      expect(await observe()).toEqual({ count: 0, privateRecord: false });
+      expect(await observe()).toEqual({ count: 0, exactRow: false });
     }
     const mutationUrls: string[] = [];
     page.on("request", (request) => {
@@ -747,7 +747,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     ).toBeVisible();
     if (observe) {
       expect(firstWriteReachedServer).toBe(true);
-      expect(await observe()).toEqual({ count: 1, privateRecord: true });
+      expect(await observe()).toEqual({ count: 1, exactRow: true });
     }
 
     await form.getByRole("button", { name: "Обсудить партнёрство" }).click();
@@ -755,7 +755,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     await page.unrouteAll({ behavior: "wait" });
 
     if (observe) {
-      expect(await observe()).toEqual({ count: 1, privateRecord: true });
+      expect(await observe()).toEqual({ count: 1, exactRow: true });
     }
     expect(attempts).toHaveLength(2);
     const [first, retry] = attempts as [Request, Request];
@@ -815,13 +815,13 @@ test.describe("Feature 013 — static public Academy home", () => {
       const contact = `partnership-4121-${randomUUID()}@example.test`;
       const observeQueue = () =>
         readStagePartnershipObservation(stage.origin, contact);
-      expect(await observeQueue()).toEqual({ count: 0, privateRecord: false });
+      expect(await observeQueue()).toEqual({ count: 0, exactRow: false });
       await expectUnavailablePartnershipIntake(
         page,
         fixture + "/#partner-form",
         contact,
       );
-      expect(await observeQueue()).toEqual({ count: 0, privateRecord: false });
+      expect(await observeQueue()).toEqual({ count: 0, exactRow: false });
       return;
     }
     // The hermetic tier has no api: the intake answers as an unreachable

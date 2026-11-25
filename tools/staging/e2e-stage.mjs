@@ -655,6 +655,79 @@ export function summarizeReport(report) {
   };
 }
 
+/** GitHub refuses a commit-status description longer than this. */
+const STATUS_DESCRIPTION_MAX = 140;
+
+/**
+ * The `stage-suite` commit-status description (#4222): the suite report's counts
+ * plus every live leg's, with the live tiers that failed named in their run order,
+ * e.g. `292 passed, 1 failed (live/academy/default), 838 skipped`. Counting goes
+ * through `summarizeReport`, so a flaky test is a failure here too. `live` is
+ * `[{ name, report }]`; a missing report (a leg skipped or never launched) counts
+ * nothing; a missing suite report (`suite` undefined) prefixes the counts with
+ * `suite report missing; live: `. The description never decides `state` — the
+ * suite step's outcome does.
+ * Past 140 chars, tier names drop from the end into `+N more`.
+ */
+export function suiteStatusDescription({ suite, live = [] } = {}) {
+  const totals = { passed: 0, failed: 0, skipped: 0 };
+  const add = (report) => {
+    const delta = { passed: 0, failed: 0, skipped: 0 };
+    for (const p of summarizeReport(report).projects) {
+      for (const key of Object.keys(delta)) delta[key] += p[key];
+    }
+    for (const key of Object.keys(totals)) totals[key] += delta[key];
+    return delta;
+  };
+  // A suite that died before writing its report must not read as a clean count
+  // of whatever live legs ran.
+  const prefix = suite === undefined ? "suite report missing; live: " : "";
+  add(suite);
+  const failing = live
+    .filter((leg) => add(leg.report).failed > 0)
+    .map((leg) => leg.name);
+  const render = (shown) => {
+    const more = failing.length - shown;
+    const names = failing.slice(0, shown).join(", ");
+    const list =
+      shown === 0
+        ? more > 0
+          ? ` (${more} live tiers)`
+          : ""
+        : ` (${names}${more > 0 ? ` +${more} more` : ""})`;
+    return `${prefix}${totals.passed} passed, ${totals.failed} failed${list}, ${totals.skipped} skipped`;
+  };
+  for (let shown = failing.length; shown > 0; shown -= 1) {
+    const text = render(shown);
+    if (text.length <= STATUS_DESCRIPTION_MAX) return text;
+  }
+  return render(0);
+}
+
+/**
+ * `suiteStatusDescription` over a `--report-dir`: the suite's `results.json` at its
+ * root and each live tier's at `liveLegReporting`'s directory — the files the run
+ * already wrote. An unreadable or absent file counts nothing.
+ */
+export function suiteStatusDescriptionFromDir(reportDir, liveTiers = LIVE_TIERS) {
+  const read = (file) => {
+    try {
+      return JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      return undefined;
+    }
+  };
+  return suiteStatusDescription({
+    suite: read(path.join(reportDir, "results.json")),
+    live: liveTiers.map((tier) => ({
+      name: tier.name,
+      report: read(
+        path.join(liveLegReporting({}, reportDir, tier.name).dir, "results.json"),
+      ),
+    })),
+  });
+}
+
 /** Exact identities, including every outline example, survive collection changes (§6.7). */
 export function keyJourneyVerdict(citations, reports) {
   const collected = new Map();

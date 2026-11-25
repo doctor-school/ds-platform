@@ -2772,9 +2772,33 @@ describe("suiteStatusDescription — the stage-suite commit status (#4222)", () 
   it("a missing suite report and a leg that never wrote one still yield a description", () => {
     assert.equal(
       suiteStatusDescription({ suite: undefined, live: [{ name: "live/doctor/room" }] }),
-      "0 passed, 0 failed, 0 skipped",
+      "suite report missing; live: 0 passed, 0 failed, 0 skipped",
     );
-    assert.equal(suiteStatusDescription({}), "0 passed, 0 failed, 0 skipped");
+    assert.equal(
+      suiteStatusDescription({}),
+      "suite report missing; live: 0 passed, 0 failed, 0 skipped",
+    );
+  });
+
+  it("a missing suite report with green live legs says the report is missing, never a clean count", () => {
+    const text = suiteStatusDescription({
+      suite: undefined,
+      live: [
+        { name: "live/academy/default", report: report("expected", "expected") },
+        { name: "live/doctor/room", report: report("expected", "skipped") },
+      ],
+    });
+    assert.equal(text, "suite report missing; live: 3 passed, 0 failed, 1 skipped");
+  });
+
+  it("a missing suite report with many failing tiers stays within 140 chars", () => {
+    const live = Array.from({ length: 12 }, (_, i) => ({
+      name: `live/doctor/some-long-tier-name-${i}`,
+      report: report("unexpected"),
+    }));
+    const text = suiteStatusDescription({ suite: undefined, live });
+    assert.ok(text.length <= 140, text);
+    assert.match(text, /^suite report missing; live: 0 passed, 12 failed \(.* \+\d+ more\), 0 skipped$/);
   });
 
   it("stays within GitHub's 140-char cap, dropping tier names from the end deterministically", () => {
@@ -2809,7 +2833,7 @@ describe("suiteStatusDescription — the stage-suite commit status (#4222)", () 
       );
       assert.equal(
         suiteStatusDescriptionFromDir(path.join(dir, "absent"), tiers),
-        "0 passed, 0 failed, 0 skipped",
+        "suite report missing; live: 0 passed, 0 failed, 0 skipped",
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });

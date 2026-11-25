@@ -664,7 +664,9 @@ const STATUS_DESCRIPTION_MAX = 140;
  * e.g. `292 passed, 1 failed (live/academy/default), 838 skipped`. Counting goes
  * through `summarizeReport`, so a flaky test is a failure here too. `live` is
  * `[{ name, report }]`; a missing report (a leg skipped or never launched) counts
- * nothing. The description never decides `state` — the suite step's outcome does.
+ * nothing; a missing suite report (`suite` undefined) prefixes the counts with
+ * `suite report missing; live: `. The description never decides `state` — the
+ * suite step's outcome does.
  * Past 140 chars, tier names drop from the end into `+N more`.
  */
 export function suiteStatusDescription({ suite, live = [] } = {}) {
@@ -677,6 +679,9 @@ export function suiteStatusDescription({ suite, live = [] } = {}) {
     for (const key of Object.keys(totals)) totals[key] += delta[key];
     return delta;
   };
+  // A suite that died before writing its report must not read as a clean count
+  // of whatever live legs ran.
+  const prefix = suite === undefined ? "suite report missing; live: " : "";
   add(suite);
   const failing = live
     .filter((leg) => add(leg.report).failed > 0)
@@ -690,7 +695,7 @@ export function suiteStatusDescription({ suite, live = [] } = {}) {
           ? ` (${more} live tiers)`
           : ""
         : ` (${names}${more > 0 ? ` +${more} more` : ""})`;
-    return `${totals.passed} passed, ${totals.failed} failed${list}, ${totals.skipped} skipped`;
+    return `${prefix}${totals.passed} passed, ${totals.failed} failed${list}, ${totals.skipped} skipped`;
   };
   for (let shown = failing.length; shown > 0; shown -= 1) {
     const text = render(shown);

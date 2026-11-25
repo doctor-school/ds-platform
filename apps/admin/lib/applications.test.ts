@@ -66,7 +66,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
     );
   });
 
-  it("EARS-14…EARS-16, EARS-20: the per-application routes are built in one place", () => {
+  it("EARS-14: the per-application routes (status, notes, erasure too) are built in one place", () => {
     expect(applicationsUrl.detail(ID)).toBe(`/v1/admin/applications/${ID}`);
     expect(applicationsUrl.status(ID)).toBe(
       `/v1/admin/applications/${ID}/status`,
@@ -119,7 +119,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
     ).toMatchObject({ takeIntoWork: false, close: false });
   });
 
-  it("EARS-16, EARS-20: an erased application takes no note and no second erasure", () => {
+  it("EARS-20: an erased application takes no note and no second erasure", () => {
     expect(applicationActions(detail())).toMatchObject({
       addNote: true,
       erase: true,
@@ -130,7 +130,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
     });
   });
 
-  it("EARS-15, EARS-16, EARS-20: each refusal reads as what happened", () => {
+  it("EARS-15: each refusal (the note and erasure ones too) reads as what happened", () => {
     expect(
       applicationRefusal({ statusCode: 412, errorCode: "PRECONDITION_FAILED" }),
     ).toBe("stale");

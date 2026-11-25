@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
+import NextLink from "next/link";
 import { useParams } from "next/navigation";
 import { Authenticated, useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Label, Textarea } from "@ds/design-system";
+import { Alert, Badge, Button, Label, Link, Textarea } from "@ds/design-system";
 import {
   APPLICATION_NOTE_MAX,
   type AdminApplicationDetail,
@@ -410,13 +410,9 @@ function ApplicationBody({
                   {t("applications.detail.noteHint")}
                 </p>
                 {noteError ? (
-                  <p
-                    className="text-sm text-destructive"
-                    role="alert"
-                    data-testid="application-note-error"
-                  >
+                  <Alert variant="danger" data-testid="application-note-error">
                     {noteError}
-                  </p>
+                  </Alert>
                 ) : null}
                 <div>
                   <Button
@@ -574,11 +570,10 @@ function ApplicationBody({
               >
                 {detail.otherApplications.map((other) => (
                   <li key={other.id} className="text-sm">
-                    <Link
-                      href={`${APPLICATIONS_ROUTE}/${other.id}`}
-                      className="text-foreground underline underline-offset-4"
-                    >
-                      {formatMskDateTime(other.submittedAt)}
+                    <Link asChild>
+                      <NextLink href={`${APPLICATIONS_ROUTE}/${other.id}`}>
+                        {formatMskDateTime(other.submittedAt)}
+                      </NextLink>
                     </Link>{" "}
                     <span className="text-muted-foreground">
                       ·{" "}

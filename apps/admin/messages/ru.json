@@ -2411,9 +2411,6 @@
       "status": "Статус",
       "statusAny": "Все"
     },
-    "kindFilter": {
-      "author": "Авторы"
-    },
     "statusFilter": {
       "new": "Новые",
       "in_review": "На рассмотрении",

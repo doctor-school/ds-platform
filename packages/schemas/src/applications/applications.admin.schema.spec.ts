@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AdminApplicationListPageSchema,
   AdminApplicationListQuerySchema,
   AdminApplicationNoteCreateSchema,
   AdminApplicationStatusMoveSchema,
@@ -29,6 +30,17 @@ describe("033 admin «Заявки» contract", () => {
       expect(AdminApplicationListQuerySchema.safeParse(bad).success).toBe(
         false,
       );
+  });
+
+  it("EARS-13: a page carries the kinds the «Вид» filter offers, each with its label", () => {
+    const page = { items: [], nextCursor: null };
+    expect(AdminApplicationListPageSchema.safeParse(page).success).toBe(false);
+    expect(
+      AdminApplicationListPageSchema.parse({
+        ...page,
+        kinds: [{ kind: "author", label: "Автор" }],
+      }).kinds,
+    ).toEqual([{ kind: "author", label: "Автор" }]);
   });
 
   it("EARS-15: the status move requires the outcome exactly when closing and never admits `expired`", () => {

@@ -3825,6 +3825,11 @@ export interface components {
                 submittedAt: string;
                 teamNotified: boolean;
             }[];
+            kinds: {
+                /** @enum {string} */
+                kind: "author";
+                label: string;
+            }[];
             nextCursor: string | null;
         };
         AdminApplicationNoteCreateDto: {

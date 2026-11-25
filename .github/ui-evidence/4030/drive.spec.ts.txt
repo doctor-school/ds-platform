@@ -157,8 +157,17 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   await page.getByTestId("application-note-input").fill("Созвониться в четверг");
   await page.getByTestId("application-note-submit").click();
   await expect(page.getByTestId("application-notes")).toContainText("Созвониться в четверг");
+  // A cancelled choice does not survive: «Закрыть» reopens with no outcome.
   await page.getByTestId("application-close").click();
+  await page.getByTestId("application-close-dialog").getByText("Отклонена", { exact: true }).click();
+  await expect(page.getByTestId("application-outcome-declined")).toBeChecked();
+  await page.getByTestId("application-close-dialog").getByRole("button", { name: "Отмена" }).click();
+  await expect(page.getByTestId("application-close-dialog")).toHaveCount(0);
+  await page.getByTestId("application-close").click();
+  await expect(page.getByTestId("application-outcome-declined")).not.toBeChecked();
+  await expect(page.getByTestId("application-outcome-accepted")).not.toBeChecked();
   await expect(page.getByTestId("application-close-submit")).toBeDisabled();
+  console.log("CLOSE DIALOG reopened after «Отмена»: no outcome chosen");
   await page.getByTestId("application-close-dialog").getByText("Принята", { exact: true }).click();
   await expect(page.getByTestId("application-outcome-accepted")).toBeChecked();
   await shot(page, "06-close-dialog");
@@ -226,7 +235,8 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   const readout = page.getByTestId("applications-page").first();
   console.log(`PAGER page 1: ${await readout.innerText()}`);
   await page.getByRole("button", { name: "Вперёд" }).first().click();
-  await expect(readout).toHaveText("Страница 2 из 2");
+  // The branch DB keeps earlier drives' rows, so the count of pages varies.
+  await expect(readout).toContainText("Страница 2");
   console.log(`PAGER page 2: ${await readout.innerText()}`);
   await expect(page.getByTestId("applications-table").getByText(topic(4))).toHaveCount(0);
   await shot(page, "12b-list-page-2");
@@ -243,6 +253,15 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   await page.goto(`/applications/${ids[1]}`);
   await expect(page.getByTestId("application-heading")).toBeVisible();
   await noSideScroll(page, "detail");
+  // The erase button stays inside its applicant card.
+  const fit = await page.getByTestId("application-erase").evaluate((button) => {
+    const card = button.closest("section") ?? button.parentElement!;
+    const b = button.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    return { button: Math.round(b.right), card: Math.round(c.right) };
+  });
+  expect(fit.button).toBeLessThanOrEqual(fit.card);
+  console.log(`390 erase button right ${fit.button} <= card right ${fit.card}`);
   await axe(page, "detail@390");
   await shot(page, "14-detail-390", { dark: true });
   void browser;

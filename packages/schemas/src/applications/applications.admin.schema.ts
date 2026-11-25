@@ -69,11 +69,25 @@ export type AdminApplicationListItem = z.infer<
   typeof AdminApplicationListItemSchema
 >;
 
+/**
+ * EARS-13 — one kind the «Вид» filter offers, with the label the rows carry:
+ * both come from the api's kinds table (033-design «Request kinds»).
+ */
+export const AdminApplicationKindOptionSchema = z.strictObject({
+  kind: ApplicationKindSchema,
+  label: z.string(),
+});
+export type AdminApplicationKindOption = z.infer<
+  typeof AdminApplicationKindOptionSchema
+>;
+
 /** EARS-13 — one page, newest first by (`submittedAt`, `id`). */
 export const AdminApplicationListPageSchema = z.strictObject({
   items: z.array(AdminApplicationListItemSchema),
   /** Opaque cursor of the next (older) page; null on the last page. */
   nextCursor: z.string().nullable(),
+  /** Every kind the queue holds, in the kinds table's order. */
+  kinds: z.array(AdminApplicationKindOptionSchema),
 });
 export type AdminApplicationListPage = z.infer<
   typeof AdminApplicationListPageSchema

@@ -1,8 +1,8 @@
 import {
   AdminApplicationErrorCodes,
-  APPLICATION_KINDS,
   APPLICATION_STATUSES,
   type AdminApplicationDetail,
+  type AdminApplicationKindOption,
   type ApplicationKind,
   type ApplicationOutcome,
   type ApplicationStatus,
@@ -47,9 +47,17 @@ export const applicationsUrl = {
   erase: (id: string) => `${BASE}/${id}/erase-personal-data`,
 };
 
-/** «Вид» — every kind the queue holds (a kind added later joins here). */
-export const APPLICATION_KIND_FILTERS: readonly ApplicationKind[] =
-  APPLICATION_KINDS;
+/**
+ * «Вид» — the label of a kind as the api serves it with every page
+ * (`kinds`), the same kinds-table label the rows carry (033-design «Request
+ * kinds»); the bare kind until a page has come.
+ */
+export function kindOptionLabel(
+  kinds: readonly AdminApplicationKindOption[],
+  kind: ApplicationKind,
+): string {
+  return kinds.find((k) => k.kind === kind)?.label ?? kind;
+}
 
 /** «Статус» — «Новые» / «На рассмотрении» / «Закрытые». */
 export const APPLICATION_STATUS_FILTERS: readonly ApplicationStatus[] =

@@ -283,6 +283,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const res = await list();
       expect(res.statusCode, res.payload).toBe(200);
       const page = AdminApplicationListPageSchema.parse(res.json());
+      // The «Вид» filter reads its options and labels from the same kinds
+      // table the rows' labels come from (033-design «Request kinds»).
+      expect(page.kinds).toEqual([{ kind: "author", label: "Автор" }]);
       const ids = page.items.map((i) => i.id);
       expect(ids.indexOf(newer)).toBeLessThan(ids.indexOf(older));
       expect(ids.indexOf(newer)).toBeGreaterThanOrEqual(0);

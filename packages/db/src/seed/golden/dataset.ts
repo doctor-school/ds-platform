@@ -61,6 +61,10 @@ import {
   buildGoldenCongressVolume,
   type GoldenCongressVolume,
 } from "./congress-volume.js";
+import {
+  buildGoldenApplicationsVolume,
+  type GoldenApplicationsVolume,
+} from "./applications-volume.js";
 import { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
 import { buildGoldenLearners } from "./learning-results.js";
 import {
@@ -183,6 +187,9 @@ export interface GoldenDataset {
   learningSchoolInterests: GoldenLearningVolume["learningSchoolInterests"];
   /** #4172 — the golden doctors' attention-points accruals (`points-ledger.ts`). */
   pointsLedger: GoldenPointsLedger;
+  /** 033 (#4030) — the admin «Заявки» queue and its team notes. */
+  applications: GoldenApplicationsVolume["applications"];
+  applicationNotes: GoldenApplicationsVolume["applicationNotes"];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -253,6 +260,12 @@ export function buildGoldenDataset(
   const learners = buildGoldenLearners(now);
   // #4172 — the congresses at volume, their registrants, submissions and marks.
   const congressVolume = buildGoldenCongressVolume(now, volume);
+  // 033 (#4030) — the application queue, filed by volume doctors and learners.
+  const applicationQueue = buildGoldenApplicationsVolume(now, {
+    doctors: volume.users,
+    learners: learners.users,
+    adminId: admin.id,
+  });
 
   const committeeRole = "congress-program-committee";
   const users: NewUser[] = [
@@ -794,6 +807,7 @@ export function buildGoldenDataset(
     ),
     ...volume.consentRecords,
     ...learners.consentRecords,
+    ...applicationQueue.consentRecords,
   ];
 
   const doctorSpecialties: GoldenDoctorSpecialtyLink[] = [
@@ -1002,6 +1016,8 @@ export function buildGoldenDataset(
       ...congressVolume.congressSubmissionKindSettings,
     ],
     congressSubmissions: congressVolume.congressSubmissions,
+    applications: applicationQueue.applications,
+    applicationNotes: applicationQueue.applicationNotes,
     registrationAttendance: congressVolume.registrationAttendance,
     eventExperts,
     eventProjects,

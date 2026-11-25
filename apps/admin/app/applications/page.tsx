@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Badge, Label, NativeSelect } from "@ds/design-system";
 import type { DataTableColumn } from "@ds/design-system/blocks";
 import type {
+  AdminApplicationKindOption,
   AdminApplicationListItem,
   AdminApplicationListPage,
   ApplicationKind,
@@ -19,12 +20,12 @@ import {
 } from "@/components/admin-data-list";
 import { StatusChip } from "@/components/status-chip";
 import {
-  APPLICATION_KIND_FILTERS,
   APPLICATION_STATUS_FILTERS,
   APPLICATIONS_ROUTE,
   applicationStatusLabelKey,
   applicationsPageCount,
   applicationsUrl,
+  kindOptionLabel,
   rememberNextCursor,
 } from "@/lib/applications";
 import { formatMskDateTime } from "@/lib/msk";
@@ -92,8 +93,14 @@ export default function ApplicationsListPage() {
     setQuery({ ...next, page: Math.min(next.page, cursors.length) });
   };
 
-  const kindLabel = (kind: ApplicationKind) =>
-    t(`applications.kindFilter.${kind}`);
+  // The «Вид» options and labels are the kinds the api serves with every
+  // page; the last ones received stay while the next page is in flight.
+  const [kinds, setKinds] = useState<readonly AdminApplicationKindOption[]>([]);
+  const servedKinds = page?.kinds;
+  useEffect(() => {
+    if (servedKinds) setKinds(servedKinds);
+  }, [servedKinds]);
+  const kindLabel = (kind: ApplicationKind) => kindOptionLabel(kinds, kind);
   const statusFilterLabel = (status: ApplicationStatus) =>
     t(`applications.statusFilter.${status}`);
 
@@ -113,9 +120,9 @@ export default function ApplicationsListPage() {
           }
         >
           <option value="">{t("applications.filters.kindAny")}</option>
-          {APPLICATION_KIND_FILTERS.map((kind) => (
-            <option key={kind} value={kind}>
-              {kindLabel(kind)}
+          {kinds.map((option) => (
+            <option key={option.kind} value={option.kind}>
+              {option.label}
             </option>
           ))}
         </NativeSelect>

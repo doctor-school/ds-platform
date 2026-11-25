@@ -507,9 +507,11 @@ function ApplicationBody({
               />
             )}
             {actions.erase ? (
+              // The label is longer than a 390 px card: it wraps inside the
+              // card instead of running past its edge.
               <Button
                 variant="destructive"
-                className="mt-4"
+                className="mt-4 max-w-full whitespace-normal text-center"
                 disabled={pending}
                 data-testid="application-erase"
                 onClick={onOpenErase}

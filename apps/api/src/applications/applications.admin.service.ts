@@ -80,6 +80,14 @@ function decodeCursor(cursor: string): [string, string] | null {
 
 const submittedAtMicro = sql<string>`to_char(${applications.submittedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/** EARS-13 — the «Вид» filter's options, from the same table as the labels. */
+const KIND_OPTIONS = Object.entries(APPLICATION_KIND_TABLE).map(
+  ([kind, definition]) => ({
+    kind: kind as ApplicationKind,
+    label: definition.label,
+  }),
+);
+
 function kindLabel(kind: string): string {
   return (
     (APPLICATION_KIND_TABLE as Record<string, { label: string }>)[kind]
@@ -183,6 +191,7 @@ export class ApplicationsAdminService {
         rows.length > query.limit && last
           ? encodeCursor(last.submittedAtMicro, last.id)
           : null,
+      kinds: KIND_OPTIONS,
     };
   }
 

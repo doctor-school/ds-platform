@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AdminApplicationDetail } from "@ds/schemas";
 import {
-  APPLICATION_KIND_FILTERS,
   APPLICATION_STATUS_FILTERS,
   applicationActions,
   applicationRefusal,
   applicationStatusLabelKey,
   applicationsPageCount,
   applicationsUrl,
+  kindOptionLabel,
   rememberNextCursor,
 } from "./applications";
 
@@ -79,9 +79,14 @@ describe("033 admin «Заявки» — the pure projections", () => {
     );
   });
 
-  it("EARS-13: the filters are «Вид» over every kind and «Статус» over the three statuses", () => {
-    expect(APPLICATION_KIND_FILTERS).toEqual(["author"]);
+  it("EARS-13: «Статус» filters over the three statuses", () => {
     expect(APPLICATION_STATUS_FILTERS).toEqual(["new", "in_review", "closed"]);
+  });
+
+  it("EARS-13: a «Вид» chip reads the label the api served for the kind, the kind itself before any page came", () => {
+    const kinds = [{ kind: "author" as const, label: "Автор" }];
+    expect(kindOptionLabel(kinds, "author")).toBe("Автор");
+    expect(kindOptionLabel([], "author")).toBe("author");
   });
 
   it("EARS-13: a closed application reads as its outcome, an open one as its status", () => {

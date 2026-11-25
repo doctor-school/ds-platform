@@ -512,6 +512,23 @@
             },
             "type": "array"
           },
+          "kinds": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": ["author"],
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": ["kind", "label"],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "nextCursor": {
             "anyOf": [
               {
@@ -523,7 +540,7 @@
             ]
           }
         },
-        "required": ["items", "nextCursor"],
+        "required": ["items", "nextCursor", "kinds"],
         "type": "object"
       },
       "AdminApplicationNoteCreateDto": {

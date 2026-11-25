@@ -47,70 +47,91 @@ export function ApplicationCloseDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (outcome: AdminApplicationOutcome) => void;
 }) {
-  const t = useTranslations();
-  const [outcome, setOutcome] = useState<AdminApplicationOutcome | null>(null);
-
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         if (pending) return;
-        if (!next) setOutcome(null);
         onOpenChange(next);
       }}
     >
-      <DialogContent data-testid="application-close-dialog">
-        <DialogHeader>
-          <DialogTitle>{t("applications.closeDialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("applications.closeDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <fieldset className="flex flex-col gap-2.5">
-          <legend className="text-sm font-semibold text-foreground">
-            {t("applications.closeDialog.outcomeLabel")}
-          </legend>
-          <div className="flex flex-wrap gap-x-6 gap-y-3">
-            {ADMIN_OUTCOMES.map((value) => (
-              <Radio
-                key={value}
-                name="application-outcome"
-                value={value}
-                checked={outcome === value}
-                disabled={pending}
-                data-testid={`application-outcome-${value}`}
-                onChange={() => setOutcome(value)}
-              >
-                {t(`applications.outcome.${value}`)}
-              </Radio>
-            ))}
-          </div>
-        </fieldset>
-        {error ? (
-          <Alert variant="danger" data-testid="application-close-error">
-            {error}
-          </Alert>
-        ) : null}
-        <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => onOpenChange(false)}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            disabled={pending || outcome === null}
-            data-testid="application-close-submit"
-            onClick={() => {
-              if (outcome) onSubmit(outcome);
-            }}
-          >
-            {t("applications.closeDialog.submit")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      {/* The chosen outcome lives in the content, which unmounts on every
+          close — «Отмена», Escape, a stale 412 or a success alike — so each
+          «Закрыть» opens with nothing chosen. */}
+      {open ? (
+        <CloseDialogContent
+          pending={pending}
+          error={error}
+          onCancel={() => onOpenChange(false)}
+          onSubmit={onSubmit}
+        />
+      ) : null}
     </Dialog>
+  );
+}
+
+function CloseDialogContent({
+  pending,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  pending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (outcome: AdminApplicationOutcome) => void;
+}) {
+  const t = useTranslations();
+  const [outcome, setOutcome] = useState<AdminApplicationOutcome | null>(null);
+
+  return (
+    <DialogContent data-testid="application-close-dialog">
+      <DialogHeader>
+        <DialogTitle>{t("applications.closeDialog.title")}</DialogTitle>
+        <DialogDescription>
+          {t("applications.closeDialog.description")}
+        </DialogDescription>
+      </DialogHeader>
+      <fieldset className="flex flex-col gap-2.5">
+        <legend className="text-sm font-semibold text-foreground">
+          {t("applications.closeDialog.outcomeLabel")}
+        </legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-3">
+          {ADMIN_OUTCOMES.map((value) => (
+            <Radio
+              key={value}
+              name="application-outcome"
+              value={value}
+              checked={outcome === value}
+              disabled={pending}
+              data-testid={`application-outcome-${value}`}
+              onChange={() => setOutcome(value)}
+            >
+              {t(`applications.outcome.${value}`)}
+            </Radio>
+          ))}
+        </div>
+      </fieldset>
+      {error ? (
+        <Alert variant="danger" data-testid="application-close-error">
+          {error}
+        </Alert>
+      ) : null}
+      <DialogFooter>
+        <Button variant="outline" disabled={pending} onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          disabled={pending || outcome === null}
+          data-testid="application-close-submit"
+          onClick={() => {
+            if (outcome) onSubmit(outcome);
+          }}
+        >
+          {t("applications.closeDialog.submit")}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 

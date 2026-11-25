@@ -186,7 +186,7 @@ The specialty select lists the whole `specialties_minzdrav` book (the canvas sho
 - **030 #3505** (public catalog read) — merged; EARS-21 reads it.
 - **030 #3506** (shared project card, `/projects`) — the «Project links of the page» package (#4033) is `blocked_by` #3506: the card and its target page must exist before the page links to them.
 - **030 #3506 / #3507 edges on #1802** — 030 blocked its catalog and project-page packages on this parent so no link points at a missing `/apply`. Kept on the parent they would deadlock with the project-links package (which waits for #3506 and must close before #1802 does); they are rewired to the «Подать заявку» page Issue #4031, the precise prerequisite.
-- **034 #1824** — `blocked_by` the queue-core Issue #4028 (034 slice 1 adds its kind to the queue). #3506 / #3507 stay `blocked_by` #1824 (the 034 parent): when the 034 triplet opens its own project-links child after #3506, those two edges must move from #1824 to the 034 page Issue the way this spec moved them from #1802, or the same deadlock returns.
+- **034 #1824** — `blocked_by` the queue-core Issue #4028 (034 slice 1 adds its kind to the queue). #3506 / #3507 are `blocked_by` the 034 «Инвесторам» page Issue #4238, not the 034 parent #1824: the 034 projects-link child (#4239) waits for #3506, so edges on the parent would return the same deadlock this spec removed from #1802.
 - **003 / 021** sign-in and registration with a return target, **bot protection** (`apps/api/src/bot-protection/`), the **mailer** chain, **047** admin access, **010** audit, **`specialties_minzdrav`** — on `main`, no edge.
 
 ## Delivery slices

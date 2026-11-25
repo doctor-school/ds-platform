@@ -3,6 +3,7 @@ title: "034 — Investors, slice 1: the «Как это работает» page 
 description: "Requirements for slice 1 of feature 034: the Academy page academy.doctor.school/investors that explains how an organisation takes part (it invests in a project, experts produce education, doctors learn, the investor sees the result), what the investor gets and how the relationship is formalised (a contract outside the platform with transparent accounting on it); the «Обсудить проект — оставить заявку» form a representative sends without an account, with the purpose-bound personal-data consent, inline validation, a failure that keeps the input and one request per submission; the confirmation state; the investor request kind of the one 033 application queue — public bot-protected intake, the «Заявка получена» receipt to the work email, the team notification, the admin list and detail, statuses, notes, retention and erasure exactly as for every queue kind."
 slug: 034-investment-marketplace
 status: Draft
+issues: [4236, 4237, 4238, 4239, 4240]
 surface: user-facing
 storefronts: academy-only
 storefronts_reason: "The investor page is an Academy page feeding the apps/admin queue of feature 033; the investor cabinets are on the Academy (ADR-0016 §4), and the doctor storefront has no investor surface (EARS-2)."
@@ -126,10 +127,10 @@ lang: en
 
 Each Issue is a sub-issue of #1824 and ships its UI with its backend; slices, dependencies and their rationale: `034-design.md` «Delivery slices». Issue numbers are written back by `open-ears-issues`.
 
-| EARS                                          | Work package                                                                                                                           |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| EARS-4 (server), EARS-6, EARS-9, EARS-12      | **Investor request kind** — enum member, kinds-table entry, migration, public intake with consent, bot protection, receipt, matrix row |
-| EARS-10                                       | **Investor requests in the admin queue** — kind label, filter, detail field labels                                                     |
-| EARS-1…EARS-5, EARS-7, EARS-8, EARS-13 (page) | **«Инвесторам» page** — route, doctor-host absence, blocks, form, states; carries the page's Stage A                                   |
-| EARS-11                                       | **Projects link of the page** — «Во что инвестировать — Проекты» after the 030 catalog; V-10                                           |
-| V-6 / V-7 / V-8 / V-9 journeys                | **Browser journeys** — CI Playwright Academy, admin and doctor-host journeys; integration Issue                                        |
+| EARS                                          | Issue | Work package                                                                                                                           |
+| --------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| EARS-4 (server), EARS-6, EARS-9, EARS-12      | #4236 | **Investor request kind** — enum member, kinds-table entry, migration, public intake with consent, bot protection, receipt, matrix row |
+| EARS-10                                       | #4237 | **Investor requests in the admin queue** — kind label, filter, detail field labels                                                     |
+| EARS-1…EARS-5, EARS-7, EARS-8, EARS-13 (page) | #4238 | **«Инвесторам» page** — route, doctor-host absence, blocks, form, states; carries the page's Stage A                                   |
+| EARS-11                                       | #4239 | **Projects link of the page** — «Во что инвестировать — Проекты» after the 030 catalog; V-10                                           |
+| V-6 / V-7 / V-8 / V-9 journeys                | #4240 | **Browser journeys** — CI Playwright Academy, admin and doctor-host journeys; integration Issue                                        |

@@ -136,13 +136,13 @@ Feature: 033 — Author application: the «Подать заявку» page and 
     Then the application is closed with the outcome «Истекла» and no acting administrator
     And one year after that closing the daily purge erases its personal data
 
-  @EARS-24
+  @EARS-24 @rule @proof:api
   Scenario: Erasing the applicant's account erases the applications
     Given the expert "anna@example.test" has one open and one closed application
     When the account of "anna@example.test" is erased
     Then both applications show «Персональные данные стёрты»
 
-  @EARS-25
+  @EARS-25 @rule @proof:api
   Scenario: The change audit never holds the application's content
     Given the expert "anna@example.test" has sent an application with the topic "Ортобиология в амбулаторной практике"
     And a platform administrator has added a note and erased the applicant's personal data

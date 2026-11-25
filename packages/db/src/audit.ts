@@ -10,7 +10,8 @@
  * As-built PD-bearing tables: `users`, `consent_records`, `registrations`,
  * `congress_submissions` (046: `authors`), `learning_feedback` (024: `text`,
  * the doctor's free-text comment on a step — it can carry anything the doctor
- * types, names and contacts included); a
+ * types, names and contacts included), `applications` / `application_notes`
+ * (033: the request content, contact, subject line and the team's notes); a
  * future table the ADR-0009 retention matrix classifies as PD-bearing is added
  * here AND in a migration regenerating `audit_pd_columns()`.
  *
@@ -31,6 +32,10 @@ export const AUDIT_PD_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   registrations: ["answers"],
   congress_submissions: ["authors"],
   learning_feedback: ["text"],
+  // 033 EARS-25: the application queue — the request content, the no-account
+  // contact and the admin subject line; a note may name the applicant.
+  applications: ["payload", "contact", "subject_line"],
+  application_notes: ["body"],
 };
 
 /**

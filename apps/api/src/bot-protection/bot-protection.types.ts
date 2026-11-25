@@ -34,7 +34,11 @@ export type BotProtectionAction =
   // as its own action because it is the one bot-protected surface that belongs
   // to a host outside the platform (the congress site), and an action-scoped
   // provider added later must be able to tell the two doors apart.
-  | "congress-sign-up";
+  | "congress-sign-up"
+  // 033 EARS-7 (#4028): the Academy author application intake. Signed in, but
+  // gated anyway so every intake of the application queue is bot-protected
+  // without a per-kind exception (033-design «Lead decisions» 10).
+  | "application";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

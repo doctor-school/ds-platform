@@ -538,6 +538,24 @@
 032 | The administrator extends the role list and cannot retire a role still held
 032 | The partners already entered appear as investor organizations
 032 | The registry list is searched and filtered on a narrow screen
+033 | A closed application cannot be reopened | #4030
+033 | A failed team notification never loses the application | #4029
+033 | A guest opens the page from the home and meets the account gate | #4031
+033 | A missing topic is reported and the rest of the input is kept | #4031
+033 | A server failure keeps the input and a retry creates one application | #4031
+033 | A signed-in expert sends an application | #4031
+033 | After sign-in the expert returns to the form | #4031
+033 | An administrator works an application through to an outcome | #4030
+033 | An application nobody took up expires and is later erased | #4032
+033 | An expert with an application in work can send another one | #4031
+033 | Interim partnership requests are in the same queue | #4032
+033 | The applicant's personal data is erased on request | #4030
+033 | The application cannot be sent without the consent | #4031
+033 | The doctor storefront has no application page | #4031
+033 | The page and the queue work on a phone | #4031
+033 | The queue is refused to anyone but a platform administrator with the second factor | #4030
+033 | With no platform administrator the application is kept and marked | #4029
+033 | «Пока не готовы?» leads to the projects | #4033
 044 | A registration with no answers payload is never marked
 044 | A signed-in doctor registers from the platform feed
 044 | An email the platform already knows is attached, not rewritten and not disclosed

@@ -4,7 +4,9 @@
 # ADR-0012 §5); incremental every 6h at 00/06/12/18 (no overlap with the full).
 # Offsite repos (#3670, only those pgbackrest-offsite.sh enabled): a weekly full on
 # Sunday 04:30 and an incremental 04:30 Mon-Sat — after the 02:30 full, before the
-# 06:00 incremental; their 35-day time retention lives in pgbackrest.conf.
+# 06:00 incremental; their 35-day time retention lives in pgbackrest.conf. Each job
+# takes only its own repo's backup lock (backup.sh: --repo=1 / --repo=<N>), so an
+# offsite backup still running at 06:00 never blocks the repo1 incremental.
 # Output → the container log (docker compose logs pgbackrest) + /var/log/pgbackrest.
 30 2 * * * /usr/local/bin/backup.sh full >> /var/log/pgbackrest/cron.log 2>&1
 0 0,6,12,18 * * * /usr/local/bin/backup.sh incr >> /var/log/pgbackrest/cron.log 2>&1

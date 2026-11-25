@@ -164,7 +164,7 @@ test.describe("033 «Подать заявку» — live sign-in round trip", (
     await expectOpenForm(page, email);
   });
 
-  test("EARS-9 / EARS-10: a real application is sent and the next visit shows the repeat banner", async ({
+  test("EARS-9/10: a real application is sent and the next visit shows the repeat banner", async ({
     page,
   }) => {
     expect(account, "the registration journey runs first").not.toBeNull();

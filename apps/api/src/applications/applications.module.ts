@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
 
 import { ApplicationsMeController } from "./applications.me.controller.js";
+import { ApplicationsPartnershipService } from "./applications.partnership.service.js";
+import { ApplicationsPublicController } from "./applications.public.controller.js";
 import { ApplicationsPurge } from "./applications.purge.js";
 import { ApplicationsService } from "./applications.service.js";
+import { PartnershipRecordsImport } from "./import-partnership-records.js";
 import {
   APPLICATIONS_CLOCK,
   type ApplicationsClock,
@@ -14,9 +17,11 @@ import {
  * on this module's service and tables.
  */
 @Module({
-  controllers: [ApplicationsMeController],
+  controllers: [ApplicationsMeController, ApplicationsPublicController],
   providers: [
     ApplicationsService,
+    ApplicationsPartnershipService,
+    PartnershipRecordsImport,
     ApplicationsPurge,
     {
       provide: APPLICATIONS_CLOCK,

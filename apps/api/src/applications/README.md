@@ -4,13 +4,16 @@ Backend core of the application queue (`033-design.md` «Capability owner»): th
 tables `applications` / `application_notes` (`packages/db/src/schema/applications.ts`),
 the contract in `packages/schemas/src/applications/`, and this module.
 
-| File                            | What it owns                                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `applications.kinds.ts`         | `APPLICATION_KIND_TABLE` — per kind: payload/contact schema, subject line, intake, consent purpose, `receiptTo` |
-| `applications-consent.ts`       | the current consent version tag, stamped from the `@ds/legal-content` document (edition + sha256)               |
-| `applications.service.ts`       | the author intake; `eraseApplication` (EARS-20); `eraseApplicationsOfAccount` (EARS-24); the purge steps        |
-| `applications.purge.ts`         | the daily retention pass: expiry (EARS-23), then erasure one year after closing (EARS-20)                       |
-| `applications.me.controller.ts` | `POST /v1/me/applications/author` (EARS-6, EARS-7)                                                              |
+| File                                           | What it owns                                                                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `applications.kinds.ts`                        | `APPLICATION_KIND_TABLE` — per kind: payload/contact schema, subject line, intake, consent purpose, `receiptTo` |
+| `applications-consent.ts`                      | the current consent version tag, stamped from the `@ds/legal-content` document (edition + sha256)               |
+| `applications.service.ts`                      | the author intake; `eraseApplication` (EARS-20); `eraseApplicationsOfAccount` (EARS-24); the purge steps        |
+| `applications.purge.ts`                        | the daily retention pass: expiry (EARS-23), then erasure one year after closing (EARS-20)                       |
+| `applications.me.controller.ts`                | `POST /v1/me/applications/author` (EARS-6, EARS-7)                                                              |
+| `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); 034's investor intake joins it                            |
+| `applications.partnership.service.ts`          | the partnership intake: replay lookup, fixed consent tag, one row with its contact                              |
+| `import-partnership-records.ts` (+ `.main.ts`) | the one-off import of the interim form's stored records (EARS-19)                                               |
 
 ## Intake
 
@@ -24,6 +27,30 @@ check (`400` on `specialtyCode` for an unknown code or the «Другое» row)
 `applications` row linked to it. A replay by the same account with the same
 body answers the stored `{ id, submittedAt }` and writes nothing; any other
 reuse of the key is `422 IDEMPOTENCY_KEY_REUSED`.
+
+`POST /v1/public/applications/partnership` — the Academy home's partnership
+form, no account, `@BotProtected("partnership")`, the same `Idempotency-Key`
+rules. Body `{ name, companyOrClinic?, contact, role, consentVersion }`: the
+contact is an email or a Telegram `@username`, the role one of the form's five,
+`consentVersion` must be `academy-partnership-v1` (`400` on `consent`
+otherwise). The row carries `payload { name, companyOrClinic?, role }`,
+`contact { emailOrTelegram }`, the subject line (company, else name), consent
+purpose `academy_partnership_contact` with that tag and no `consent_records`
+row, and `receipt_notice = not_applicable` (the form promises no letter). The
+answer and the replay's is `201 { id }`.
+
+## Import of the interim records (EARS-19)
+
+`pnpm --filter @ds/api applications:import-partnership <dir>` (in the image:
+`node dist/applications/import-partnership-records.main.js <dir>`) reads every
+`<id>.json` the retired portal store wrote and inserts one `partnership` row per
+valid record with `legacy_record_id = id`, `submitted_at` = the record's
+`acceptedAt`, its consent tag, status `new` (the EARS-23 clock runs from the
+original submission), `team_notice = imported` (never notified, no «Команда не
+уведомлена» mark) and `receipt_notice = not_applicable`; on a known
+`legacy_record_id` it does nothing. It prints `{ imported, alreadyPresent,
+invalid: [file names] }`. The prod procedure is in
+`operations/academy-partnership-submissions.md`.
 
 ## Retention and erasure
 
@@ -64,4 +91,5 @@ add the kind's intake. Storage, retention, erasure and audit need no change.
 Notifications (EARS-11, EARS-12) — #4029; admin queue (EARS-13…17, the
 `erase-personal-data` endpoint over `ApplicationsService.eraseOnRequest`) —
 #4030; the «Подать заявку» page and `GET /v1/me/applications` — #4031; the
-interim partnership intake and import — #4032; the browser journeys — #4034.
+home form re-pointed at the partnership intake and the file store retired —
+#4032 (its portal slice); the browser journeys — #4034.

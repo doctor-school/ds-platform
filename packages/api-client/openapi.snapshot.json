@@ -9090,6 +9090,54 @@
         "required": ["action", "label", "href", "reason", "presenceCount"],
         "type": "object"
       },
+      "PartnershipRequestIntakeDto": {
+        "additionalProperties": false,
+        "properties": {
+          "companyOrClinic": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "consentVersion": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "contact": {
+            "maxLength": 254,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "Эксперт",
+              "Партнёр",
+              "Участник подкаста",
+              "Соавтор направления",
+              "Компания"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["name", "contact", "role", "consentVersion"],
+        "type": "object"
+      },
+      "PartnershipRequestIntakeResultDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
       "PasswordResetRequestDto": {
         "properties": {
           "captchaToken": {
@@ -16684,6 +16732,55 @@
           }
         },
         "tags": ["SpecialtyChoiceMe"]
+      }
+    },
+    "/v1/public/applications/partnership": {
+      "post": {
+        "operationId": "ApplicationsPublicController_submitPartnership",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnershipRequestIntakeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnershipRequestIntakeResultDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["ApplicationsPublic"]
       }
     },
     "/v1/public/directions/{idOrSlug}/events": {

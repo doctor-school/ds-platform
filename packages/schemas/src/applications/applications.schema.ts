@@ -5,12 +5,12 @@ import { z } from "zod";
  * «Request kinds (the 034 seam)»).
  *
  * `ApplicationKind` is CLOSED: a kind exists only once its payload schema, its
- * intake and its entry in the api's `APPLICATION_KINDS` table exist. The queue
- * core (#4028) ships `author`; the interim partnership intake (#4032) and 034's
- * investor intake (#1824) each extend this enum, the api table and the
- * `applications_kind_check` constraint in their own migration.
+ * intake and its entry in the api's `APPLICATION_KINDS` table exist: `author`
+ * (EARS-6, EARS-7) and `partnership` (the Academy home form, EARS-18). 034's
+ * investor intake (#1824) extends this enum, the api table and the
+ * `applications_kind_check` constraint in its own migration.
  */
-export const APPLICATION_KINDS = ["author"] as const;
+export const APPLICATION_KINDS = ["author", "partnership"] as const;
 export const ApplicationKindSchema = z.enum(APPLICATION_KINDS);
 export type ApplicationKind = z.infer<typeof ApplicationKindSchema>;
 
@@ -57,12 +57,18 @@ export type AdminApplicationStatusMove = z.infer<
   typeof AdminApplicationStatusMoveSchema
 >;
 
-/** Team-notice outcome (EARS-11); written by the notifications slice (#4029). */
+/**
+ * Team-notice outcome (EARS-11); written by the notifications slice (#4029).
+ * `imported` marks a row the one-off partnership import brought in (EARS-19):
+ * the team never gets a notice for it and the list shows no «Команда не
+ * уведомлена» mark on it, unlike `pending` / `failed` / `skipped`.
+ */
 export const APPLICATION_TEAM_NOTICES = [
   "pending",
   "sent",
   "failed",
   "skipped",
+  "imported",
 ] as const;
 /** Receipt outcome (EARS-12); written by the notifications slice (#4029). */
 export const APPLICATION_RECEIPT_NOTICES = [

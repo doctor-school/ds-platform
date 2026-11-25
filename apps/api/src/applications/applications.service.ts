@@ -45,7 +45,7 @@ type Writer = AuditedTransaction | Db;
 /** The erasure tombstone of 033-design «Data model» (EARS-20). */
 const ERASED_PAYLOAD = { erased: true } as const;
 
-function refusal(
+export function refusal(
   status: 400 | 422 | 428 | 503,
   code: ApplicationProblemCode,
   field?: string,
@@ -58,7 +58,7 @@ function refusal(
 }
 
 /** Drop `undefined` members so the stored jsonb and the replay compare equal. */
-function defined<T extends object>(value: T): T {
+export function defined<T extends object>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== undefined),
   ) as T;

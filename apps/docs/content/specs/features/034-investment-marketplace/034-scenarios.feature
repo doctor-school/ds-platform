@@ -14,13 +14,12 @@ Feature: 034 — Investors, slice 1: the «Как это работает» page
     Given the personal-data consent of purpose "investor-request-personal-data" has a current version
     And an active staff account holds the role "platform_admin"
 
-  @EARS-1 @EARS-3 @EARS-4 @EARS-6 @EARS-8 @EARS-9 @EARS-11 @journey
+  @EARS-1 @EARS-3 @EARS-4 @EARS-6 @EARS-8 @EARS-9 @journey
   Scenario: A representative reads the page and sends a request
     Given a visitor is not signed in
     When the visitor opens "/investors" on the Academy
     Then the page shows «Как это работает», «Что получает инвестор», «Как оформляются отношения» and «Следующий шаг»
     And the page shows no marketplace, no product card and no «Организация, не персона»
-    And «Следующий шаг» shows «Во что инвестировать — Проекты» linking to "/projects"
     When the visitor fills «Организация» with "ООО «Партнёр А»", «ФИО» with "Иванова Анна Сергеевна" and «Рабочая почта» with "a.ivanova@partner-a.test"
     And ticks the personal-data consent
     And taps «Отправить заявку»
@@ -28,6 +27,14 @@ Feature: 034 — Investors, slice 1: the «Как это работает» page
     And one application of kind "investor" with status "new" is stored with the consent purpose and version
     And every active platform administrator receives one notification that names neither the organisation nor the representative
     And "a.ivanova@partner-a.test" receives the email «Заявка получена» that names no organisation and no task
+
+  # Owned by the «Projects link of the page» package (034-design.md «Delivery slices» 4), after 030 #3506.
+  @EARS-11 @journey
+  Scenario: «Следующий шаг» leads to the projects
+    Given the Academy serves the public project catalog at "/projects"
+    When a visitor opens "/investors"
+    Then «Следующий шаг» shows «Во что инвестировать — Проекты» linking to "/projects"
+    And the page shows no link to a partners catalog, «Документы и лицензия» or an investor cabinet
 
   @EARS-5 @journey
   Scenario: A missing organisation is reported and the rest of the input is kept

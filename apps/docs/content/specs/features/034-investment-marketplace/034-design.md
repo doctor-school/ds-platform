@@ -72,7 +72,7 @@ The sends are 033's (#4029): the investor kind only supplies `receiptTo: contact
 
 ### Academy (canvas, Stage A pending)
 
-Canvas `design-source/academy-invest.dc.html` (owner-drawn R4, vendored in #1451), switches «Объём» = «срез 1», «Заявка» = А, «Вход» = гость. The page look is a sponsor-facing screen: its Stage A is the owner's pick on the page Issue (AGENTS.md §6), which also settles the sent-state text (decision 6).
+Canvas `design-source/academy-invest.dc.html` (owner-drawn R4, vendored in #1451), switches «Объём» = «срез 1», «Заявка» = А, «Вход» = гость. The page look is a sponsor-facing screen: its Stage A is the owner's pick on the page Issue (AGENTS.md §6). Stage-A items: the page look; the sent-state text (decision 6); the «Как оформляются отношения» line «внесено → фонд → начисления» (EARS-1).
 
 | State           | Canvas branch                                                                                     | Notes                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -82,7 +82,7 @@ Canvas `design-source/academy-invest.dc.html` (owner-drawn R4, vendored in #1451
 | `network-error` | not drawn — approved-non-canvas, the 033 «сбой сети» state                                        | banner + «Попробовать ещё раз», the same package block as 033 EARS-8 (EARS-7)                                 |
 | `sent`          | `formSent`                                                                                        | «Запрос отправлен», the Stage-A text, «Отправить ещё одну заявку» (EARS-8)                                    |
 
-The «Как оформляются отношения» line «внесено → фонд → начисления» of the canvas names the steps of the project accounting the page explains; it promises no payment on the platform and stays canvas content for Stage A.
+The «Как оформляются отношения» line «внесено → фонд → начисления» of the canvas names the steps of the project accounting the page explains; it promises no payment on the platform and is built as drawn, subject to the Stage-A pick (EARS-1).
 
 ### Admin (approved-non-canvas, 033)
 
@@ -110,7 +110,7 @@ Investor requests are rows of `applications` and follow its matrix row (033 desi
 1. **Investor request kind** (EARS-4 server, EARS-6, EARS-9, EARS-12) — after #4028 and #4029. Head.
 2. **Investor requests in the admin queue** (EARS-10) — after 1 and #4030.
 3. **«Инвесторам» page** (EARS-1…EARS-5, EARS-7, EARS-8, EARS-13) — after 1 and #4031; carries the page's Stage A.
-4. **Projects link of the page** (EARS-11) — after 3 and 030 #3506.
+4. **Projects link of the page** (EARS-11, V-10) — after 3 and 030 #3506; its own scenario, outside the browser journeys.
 5. **Browser journeys** (V-6…V-9) — integration, after 2 and 3.
 
 ## Lead decisions
@@ -120,7 +120,7 @@ The PRD's _agent-proposed — UNCONFIRMED_ and lead items, specified as the PRD 
 1. **Route** `academy.doctor.school/investors` — the page and the persona say «Инвесторам» (PRD naming); the home's «Партнёрам» card and «Инвесторам» entries both point at it (EARS-1, EARS-2).
 2. **No account** (US-4): the form is open to every visitor; the cabinet is 035's (EARS-3).
 3. **Field set and bounds** follow the canvas: organisation, full name, work email required; role, phone and task optional (the canvas validates none of the three); bounds as 033 (EARS-3).
-4. **Consent** (US-5, lead-asserted 152-ФЗ constraint): its own purpose `investor-request-personal-data`, the canvas text and the existing `/documents/privacy-policy`; recorded on the row like the 033 partnership kind, since `consent_records` needs an account (EARS-4).
+4. **Consent** (US-5, lead-asserted 152-ФЗ constraint): its own purpose `investor-request-personal-data`, the canvas text and the existing `/documents/privacy-policy`; recorded on the row like the 033 partnership kind (`033-design.md`), since `consent_records.user_id` is NOT NULL and the request has no account (EARS-4).
 5. **Failure state** (US-6): the canvas draws none; the 033 «сбой сети» block with its wording, so the queue's two public pages fail the same way (EARS-7).
 6. **Sent-state text** (US-7): the owner's canvas text until the Stage A pick; the agent lead's canvas variant is shown beside it at Stage A (EARS-8; PRD «Product acceptance criteria»).
 7. **Receipt to the work email** through the 033 `contact-email` resolver, with the generic body (EARS-9).

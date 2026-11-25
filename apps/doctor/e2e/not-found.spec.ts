@@ -36,6 +36,14 @@ for (const viewer of ["guest", "doctor"] as const) {
         });
       }
 
+      // 033 EARS-2 — the author-application page lives only on the Academy
+      // host; `doctor.school/apply` is this storefront's not-found page.
+      test("EARS-2: /apply is the doctor storefront not-found page", async ({
+        page,
+      }) => {
+        await expectStorefrontNotFound(page, "/apply", viewer);
+      });
+
       // #2478 — a route's own `notFound()` inside the `(storefront)` group
       // (the event page on an unknown slug) renders inside the group layout's
       // frame, never a second one. The route streams (`loading.tsx`), so its

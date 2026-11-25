@@ -198,6 +198,10 @@ export function FeedRail({
   const [cursor, setCursor] = React.useState<string | null>(
     initialPage?.nextCursor ?? null,
   );
+  // The cursor the next load reads, set the moment a page lands: a scroll
+  // handler from the render before that page (a smooth scroll's next frame)
+  // must not request the same cursor again (#4230).
+  const cursorRef = React.useRef<string | null>(cursor);
   const [more, setMore] = React.useState<More>("idle");
   const moreRef = React.useRef<More>("idle");
   const [liveMsg, setLiveMsg] = React.useState("");
@@ -224,6 +228,7 @@ export function FeedRail({
       (page) => {
         if (!alive.current) return;
         setItems(page.data);
+        cursorRef.current = page.nextCursor;
         setCursor(page.nextCursor);
         setEdges({ atStart: true, atEnd: false });
         setPhase("ready");
@@ -241,7 +246,8 @@ export function FeedRail({
   }, [initialPage, readFirstPage]);
 
   const loadMore = () => {
-    if (phase !== "ready" || cursor === null || moreRef.current !== "idle")
+    const from = cursorRef.current;
+    if (phase !== "ready" || from === null || moreRef.current !== "idle")
       return;
     moreRef.current = "loading";
     setMore("loading");
@@ -249,10 +255,11 @@ export function FeedRail({
     const limit = phone
       ? FEED_RAIL_SIZES.nextPage.phone
       : FEED_RAIL_SIZES.nextPage.desktop;
-    loadPage({ cursor, limit }).then(
+    loadPage({ cursor: from, limit }).then(
       (page) => {
         if (!alive.current) return;
         moreRef.current = "idle";
+        cursorRef.current = page.nextCursor;
         setItems((prev) => [...prev, ...page.data]);
         setCursor(page.nextCursor);
         setMore("idle");

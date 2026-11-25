@@ -1,5 +1,9 @@
 import { Module } from "@nestjs/common";
 
+import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
+import { ApplicationsAdminController } from "./applications.admin.controller.js";
+import { ApplicationAdminProblemFilter } from "./applications.admin.errors.js";
+import { ApplicationsAdminService } from "./applications.admin.service.js";
 import { ApplicationsMeController } from "./applications.me.controller.js";
 import { ApplicationsPartnershipService } from "./applications.partnership.service.js";
 import { ApplicationsPublicController } from "./applications.public.controller.js";
@@ -17,8 +21,16 @@ import {
  * on this module's service and tables.
  */
 @Module({
-  controllers: [ApplicationsMeController, ApplicationsPublicController],
+  // TaxonomyModule: the 012 admin idempotency service and problem filter (#4030).
+  imports: [TaxonomyModule],
+  controllers: [
+    ApplicationsMeController,
+    ApplicationsPublicController,
+    ApplicationsAdminController,
+  ],
   providers: [
+    ApplicationsAdminService,
+    ApplicationAdminProblemFilter,
     ApplicationsService,
     ApplicationsPartnershipService,
     PartnershipRecordsImport,

@@ -728,6 +728,37 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/organisation-roles/${ABSENT_ID}`,
     payload: {},
   },
+  // 033 EARS-13…EARS-17, EARS-20 (#4030) — the admin application queue. Same
+  // floor as every admin entity: refused before validation, idempotency or
+  // If-Match.
+  {
+    endpoint: "GET /v1/admin/applications",
+    method: "GET",
+    url: "/v1/admin/applications",
+  },
+  {
+    endpoint: "GET /v1/admin/applications/:id",
+    method: "GET",
+    url: `/v1/admin/applications/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/applications/:id/status",
+    method: "POST",
+    url: `/v1/admin/applications/${ABSENT_ID}/status`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/applications/:id/notes",
+    method: "POST",
+    url: `/v1/admin/applications/${ABSENT_ID}/notes`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/applications/:id/erase-personal-data",
+    method: "POST",
+    url: `/v1/admin/applications/${ABSENT_ID}/erase-personal-data`,
+    payload: {},
+  },
   // 030 EARS-2/EARS-3/EARS-18 (#3503) — a project's result set and the
   // output-kind reference book. Same floor as the project entity: refused
   // before validation, idempotency or If-Match.

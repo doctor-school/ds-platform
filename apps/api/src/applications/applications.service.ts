@@ -317,9 +317,9 @@ export class ApplicationsService {
   }
 
   /**
-   * EARS-20 — the administrator erasure on the subject's request; the admin
-   * endpoint (`erase-personal-data`, the admin-queue slice) maps `false` to
-   * `409 ALREADY_ERASED`.
+   * EARS-20 — one erasure on request in its own transaction (tests, tooling).
+   * The admin `erase-personal-data` endpoint runs `eraseApplication` inside
+   * its own idempotent command (`applications.admin.service.ts`).
    */
   async eraseOnRequest(id: string): Promise<boolean> {
     return withRequestAuditContext(this.db, (tx) =>

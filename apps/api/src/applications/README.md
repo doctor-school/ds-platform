@@ -14,6 +14,10 @@ the contract in `packages/schemas/src/applications/`, and this module.
 | `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); 034's investor intake joins it                            |
 | `applications.partnership.service.ts`          | the partnership intake: replay lookup, fixed consent tag, one row with its contact                              |
 | `import-partnership-records.ts` (+ `.main.ts`) | the one-off import of the interim form's stored records (EARS-19)                                               |
+| `applications.admin.controller.ts`             | the admin «Заявки» routes `/v1/admin/applications*` (EARS-13…EARS-17, EARS-20)                                  |
+| `applications.admin.service.ts`                | the admin list, detail, status move, notes and erasure on request                                               |
+| `applications.admin-view.ts`                   | `APPLICATION_ADMIN_VIEWS` — per kind: the detail's labelled fields and the no-account contact                   |
+| `applications.admin.errors.ts`                 | `409 APPLICATION_TRANSITION_NOT_ALLOWED` / `409 ALREADY_ERASED` and the scoped problem filter                   |
 
 ## Intake
 
@@ -73,6 +77,35 @@ The purge runs one minute after boot and then every 24 hours (a release
 restarts the api, so an interval alone could never fire); both steps are
 idempotent conditional updates.
 
+## Admin queue (EARS-13…EARS-17)
+
+`platform_admin` in the 011 admin session with the second factor, CSRF on the
+mutations (the global admin guards, before validation); the 012 admin problem
+shape (`TaxonomyProblemFilter`, extended for the two queue codes).
+
+- `GET /v1/admin/applications?kind&status&cursor&limit` — `{ items, nextCursor }`,
+  newest first by `(submitted_at, id)`; the cursor is opaque (microsecond
+  keyset, `400 CURSOR_INVALID` otherwise). `teamNotified` is `false` for any
+  team notice that is not `sent` («Команда не уведомлена»).
+- `GET /v1/admin/applications/{id}` — the labelled fields, the consent, the
+  notice outcomes, the applicant (an author's account read LIVE: current
+  display name, email, phone — never copied), the notes oldest first, the
+  subject's other applications; `ETag: W/"<version>"`; unknown id `404`.
+- `POST …/{id}/status` — `Idempotency-Key` + `If-Match`; `{ status, outcome? }`;
+  only `new → in_review`, `new → closed`, `in_review → closed`, otherwise
+  `409 APPLICATION_TRANSITION_NOT_ALLOWED`; outcome exactly on `closed`
+  (`400`); stale `412`. Stores the actor (`users.id`) and the time.
+- `POST …/{id}/notes` — `Idempotency-Key`; `{ body }` trimmed 1–2000; append
+  only. An erased application takes no note (`409 ALREADY_ERASED`): a note
+  written after the erasure would never be erased.
+- `POST …/{id}/erase-personal-data` — `Idempotency-Key`; the EARS-20
+  tombstone (`eraseApplication`) in any status; a second call
+  `409 ALREADY_ERASED`.
+
+Every command locks the row, writes in the request audit context (the 010
+row carries the administrator) and completes its `idempotency_keys` record
+in the same transaction; the two `409`s are stored for replay.
+
 ## Audit
 
 Both tables carry the 010 capture trigger; `payload`, `contact`,
@@ -84,12 +117,14 @@ Both tables carry the 010 capture trigger; `payload`, `contact`,
 
 Extend `APPLICATION_KINDS` in `@ds/schemas`, add the kind's entry to
 `APPLICATION_KIND_TABLE`, widen `applications_kind_check` in a migration, and
-add the kind's intake. Storage, retention, erasure and audit need no change.
+add the kind's entry to `APPLICATION_ADMIN_VIEWS` (its labelled fields and
+contact for the admin detail) and the kind's intake. Storage, retention,
+erasure and audit need no change.
 
 ## Sibling slices
 
-Notifications (EARS-11, EARS-12) — #4029; admin queue (EARS-13…17, the
-`erase-personal-data` endpoint over `ApplicationsService.eraseOnRequest`) —
-#4030; the «Подать заявку» page and `GET /v1/me/applications` — #4031; the
-home form re-pointed at the partnership intake and the file store retired —
-#4032 (its portal slice); the browser journeys — #4034.
+Notifications (EARS-11, EARS-12) — #4029; admin queue API (EARS-13…17,
+EARS-20 action; above) and its «Заявки» screens — #4030; the «Подать заявку»
+page and `GET /v1/me/applications` — #4031; the home form re-pointed at the
+partnership intake and the file store retired — #4032 (its portal slice); the
+browser journeys — #4034.

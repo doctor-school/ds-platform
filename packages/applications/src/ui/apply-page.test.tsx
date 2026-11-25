@@ -15,7 +15,6 @@ function props(over: Partial<ApplyPageProps> = {}): ApplyPageProps {
     homeHref: "/",
     gate: {
       signInHref: "/login?returnTo=%2Fapply",
-      registerHref: "/register?returnTo=%2Fapply",
     },
     form: {
       consentVersion: CONSENT,
@@ -80,7 +79,7 @@ describe("ApplyPage", () => {
   it("EARS-1: the page names what an expert can make, the path in order and the author terms — no producer, no expert link", () => {
     render(<ApplyPage {...props({ viewer: null })} />);
     expect(
-      screen.getByRole("heading", { level: 1, name: "Подать заявку" }),
+      screen.getByRole("heading", { level: 1, name: "Заявка автора" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/курс-сериал, отдельный урок, подкаст или выступление/),
@@ -110,7 +109,7 @@ describe("ApplyPage", () => {
       expect(a.getAttribute("href")).not.toMatch(/expert/);
   });
 
-  it("EARS-3: a guest sees the account gate with «Войти» and «Регистрация» returning to /apply, and no form field", () => {
+  it("EARS-3: a guest sees the account gate with one «Войти / Регистрация» action returning to /apply, and no form field", () => {
     render(<ApplyPage {...props({ viewer: null })} />);
     expect(
       screen.getByRole("heading", { name: copy.gate.title }),
@@ -120,14 +119,11 @@ describe("ApplyPage", () => {
         /Заявка отправляется под той же учётной записью, что у врача/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Войти" })).toHaveAttribute(
-      "href",
-      "/login?returnTo=%2Fapply",
-    );
-    expect(screen.getByRole("link", { name: "Регистрация" })).toHaveAttribute(
-      "href",
-      "/register?returnTo=%2Fapply",
-    );
+    const actions = screen.getAllByRole("link", { name: /Войти|Регистрац/ });
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toHaveAccessibleName("Войти / Регистрация");
+    expect(actions[0]).toHaveAttribute("href", "/login?returnTo=%2Fapply");
+    expect(screen.queryByText("Я вошёл — вернуться к заявке")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     // A guest is not read for open applications.

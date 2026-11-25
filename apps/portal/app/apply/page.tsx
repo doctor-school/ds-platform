@@ -15,7 +15,7 @@ import { ACADEMY_APPLY } from "../../lib/auth-flow.host-config";
  * a static prerender would serve one account's form to everyone.
  */
 export const metadata: Metadata = {
-  title: "Подать заявку — Академия Doctor.School",
+  title: "Заявка автора — Академия Doctor.School",
 };
 
 export const dynamic = "force-dynamic";

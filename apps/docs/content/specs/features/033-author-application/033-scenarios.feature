@@ -12,15 +12,15 @@ Feature: 033 — Author application: the «Подать заявку» page and 
   Scenario: A guest opens the page from the home and meets the account gate
     Given a visitor is not signed in
     When the visitor activates «Экспертам → Подать заявку» on the Academy home
-    Then the page «Подать заявку» opens with «Что будет дальше» and «Условия автора»
-    And the account gate «Заявка отправляется под той же учётной записью, что у врача» is shown with «Войти» and «Регистрация»
+    Then the page «Подать заявку» opens under the heading «Заявка автора» with «Что будет дальше» and «Условия автора»
+    And the account gate «Заявка отправляется под той же учётной записью, что у врача» is shown with one action «Войти / Регистрация»
     And no form field is shown
     And the page names no producer and links to no expert page
 
   @EARS-3 @EARS-4
   Scenario: After sign-in the expert returns to the form
     Given a visitor is not signed in on «Подать заявку»
-    When the visitor signs in as "anna@example.test" through «Войти»
+    When the visitor signs in as "anna@example.test" through «Войти / Регистрация»
     Then the visitor is back on «Подать заявку»
     And the form shows «Отправите как Анна Крылова · anna@example.test»
 

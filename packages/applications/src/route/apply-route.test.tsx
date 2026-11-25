@@ -96,14 +96,11 @@ beforeEach(() => {
 });
 
 describe("ApplyRoute", () => {
-  it("033 EARS-3: a guest gets the gate whose doors carry /apply as the return target", async () => {
+  it("033 EARS-3: a guest gets the gate whose one action carries /apply as the return target", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
     const props = page(await ApplyRoute({ config: CONFIG, fetchImpl }));
     expect(props.viewer).toBeNull();
-    expect(props.gate).toEqual({
-      signInHref: "/login?returnTo=%2Fapply",
-      registerHref: "/register?returnTo=%2Fapply",
-    });
+    expect(props.gate).toEqual({ signInHref: "/login?returnTo=%2Fapply" });
     expect(fetchImpl).not.toHaveBeenCalledWith(
       expect.stringMatching(/\/v1\/me\/profile$/),
       expect.anything(),

@@ -18,7 +18,7 @@ import {
 
 import { ApplyPage, type ApplyViewer, type AuthorSpecialty } from "../ui";
 
-/** The host half of «Подать заявку»: its auth flow and its two links. */
+/** The host half of «Подать заявку»: its auth flow and its gate link. */
 export interface ApplyHostConfig {
   /** The host's auth flow; `routes.apply` is where the page is mounted. */
   authFlow: Pick<AuthFlowHostConfig, "routes"> &
@@ -31,8 +31,8 @@ export interface ApplyHostConfig {
 
 /**
  * 033 EARS-1, EARS-3, EARS-4, EARS-6 — the server mount of «Подать заявку».
- * A guest is decided on the SERVER and gets the account gate, whose two doors
- * carry the page as the return target (`routes.apply`, admitted by
+ * A guest is decided on the SERVER and gets the account gate, whose one action
+ * carries the page as the return target (`routes.apply`, admitted by
  * `@ds/auth-flow`'s return codec), so the sign-in or registration lands back on
  * the open form. A signed-in account gets the form under its own name and
  * email (`GET /v1/me/profile`, read on its behalf), stamped with the current
@@ -55,7 +55,6 @@ export async function ApplyRoute({
 
   const gate = {
     signInHref: withReturnContext(authFlow, authFlow.routes.login, path),
-    registerHref: withReturnContext(authFlow, authFlow.routes.register, path),
   };
   const requestHeaders = await headers();
   const session = await resolveServerAuth(requestHeaders, fetchImpl);

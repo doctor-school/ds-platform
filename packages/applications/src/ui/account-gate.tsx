@@ -2,16 +2,15 @@ import { Button } from "@ds/design-system/button";
 
 import { applicationsCopy as copy } from "../copy";
 
-/** Where the gate's two doors lead — each carries `/apply` as its return target. */
+/** Where the gate's one action leads — it carries `/apply` as its return target. */
 export interface AccountGateHost {
   signInHref: string;
-  registerHref: string;
 }
 
 /**
  * 033 EARS-3 — the account gate a guest sees in place of the form: the same
- * account as a doctor's, «Войти» and «Регистрация» starting the 003 / 021 flow
- * that returns to `/apply`. No form field is drawn.
+ * account as a doctor's, one «Войти / Регистрация» action starting the 003 / 021
+ * flow that returns to `/apply`. No form field is drawn.
  */
 export function AccountGate({ host }: { host: AccountGateHost }) {
   return (
@@ -34,9 +33,6 @@ export function AccountGate({ host }: { host: AccountGateHost }) {
       <div className="mt-6 flex flex-wrap gap-3">
         <Button asChild size="lg">
           <a href={host.signInHref}>{copy.gate.signIn}</a>
-        </Button>
-        <Button asChild size="lg" variant="secondary">
-          <a href={host.registerHref}>{copy.gate.register}</a>
         </Button>
       </div>
     </div>

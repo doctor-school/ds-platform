@@ -2964,6 +2964,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/experts/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ExpertCountPublicController_count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/feed": {
         parameters: {
             query?: never;
@@ -10721,6 +10737,23 @@ export interface operations {
             path: {
                 idOrSlug: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ExpertCountPublicController_count: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

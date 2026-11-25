@@ -96,6 +96,18 @@ export class ExpertsRepository {
     return row;
   }
 
+  /**
+   * 029 EARS-4 — the `published` experts, read live. `published` excludes
+   * drafts and retired rows by itself (`experts_retired_iff_deleted`).
+   */
+  async countPublished(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(experts)
+      .where(eq(experts.status, "published"));
+    return Number(row?.value ?? 0);
+  }
+
   async findById(id: string): Promise<Expert | null> {
     const [row] = await this.db
       .select()

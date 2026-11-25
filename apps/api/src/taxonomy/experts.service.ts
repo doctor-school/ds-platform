@@ -8,6 +8,7 @@ import {
   type ExpertAdminDetail,
   type ExpertAdminList,
   expertDisplayName,
+  type PublicExpertCount,
   expertInitials,
   taxonomyETag,
   type UpdateExpertRequest,
@@ -434,6 +435,15 @@ export class ExpertsService {
       detail: await this.toDetail(row),
       etag: taxonomyETag(row.version),
     };
+  }
+
+  /**
+   * `GET /v1/public/experts/count` (029 EARS-4) — the published experts, read
+   * live from the registry so a publish or a retire of a published expert
+   * changes the next answer and a restore to `draft` does not.
+   */
+  async publicCount(): Promise<PublicExpertCount> {
+    return { count: await this.repo.countPublished() };
   }
 
   /** `GET /v1/admin/experts/:id` — detail by stable id, retired rows included. */

@@ -538,6 +538,14 @@
 028 | A republished document shows the "обновлено" chip, never a version number
 028 | Consent link from the 021 registration form
 028 | No link ever reaches the legacy site
+029 | An expert finds their entry and reaches the application page | #4244
+029 | A visitor moves from the home into projects and events | #4244
+029 | A partner reaches the investor page | #4244
+029 | A count the platform cannot give is left out | #4243
+029 | Zero projects in production drop that segment | #4243
+029 | Publishing an expert changes the next read | #4243
+029 | The home carries none of the 013 landing | #4243
+029 | The home works on a phone | #4244
 030 | A congress registrar cannot change projects
 030 | A project from the old taxonomy keeps its links and waits for its results
 030 | A project with a sought specialty names it in the expert entry

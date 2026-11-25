@@ -20,6 +20,13 @@ import {
 } from "../support/congress-submissions";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import { removeTelegramPosts, seedTelegramPosts } from "../support/feed-posts";
+import {
+  removeVkSources,
+  restoreVkCallsThisMonth,
+  seedVkEntries,
+  seedVkSource,
+  setVkCallsThisMonth,
+} from "../support/feed-vk";
 
 /**
  * 007 EARS-11 — axe-core WCAG 2 A/AA scan of the admin event surface (the runtime
@@ -554,6 +561,71 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       for (const theme of THEMES) await scan(page, theme);
     } finally {
       await removeTelegramPosts(posts.map((p) => p.id));
+    }
+  });
+
+  // 048 slice 3 (#4004) — VK on «Источники» (the VK add form, a failing VK
+  // source and the month’s call line in its warning state) and «Публикации»
+  // of a VK source (a video, a removed post, the VK note).
+  test("048 EARS-52: the VK add form, the VK source list and the VK posts list pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const address = `axe.vk.${Date.now().toString(36)}`;
+    const callsBefore = await setVkCallsThisMonth(8000);
+    try {
+      await page.goto("/materials/sources/create");
+      await page.getByTestId("feed-source-platform").selectOption("vk");
+      await page.getByTestId("feed-source-address").fill("vk.com/wall-1_2");
+      await page.getByTestId("submit-feed-source").click();
+      await page
+        .locator('[data-testid="feed-source-address"][aria-invalid="true"]')
+        .waitFor({ state: "visible" });
+      for (const theme of THEMES) await scan(page, theme);
+
+      const source = await seedVkSource(address, {
+        reason: "VK не присылает новые записи",
+      });
+      await seedVkEntries(source, [
+        {
+          kind: "post",
+          objectId: 1,
+          text: "Пост в ленте",
+          at: "2026-11-10T09:00:00Z",
+        },
+        {
+          kind: "post",
+          objectId: 2,
+          text: "Удалённый пост",
+          at: "2026-11-11T09:00:00Z",
+          removed: true,
+        },
+        {
+          kind: "video",
+          objectId: 3,
+          text: "Видео",
+          at: "2026-11-12T09:00:00Z",
+        },
+      ]);
+      await page.goto("/materials/sources");
+      await page
+        .getByTestId("feed-sources-vk-calls")
+        .waitFor({ state: "visible" });
+      await page
+        .getByTestId(`feed-source-row-${address}`)
+        .filter({ visible: true })
+        .waitFor({ state: "visible" });
+      for (const theme of THEMES) await scan(page, theme);
+
+      await page.goto(`/materials/sources/${source.id}`);
+      await page
+        .getByText("Удалён в VK", { exact: true })
+        .filter({ visible: true })
+        .waitFor({ state: "visible" });
+      for (const theme of THEMES) await scan(page, theme);
+    } finally {
+      await removeVkSources([address]);
+      await restoreVkCallsThisMonth(callsBefore);
     }
   });
 

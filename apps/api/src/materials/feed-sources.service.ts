@@ -2,13 +2,15 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { FeedSource } from "@ds/db";
 import {
   type CreateFeedSourceRequest,
-  FEED_SOURCE_ADDRESS_TAKEN_ERROR,
   type FeedEntryAdmin,
   type FeedEntryAdminList,
   type FeedSourceAdmin,
   type FeedSourceEntriesQuery,
   type FeedSourceAdminList,
   type FeedSourceNetwork,
+  feedSourceAddressError,
+  feedSourceAddressTakenError,
+  normalizeFeedSourceAddressFor,
   taxonomyETag,
   type UpdateFeedSourceRequest,
 } from "@ds/schemas";
@@ -28,6 +30,8 @@ import {
   type FeedSourcesTx,
 } from "./feed-sources.repository.js";
 import { TelegramSourceCheck } from "./telegram/telegram-source-check.service.js";
+import { VkCallMonthsRepository } from "./vk/vk-call-months.repository.js";
+import { VkSourceCheck } from "./vk/vk-source-check.service.js";
 
 /** How long an admin write's response waits for the at-once check (EARS-21). */
 export const AT_ONCE_CHECK_BUDGET_MS = 15_000;
@@ -47,6 +51,15 @@ export const AT_ONCE_CHECK_BUDGET_MS = 15_000;
 // and the check still writes its verdict when Telegram answers. An exact
 // idempotent replay returns the response recorded at commit (before the
 // check); the list read is always current.
+//
+// 048 slice 3 (#4004) — a VK source follows the same commands with its own
+// address rule (EARS-38) and check (EARS-44). Before the transaction, an add
+// or address edit of a VK source resolves the address through
+// `groups.getById`: a community already bound to ANOTHER source is refused
+// with the «already listed» field error, storing nothing (048-design «Lead
+// decisions (slice 3)»). An address edit clears the bound community id and
+// its last-event time in the same write, so the previous community's events
+// are dropped from then on and the at-once check binds the new one.
 
 export interface CreateFeedSourceInput {
   payload: CreateFeedSourceRequest;
@@ -99,43 +112,69 @@ export class FeedSourcesService {
     private readonly sourceCheck: TelegramSourceCheck,
     @Inject(FeedEntriesRepository)
     private readonly entries: FeedEntriesRepository,
+    @Inject(VkSourceCheck)
+    private readonly vkCheck: VkSourceCheck,
+    @Inject(VkCallMonthsRepository)
+    private readonly vkCalls: VkCallMonthsRepository,
   ) {}
 
-  /** EARS-20 — `GET /v1/admin/feed-sources`. */
+  /** EARS-20, EARS-44 — `GET /v1/admin/feed-sources` with the month's VK calls. */
   async list(): Promise<FeedSourceAdminList> {
-    const rows = await this.repo.list();
+    const [rows, vkCallsThisMonth] = await Promise.all([
+      this.repo.list(),
+      this.vkCalls.thisMonth(),
+    ]);
     return {
       data: rows.map(({ source, entryCount }) => toAdmin(source, entryCount)),
+      vkCallsThisMonth,
     };
   }
 
   async create(input: CreateFeedSourceInput): Promise<FeedSourceCommandResult> {
-    const result = await this.fenced(input.lease, () =>
-      this.repo.transaction(async (tx) => {
-        const { platform, address } = input.payload;
+    const result = await this.fenced(input.lease, async () => {
+      const { platform, address } = input.payload;
+      await this.assertCommunityFree(platform, address, null);
+      return this.repo.transaction(async (tx) => {
         await this.assertAddressFree(tx, platform, address, null);
         const created = await this.repo.insert(tx, { platform, address });
         return this.complete(tx, input.lease, created, 201);
-      }),
-    );
+      });
+    });
     return this.checkAtOnce(result);
   }
 
   /**
-   * EARS-21 — «Изменить адрес». A changed address rewrites the `href` of each
-   * entry in the same transaction and returns the source to «Не проверен»:
-   * the last check judged the old address.
+   * EARS-21 / EARS-38 — «Изменить адрес», under the stored platform's address
+   * rule. A changed address returns the source to «Не проверен» (the last
+   * check judged the old address); a Telegram source's entries get their
+   * `href` rewritten in the same transaction, a VK source's keep theirs
+   * (built from the community id) and the source is unbound.
    */
   async update(input: UpdateFeedSourceInput): Promise<FeedSourceCommandResult> {
-    const result = await this.fenced(input.lease, () =>
-      this.repo.transaction(async (tx) => {
+    const result = await this.fenced(input.lease, async () => {
+      const stored = await this.repo.findById(input.id);
+      if (!stored) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+      const platform = network(stored);
+      const address = normalizeFeedSourceAddressFor(
+        platform,
+        input.payload.address,
+      );
+      if (address === null) {
+        throw new TaxonomyError(
+          "VALIDATION_FAILED",
+          "the address does not follow the platform's address rule",
+          [{ path: "address", message: feedSourceAddressError(platform) }],
+        );
+      }
+      if (address !== stored.address) {
+        await this.assertCommunityFree(platform, address, stored.id);
+      }
+      return this.repo.transaction(async (tx) => {
         const current = await this.lockVersion(
           tx,
           input.id,
           input.expectedVersion,
         );
-        const platform = network(current);
-        const { address } = input.payload;
         const changed = address !== current.address;
         if (changed) {
           await this.assertAddressFree(tx, platform, address, current.id);
@@ -150,14 +189,19 @@ export class FeedSourcesService {
                 status: "unchecked",
                 statusReason: null,
                 checkedAt: null,
+                ...(platform === "vk"
+                  ? { vkGroupId: null, vkLastEventAt: null }
+                  : {}),
               }
             : {},
         );
         if (!moved) throw new TaxonomyError("PRECONDITION_FAILED", STALE);
-        if (changed) await this.repo.rewriteHrefs(tx, moved.id, address);
+        if (changed && platform === "telegram") {
+          await this.repo.rewriteHrefs(tx, moved.id, address);
+        }
         return this.complete(tx, input.lease, moved, 200);
-      }),
-    );
+      });
+    });
     return this.checkAtOnce(result);
   }
 
@@ -183,10 +227,13 @@ export class FeedSourcesService {
     const bound = new Promise<undefined>((resolve) => {
       timer = setTimeout(() => resolve(undefined), AT_ONCE_CHECK_BUDGET_MS);
     });
-    const checked = await Promise.race([
-      this.sourceCheck.check(result.detail.id),
-      bound,
-    ]).finally(() => clearTimeout(timer));
+    const check =
+      result.detail.platform === "vk"
+        ? this.vkCheck.check(result.detail.id)
+        : this.sourceCheck.check(result.detail.id);
+    const checked = await Promise.race([check, bound]).finally(() =>
+      clearTimeout(timer),
+    );
     if (!checked) return result;
     return {
       etag: result.etag,
@@ -329,11 +376,27 @@ export class FeedSourcesService {
   ): Promise<void> {
     await this.repo.lockAddress(tx, platform, address);
     if (await this.repo.addressTaken(tx, platform, address, exceptId)) {
-      throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "the address is already listed for this platform",
-        [{ path: "address", message: FEED_SOURCE_ADDRESS_TAKEN_ERROR }],
-      );
+      throw addressTaken(platform);
+    }
+  }
+
+  /**
+   * EARS-38 — a VK address naming a community already bound to another
+   * source (`club<id>` and its screen name are one community) is the same
+   * «already listed» field error. Runs before the transaction: a VK call
+   * never holds a row lock. An unconfigured, unreachable or unknown
+   * community is not refused here — the at-once check reports it.
+   */
+  private async assertCommunityFree(
+    platform: FeedSourceNetwork,
+    address: string,
+    exceptId: string | null,
+  ): Promise<void> {
+    if (platform !== "vk") return;
+    const found = await this.vkCheck.lookup(address, exceptId);
+    if (found.kind !== "found") return;
+    if (await this.repo.vkGroupHeldByOther(found.group.id, exceptId)) {
+      throw addressTaken(platform);
     }
   }
 
@@ -372,6 +435,15 @@ export class FeedSourcesService {
   }
 }
 
+/** EARS-21 / EARS-38 — the «already listed» field error of a platform. */
+function addressTaken(platform: FeedSourceNetwork): TaxonomyError {
+  return new TaxonomyError(
+    "VALIDATION_FAILED",
+    "the address is already listed for this platform",
+    [{ path: "address", message: feedSourceAddressTakenError(platform) }],
+  );
+}
+
 /** A stored source is a network one (CHECK `feed_sources_network_platform`). */
 function network(row: FeedSource): FeedSourceNetwork {
   if (row.platform === "academy") {
@@ -395,14 +467,29 @@ function toAdmin(row: FeedSource, entryCount: number): FeedSourceAdmin {
   };
 }
 
-/** EARS-32 — a hidden post reads «Скрыт» whatever its source's state. */
+/**
+ * EARS-32 / EARS-47 — a hidden post reads «Скрыт» whatever its source's
+ * state; a post removed in VK reads «Удалён в VK», also under a switched-off
+ * source.
+ */
 function toEntryAdmin(row: FeedEntryAdminRow): FeedEntryAdmin {
   const hidden = row.hiddenAt !== null;
+  const state = hidden
+    ? "hidden"
+    : row.removedAt !== null
+      ? "removed"
+      : row.sourceOff
+        ? "source_off"
+        : "in_feed";
+  if (row.kind !== "post" && row.kind !== "video") {
+    throw new Error(`feed entry ${row.id} of a source is a ${row.kind}`);
+  }
   return {
     id: row.id,
+    kind: row.kind,
     text: row.title,
     publishedAt: row.publishedAt.toISOString(),
-    state: hidden ? "hidden" : row.sourceOff ? "source_off" : "in_feed",
+    state,
     hidden,
     href: row.href,
     version: Number(row.stamp),

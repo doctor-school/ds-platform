@@ -16,6 +16,7 @@ import {
 import { BackToList } from "@/components/back-to-list";
 import { FeedPostRowActions } from "@/components/feed-post-row-actions";
 import { StatusChip } from "@/components/status-chip";
+import { feedSourceAddressLabel } from "@/lib/feed-source-address";
 import { formatMskDateTime } from "@/lib/msk";
 import { feedSourcesUrl } from "@/providers/data-provider";
 
@@ -28,6 +29,11 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  * confirmation) or «Вернуть в ленту». The standing note says the one thing an
  * operator cannot guess: a post deleted in Telegram stays in the feed until
  * it is hidden here (the Bot API sends no deletion update).
+ *
+ * A VK source (EARS-47) lists its posts and videos alike — the «Вид» column
+ * says which —, «Открыть в VK ↗», the state «Удалён в VK» of an entry the
+ * wall reconcile found gone, and the note that a video removed in VK stays
+ * (videos are not reconciled). Hide and return apply unchanged.
  *
  * The API pages by cursor (newest first) and names the total in the source's
  * `entryCount`, so the pager shows real page numbers: the cursor of each page
@@ -109,12 +115,30 @@ export default function FeedSourcePostsPage() {
   }
 
   const source = page?.source;
-  const address = source ? `t.me/${source.address}` : "";
+  const platform = source?.platform ?? "telegram";
+  const platformName = t(`feedSources.platforms.${platform}`);
+  const address = source
+    ? feedSourceAddressLabel(source.platform, source.address)
+    : "";
   const notFound =
     request.isError &&
     (request.error as { statusCode?: number } | null)?.statusCode === 404;
 
   const columns: DataTableColumn<FeedEntryAdmin>[] = [
+    {
+      key: "kind",
+      header: t("feedPosts.columns.kind"),
+      width: "10%",
+      fullValue: (row) => t(`feedPosts.kinds.${row.kind}`),
+      render: (row) => (
+        <span
+          className="text-muted-foreground"
+          data-testid={`feed-post-kind-${row.id}`}
+        >
+          {t(`feedPosts.kinds.${row.kind}`)}
+        </span>
+      ),
+    },
     {
       key: "publishedAt",
       header: t("feedPosts.columns.publishedAt"),
@@ -173,13 +197,13 @@ export default function FeedSourcePostsPage() {
               : t("feedPosts.title")
           }
           description={t("feedPosts.description", { address })}
-          notice={t("feedPosts.note")}
+          notice={source ? t(`feedPosts.note.${platform}`) : undefined}
           searchable={false}
           filterable={false}
           caption={t("feedPosts.tableCaption", { address })}
           record={{
             header: t("feedPosts.columns.text"),
-            width: "44%",
+            width: "36%",
             title: (row) => (
               <span
                 className="line-clamp-1 break-words"
@@ -195,11 +219,13 @@ export default function FeedSourcePostsPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={t("feedPosts.openOriginalLabel", {
+                    kind: t(`feedPosts.kindsInLabel.${row.kind}`),
                     date: formatMskDateTime(row.publishedAt),
+                    platform: platformName,
                   })}
                   data-testid={`feed-post-original-${row.id}`}
                 >
-                  {t("feedPosts.openOriginal")}
+                  {t(`feedPosts.openOriginal.${platform}`)}
                 </a>
               </DsLink>
             ),
@@ -225,6 +251,7 @@ export default function FeedSourcePostsPage() {
           actions={(row) => (
             <FeedPostRowActions
               entry={row}
+              platform={platform}
               dateLabel={formatMskDateTime(row.publishedAt)}
               onStarted={() => setBanner(null)}
               onChanged={(text) => {
@@ -238,7 +265,7 @@ export default function FeedSourcePostsPage() {
             />
           )}
           emptyTitle={t("feedPosts.empty")}
-          emptyDescription={t("feedPosts.emptyDescription")}
+          emptyDescription={t(`feedPosts.emptyDescription.${platform}`)}
           testId="feed-posts"
         />
       </AppShell>

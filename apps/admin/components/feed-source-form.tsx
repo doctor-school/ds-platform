@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import { Button, Input, NativeSelect } from "@ds/design-system";
 import { FormActions } from "@ds/design-system/blocks";
@@ -13,12 +13,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { FeedSourceNetworkSchema, type FeedSourceNetwork } from "@ds/schemas";
 import {
-  FEED_SOURCE_ADDRESS_ERROR,
-  FeedSourceNetworkSchema,
-  normalizeFeedSourceAddress,
-  type FeedSourceNetwork,
-} from "@ds/schemas";
+  feedSourceAddressFieldError,
+  feedSourceAddressLabel,
+} from "@/lib/feed-source-address";
 
 export interface FeedSourceFormFields {
   platform: FeedSourceNetwork;
@@ -26,19 +25,24 @@ export interface FeedSourceFormFields {
 }
 
 /**
- * The «Добавить источник» / «Изменить адрес» form (048 EARS-21). Two fields
- * on add — the platform among the connected networks (only «Telegram» in
- * slice 2) and the channel address; the edit changes the address only.
+ * The «Добавить источник» / «Изменить адрес» form (048 EARS-21, EARS-38). Two
+ * fields on add — the platform among the connected networks («Telegram»,
+ * «VK») and the address, named for the platform («Адрес канала» /
+ * «Адрес сообщества») with its own example; the edit changes the address of
+ * the stored platform only.
  *
- * The address is checked here with the SAME `normalizeFeedSourceAddress` the
- * API applies, so an address of another form or an invite link is refused at
+ * The address is checked here with the SAME per-platform normalizer the API
+ * applies, so an address of another form or an invite link is refused at
  * the field before any request; what only the server knows (the address is
  * already listed) comes back as a `VALIDATION_FAILED` on `address` and is
  * marked on the same field (`addressRefusal`). The typed value stays in the
- * input either way — the form is never reset by a refusal.
+ * input either way — the form is never reset by a refusal. Switching the
+ * platform clears the address refusal (it named the other platform's form);
+ * the value stays and is checked against the new platform on submit.
  */
 export function FeedSourceForm({
   mode,
+  platform: storedPlatform = "telegram",
   defaultAddress = "",
   submitLabel,
   submitting,
@@ -48,7 +52,9 @@ export function FeedSourceForm({
   cancelLabel,
 }: {
   mode: "create" | "edit";
-  /** The stored username, shown as `t.me/<имя>` in the edit field. */
+  /** The stored source's platform (edit); a new source starts on Telegram. */
+  platform?: FeedSourceNetwork;
+  /** The stored name, shown as `t.me/<имя>` / `vk.com/<имя>` in the edit field. */
   defaultAddress?: string;
   submitLabel: string;
   submitting?: boolean;
@@ -62,10 +68,14 @@ export function FeedSourceForm({
   const form = useForm<FeedSourceFormFields>({
     mode: "onSubmit",
     defaultValues: {
-      platform: "telegram",
-      address: defaultAddress ? `t.me/${defaultAddress}` : "",
+      platform: storedPlatform,
+      address: defaultAddress
+        ? feedSourceAddressLabel(storedPlatform, defaultAddress)
+        : "",
     },
   });
+  const platform =
+    useWatch({ control: form.control, name: "platform" }) ?? storedPlatform;
 
   useEffect(() => {
     if (addressRefusal) {
@@ -100,6 +110,13 @@ export function FeedSourceForm({
                     id="feed-source-platform"
                     data-testid="feed-source-platform"
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      // A refusal was worded for the platform it was checked
+                      // against; the typed value stays and is re-checked
+                      // against the new platform's rule on submit.
+                      form.clearErrors("address");
+                    }}
                   >
                     {FeedSourceNetworkSchema.options.map((value) => (
                       <option key={value} value={value}>
@@ -116,15 +133,13 @@ export function FeedSourceForm({
           control={form.control}
           name="address"
           rules={{
-            validate: (value) =>
-              normalizeFeedSourceAddress(value) === null
-                ? FEED_SOURCE_ADDRESS_ERROR
-                : true,
+            validate: (value, fields) =>
+              feedSourceAddressFieldError(fields.platform, value),
           }}
           render={({ field }) => (
             <FormItem>
               <FormLabel htmlFor="feed-source-address">
-                {t("feedSources.fields.address")}
+                {t(`feedSources.fields.address.${platform}`)}
               </FormLabel>
               <FormControl>
                 <Input
@@ -135,7 +150,9 @@ export function FeedSourceForm({
                   {...field}
                 />
               </FormControl>
-              <FormMessage>{t("feedSources.fields.addressHint")}</FormMessage>
+              <FormMessage>
+                {t(`feedSources.fields.addressHint.${platform}`)}
+              </FormMessage>
             </FormItem>
           )}
         />

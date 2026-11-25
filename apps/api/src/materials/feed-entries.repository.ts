@@ -18,6 +18,7 @@ import {
   expertPubliclyVisible,
   feedEntries,
   feedEntryMessages,
+  feedEntryVkObjects,
   organisations,
 } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -31,9 +32,10 @@ import type { MaterialsTx } from "./materials.repository.js";
 // 048 EARS-10 (#3512) — the ONLY reader and writer of `feed_entries` (Lead
 // decision 8). A source writes its rows through here inside the transaction
 // of the change that caused them; no admin endpoint touches the table
-// directly. Two sources write here: `academy` (own-materials.feed-source.ts)
-// and `telegram` (telegram/telegram.feed-source.ts, with its dedup table
-// `feed_entry_messages`).
+// directly. Three sources write here: `academy` (own-materials.feed-source.ts),
+// `telegram` (telegram/telegram.feed-source.ts, with its dedup table
+// `feed_entry_messages`) and `vk` (vk/vk.feed-source.ts, with its dedup table
+// `feed_entry_vk_objects`).
 
 type Db = DrizzleHandle["db"];
 
@@ -178,15 +180,16 @@ export interface FeedCursorPosition {
 export { expertPubliclyVisible };
 
 /**
- * 048 EARS-22, EARS-32 (#3993, #3996) — the row-local feed marks: an entry
- * is in the feed while it is neither hidden by an administrator nor of a
- * switched-off source. The public read composes it with its platform gate;
+ * 048 EARS-22, EARS-32, EARS-45 (#3993, #3996, #4004) — the row-local feed
+ * marks: an entry is in the feed while it is neither hidden by an
+ * administrator, nor of a switched-off source, nor gone from the VK wall. The public read composes it with its platform gate;
  * exported so the hide/return journey is proved on this exact predicate for a
  * network entry the platform gate does not yet serve (#3997).
  */
 export const feedEntryRowVisible: SQL = and(
   isNull(feedEntries.hiddenAt),
   not(feedEntries.sourceOff),
+  isNull(feedEntries.removedAt),
 )!;
 
 /**
@@ -265,12 +268,14 @@ const entryStamp = sql<string>`(extract(epoch from ${feedEntries.updatedAt}) * 1
 const adminRowColumns = {
   id: feedEntries.id,
   sourcePlatform: feedEntries.sourcePlatform,
+  kind: feedEntries.kind,
   title: feedEntries.title,
   href: feedEntries.href,
   publishedAt: feedEntries.publishedAt,
   publishedAtCursor: exactCursorInstant(feedEntries.publishedAt),
   hiddenAt: feedEntries.hiddenAt,
   sourceOff: feedEntries.sourceOff,
+  removedAt: feedEntries.removedAt,
   stamp: entryStamp,
 };
 
@@ -278,13 +283,67 @@ const adminRowColumns = {
 export interface FeedEntryAdminRow {
   id: string;
   sourcePlatform: (typeof feedEntries.sourcePlatform.enumValues)[number];
+  kind: (typeof feedEntries.kind.enumValues)[number];
   title: string;
   href: string;
   publishedAt: Date;
   publishedAtCursor: string;
   hiddenAt: Date | null;
   sourceOff: boolean;
+  removedAt: Date | null;
   stamp: string;
+}
+
+/** The VK object kinds of the EARS-43 dedup key. */
+export type VkObjectKind =
+  (typeof feedEntryVkObjects.objectKind.enumValues)[number];
+
+/** A VK entry as its writer reads it back (#4004). */
+export interface VkEntryRow {
+  id: string;
+  kind: (typeof feedEntries.kind.enumValues)[number];
+  title: string;
+  imageUrl: string | null;
+  durationSeconds: number | null;
+  hiddenAt: Date | null;
+  removedAt: Date | null;
+}
+
+const vkEntryColumns = {
+  id: feedEntries.id,
+  kind: feedEntries.kind,
+  title: feedEntries.title,
+  imageUrl: feedEntries.imageUrl,
+  durationSeconds: feedEntries.durationSeconds,
+  hiddenAt: feedEntries.hiddenAt,
+  removedAt: feedEntries.removedAt,
+};
+
+/** A VK `post` or `video` entry as the connector writes it (048-design §Data model (slice 3)). */
+export interface VkEntryInsert {
+  feedSourceId: string;
+  kind: "post" | "video";
+  /**
+   * `<feed_source_id>:<group_id>:post:<post_id>` /
+   * `<feed_source_id>:<group_id>:video:<video_id>`.
+   */
+  sourceRef: string;
+  title: string;
+  imageUrl: string | null;
+  durationSeconds: number | null;
+  sourceName: string;
+  href: string;
+  publishedAt: Date;
+  /** The source's switched-off mark (EARS-22): set only by the import. */
+  sourceOff?: boolean;
+}
+
+/** A held VK post of a source as the reconcile reads it (EARS-45). */
+export interface VkHeldPost {
+  entryId: string;
+  postId: number;
+  publishedAt: Date;
+  removedAt: Date | null;
 }
 
 @Injectable()
@@ -569,6 +628,196 @@ export class FeedEntriesRepository {
       )
       .returning(adminRowColumns);
     return row!;
+  }
+
+  // ── 048 slice 3 — VK entries (#4004, EARS-40…EARS-45) ───────────────────
+  // Written only by `vk/vk.feed-source.ts`, inside the transaction that holds
+  // the source's row lock (a Callback event, a reconcile or an import post),
+  // so two writers of one source never interleave. `feed_entry_vk_objects` is
+  // the dedup key (048-design §Data model (slice 3)).
+
+  /**
+   * The entry a source's VK object already went into (EARS-43); the object is
+   * the community it came from plus its kind and id (Lead decision 17).
+   */
+  async vkEntryByObject(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    vkGroupId: number,
+    objectKind: VkObjectKind,
+    vkObjectId: number,
+  ): Promise<VkEntryRow | undefined> {
+    const [row] = await tx
+      .select(vkEntryColumns)
+      .from(feedEntryVkObjects)
+      .innerJoin(
+        feedEntries,
+        eq(feedEntries.id, feedEntryVkObjects.feedEntryId),
+      )
+      .where(
+        and(
+          eq(feedEntryVkObjects.feedSourceId, feedSourceId),
+          eq(feedEntryVkObjects.vkGroupId, vkGroupId),
+          eq(feedEntryVkObjects.objectKind, objectKind),
+          eq(feedEntryVkObjects.vkObjectId, vkObjectId),
+        ),
+      )
+      .for("update", { of: feedEntries });
+    return row;
+  }
+
+  /** A new VK entry; returns its id. */
+  async insertVkEntry(tx: MaterialsTx, entry: VkEntryInsert): Promise<string> {
+    const [row] = await tx
+      .insert(feedEntries)
+      .values({
+        sourcePlatform: "vk",
+        materialId: null,
+        imageRef: null,
+        authorExpertId: null,
+        partnerOrganisationId: null,
+        ...entry,
+      })
+      .returning({ id: feedEntries.id });
+    return row!.id;
+  }
+
+  /**
+   * EARS-43, EARS-45 — rewrite card fields of a VK entry in place.
+   * `published_at` and `source_off` are never in the patch; `hidden_at` only
+   * when an absorbed video carries its hide onto the post.
+   */
+  async updateVkEntry(
+    tx: MaterialsTx,
+    id: string,
+    patch: Partial<
+      Pick<VkEntryRow, "title" | "imageUrl" | "durationSeconds" | "hiddenAt">
+    >,
+  ): Promise<void> {
+    await tx
+      .update(feedEntries)
+      .set({ ...patch, updatedAt: sql`now()` })
+      .where(and(eq(feedEntries.id, id), eq(feedEntries.sourcePlatform, "vk")));
+  }
+
+  /** EARS-43 — key a VK object to its entry; false when the key is already held. */
+  async attachVkObject(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    vkGroupId: number,
+    objectKind: VkObjectKind,
+    vkObjectId: number,
+    feedEntryId: string,
+  ): Promise<boolean> {
+    const rows = await tx
+      .insert(feedEntryVkObjects)
+      .values({ feedSourceId, vkGroupId, objectKind, vkObjectId, feedEntryId })
+      .onConflictDoNothing()
+      .returning({ id: feedEntryVkObjects.vkObjectId });
+    return rows.length > 0;
+  }
+
+  /**
+   * EARS-43 — fold a `video` entry into the post it is attached to: every key
+   * of the video entry moves to the post entry, then the video entry goes —
+   * the only physical deletion of a VK entry (048-design «Absorption»).
+   */
+  async absorbVkVideoEntry(
+    tx: MaterialsTx,
+    videoEntryId: string,
+    postEntryId: string,
+  ): Promise<void> {
+    await tx
+      .update(feedEntryVkObjects)
+      .set({ feedEntryId: postEntryId })
+      .where(eq(feedEntryVkObjects.feedEntryId, videoEntryId));
+    await tx
+      .delete(feedEntries) // retained-data-ok: an absorbed video entry duplicates its post's publication (048 EARS-43); the post entry keeps its key and its hide, and the removal is a feature-010 ledger row
+      .where(
+        and(
+          eq(feedEntries.id, videoEntryId),
+          eq(feedEntries.sourcePlatform, "vk"),
+          eq(feedEntries.kind, "video"),
+        ),
+      );
+  }
+
+  /**
+   * EARS-45 — the source's held post entries of community `vkGroupId` dated
+   * at or after `since` (every one when `since` is null), with their VK post
+   * ids, locked; entries of a community the source was bound to before are
+   * not among them (Lead decision 17).
+   */
+  async vkHeldPosts(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    vkGroupId: number,
+    since: Date | null,
+  ): Promise<VkHeldPost[]> {
+    const rows = await tx
+      .select({
+        entryId: feedEntries.id,
+        postId: feedEntryVkObjects.vkObjectId,
+        publishedAt: feedEntries.publishedAt,
+        removedAt: feedEntries.removedAt,
+      })
+      .from(feedEntryVkObjects)
+      .innerJoin(
+        feedEntries,
+        eq(feedEntries.id, feedEntryVkObjects.feedEntryId),
+      )
+      .where(
+        and(
+          eq(feedEntryVkObjects.feedSourceId, feedSourceId),
+          eq(feedEntryVkObjects.vkGroupId, vkGroupId),
+          eq(feedEntryVkObjects.objectKind, "post"),
+          eq(feedEntries.kind, "post"),
+          since ? sql`${feedEntries.publishedAt} >= ${since}` : undefined,
+        ),
+      )
+      .for("update", { of: feedEntries });
+    return rows.map((r) => ({ ...r, postId: Number(r.postId) }));
+  }
+
+  /** EARS-45 — set or clear the removed mark of VK entries. */
+  async setVkRemoved(
+    tx: MaterialsTx,
+    ids: string[],
+    removed: boolean,
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    await tx
+      .update(feedEntries)
+      .set({ removedAt: removed ? sql`now()` : null, updatedAt: sql`now()` })
+      .where(
+        and(inArray(feedEntries.id, ids), eq(feedEntries.sourcePlatform, "vk")),
+      );
+  }
+
+  /**
+   * EARS-44 «VK не присылает новые записи» — whether the last reconcile (an
+   * entry written within the last hour: the check runs half an hour after
+   * the hourly reconcile) wrote a post newer than the source's last Callback
+   * event and older than one hour.
+   */
+  async vkCallbackMissedPost(
+    feedSourceId: string,
+    lastEventAt: Date,
+  ): Promise<boolean> {
+    const [row] = await this.handle
+      .select({ id: feedEntries.id })
+      .from(feedEntries)
+      .where(
+        and(
+          eq(feedEntries.feedSourceId, feedSourceId),
+          eq(feedEntries.kind, "post"),
+          sql`${feedEntries.createdAt} > now() - interval '1 hour'`,
+          sql`${feedEntries.publishedAt} > ${lastEventAt}`,
+          sql`${feedEntries.publishedAt} < now() - interval '1 hour'`,
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /** Remove the source record's card (EARS-6: an unpublished material leaves the feed). */

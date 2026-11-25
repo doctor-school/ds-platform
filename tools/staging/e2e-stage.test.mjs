@@ -2866,11 +2866,11 @@ describe("suiteStatusDescription — the stage-suite commit status (#4222)", () 
       const tiers = [{ name: "live/academy/default" }, { name: "live/doctor/room" }];
       assert.equal(
         suiteStatusDescriptionFromDir(dir, tiers),
-        "2 passed, 1 failed (live/academy/default), 1 skipped",
+        "2 passed, 1 failed (live/academy/default), 1 skipped; verdict file missing",
       );
       assert.equal(
         suiteStatusDescriptionFromDir(path.join(dir, "absent"), tiers),
-        "suite report missing; live: 0 passed, 0 failed, 0 skipped",
+        "suite report missing; live: 0 passed, 0 failed, 0 skipped; verdict file missing",
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -2934,7 +2934,7 @@ describe("suiteStatusDescription — every red verdict source names itself (#425
       suite: report("expected"),
       live: [{ name: "x".repeat(140), report: report("unexpected") }],
     });
-    assert.equal(hidden, "1 passed, 1 failed (1 live tiers failed), 0 skipped");
+    assert.equal(hidden, "1 passed, 1 failed (1 live tier failed), 0 skipped");
   });
 
   it("all sources together stay within 140 chars, truncating deterministically with +N more", () => {
@@ -2975,14 +2975,51 @@ describe("suiteStatusDescription — every red verdict source names itself (#425
           { name: "live/academy/default", state: "fail", died: false, failed: 2 },
           { name: "live/doctor/register-live", state: "pass", died: false, failed: 0 },
         ],
+        suiteFailed: 3,
       }),
       {
         died: ["live/doctor/room"],
         exited: ["live/admin/staff"],
         keyJourneyRows: ["D8", "A3"],
         axeBlocking: ["axe/academy"],
+        suiteExited: false,
       },
     );
+  });
+
+  it("a suite that exited non-zero with no failed test is named", () => {
+    const leg = { name: "suite", ok: false };
+    assert.equal(statusVerdict({ legs: [leg], suiteFailed: 0 }).suiteExited, true);
+    assert.equal(statusVerdict({ legs: [leg], suiteFailed: 2 }).suiteExited, false);
+    assert.equal(statusVerdict({ legs: [{ name: "suite", ok: true }], suiteFailed: 0 }).suiteExited, false);
+    assert.equal(
+      suiteStatusDescription({ suite: green, verdict: { suiteExited: true } }),
+      "2 passed, 0 failed, 1 skipped; suite exited non-zero",
+    );
+  });
+
+  it("every group keeps its marker within 140 chars: all 13 live tiers, key journeys, axe, missing suite", () => {
+    assert.equal(LIVE_TIERS.length, 13);
+    const names = LIVE_TIERS.map((t) => t.name);
+    const live = names.slice(0, 5).map((name) => ({ name, report: report("unexpected") }));
+    const verdict = {
+      died: names.slice(5, 9),
+      exited: names.slice(9, 13),
+      keyJourneyRows: ["D8", "A3"],
+      axeBlocking: ["axe/academy"],
+      suiteExited: true,
+    };
+    for (const suite of [undefined, report("expected"), big()]) {
+      const text = suiteStatusDescription({ suite, live, verdict });
+      assert.ok(text.length <= 140, `${text.length}: ${text}`);
+      for (const marker of [/failed \(/, /died/, /; (?!suite)[^;]*exited/, /K(?:J|ey-journey)/i, /axe/, /suite exited/])
+        assert.match(text, marker, text);
+      if (suite === undefined) assert.match(text, /^suite report missing/);
+      assert.equal(suiteStatusDescription({ suite, live, verdict }), text);
+    }
+    function big() {
+      return report(...Array(1130).fill("expected"), ...Array(12).fill("unexpected"), ...Array(838).fill("skipped"));
+    }
   });
 
   it("reads the persisted verdict out of the report dir", () => {

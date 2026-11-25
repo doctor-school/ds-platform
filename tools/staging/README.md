@@ -543,8 +543,10 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
 4. The commit status `stage-suite` becomes `success` / `failure` with the suite and
    live-tier counts (`412 passed, 3 failed (live/academy/default), 12 skipped`), then
    every red verdict the counts cannot show, read from the run's `status-verdict.json`:
-   `; live/doctor/room died; key-journey D8,A3 failed; axe/academy blocking` (140 chars,
-   names past the cap fold into `+N more`). A failed converge sets it to `failure` and the
+   `; live/doctor/room died; key-journey D8,A3 failed; axe/academy blocking`, plus
+   `; suite exited non-zero` (a suite red with no failed test) or `; verdict file missing`.
+   Within 140 chars no group is ever dropped: names fold into `+N more`, then counts,
+   then short forms (`; 4 died; 4 exited; KJ 2 rows; 1 axe blocking`). A failed converge sets it to `failure` and the
    suite does not run; a run cancelled between the two jobs is closed as `failure` by
    the `close-status` job, so the status is never left pending.
 

@@ -102,6 +102,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   rows,
   getRowKey,
   total,
+  pageCount: pageCountOverride,
   isLoading,
   error,
   query,
@@ -176,7 +177,14 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   columns: DataTableColumn<Row>[];
   rows: Row[];
   getRowKey: (row: Row) => string;
-  total: number;
+  /**
+   * The server's count of matching rows; `null` for a cursor-paged list whose
+   * API counts nothing (033 «Заявки») — the count readout is then omitted, never
+   * guessed, and the caller passes `pageCount` from the cursors it has seen.
+   */
+  total: number | null;
+  /** Overrides the count-derived page total (a cursor pager knows only the pages it reached). */
+  pageCount?: number;
   isLoading: boolean;
   error?: string | null;
   query: AdminDataListQueryState<Status>;
@@ -210,7 +218,14 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   testId: string;
 }) {
   const t = useTranslations();
-  const pageCount = Math.max(1, Math.ceil(total / query.pageSize));
+  const pageCount =
+    pageCountOverride ?? Math.max(1, Math.ceil((total ?? 0) / query.pageSize));
+  const countReadout =
+    total === null ? undefined : (
+      <span data-testid={`${testId}-total`}>
+        {t("common.list.found", { total })}
+      </span>
+    );
 
   const applied: AppliedFilter[] = [
     ...(query.q
@@ -291,9 +306,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
           aria-live="polite"
           className="mb-5 text-caption text-muted-foreground"
         >
-          <span data-testid={`${testId}-total`}>
-            {t("common.list.found", { total })}
-          </span>
+          {countReadout}
         </p>
       ) : (
         /* `FilterBar` takes no arbitrary DOM props, so the e2e handle lives on the
@@ -322,11 +335,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
             isBusy={isLoading}
             busyLabel={t("common.list.busy")}
             moreFilters={moreFilters}
-            resultCount={
-              <span data-testid={`${testId}-total`}>
-                {t("common.list.found", { total })}
-              </span>
-            }
+            resultCount={countReadout}
           >
             {extraFilters}
             {filterable ? (

@@ -130,6 +130,13 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
     testId: "nav-organisation-roles",
     labelKey: "app.nav.organisationRoles",
   },
+  // 033 EARS-13 (#4030) — the application queue: authors and partners apply
+  // here, so it sits right after the books they end up in.
+  {
+    href: "/applications",
+    testId: "nav-applications",
+    labelKey: "app.nav.applications",
+  },
   // 012 EARS-25 (#2509) — the event-kind dictionary classifies events, so it
   // sits with the event-side books, before directions and their relations.
   {

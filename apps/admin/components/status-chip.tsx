@@ -2,6 +2,8 @@
 
 import { Badge } from "@ds/design-system";
 import type {
+  ApplicationOutcome,
+  ApplicationStatus,
   FeedEntryAdminState,
   FeedSourceStatus,
   RelationshipStatus,
@@ -58,6 +60,29 @@ const FEED_ENTRY_TONE: Record<FeedEntryAdminState, string> = {
   removed: "bg-warning-tint text-foreground",
 };
 
+/**
+ * 033 EARS-13 — an application's status, or its outcome once closed. «Новая»
+ * rides the `draft` pair (waits for an administrator), «На рассмотрении» the
+ * plain card ground with a hairline, «Принята» the success pair, «Отклонена»
+ * the destructive pair, «Истекла» the `draft` pair (closed by time, not by a
+ * decision). A closed application always shows its outcome, so `closed` itself
+ * is only the fallback of a closed row without one. EARS-11 «Команда не
+ * уведомлена» (`not_notified`) rides the destructive pair: an application the
+ * team may not know about yet.
+ */
+const APPLICATION_TONE: Record<
+  ApplicationStatus | ApplicationOutcome | "not_notified",
+  string
+> = {
+  new: "bg-warning-tint text-foreground",
+  in_review: "border border-hairline bg-card text-foreground",
+  closed: "border border-hairline bg-card text-muted-foreground",
+  accepted: "bg-success-tint text-success-text",
+  declined: "bg-destructive-tint text-destructive-text",
+  expired: "bg-warning-tint text-foreground",
+  not_notified: "bg-destructive-tint text-destructive-text",
+};
+
 /** «Включён» / «Выключен» of a feed source. */
 export type FeedSourceState = "enabled" | "disabled";
 
@@ -66,6 +91,7 @@ const TONE: Record<string, string> = {
   ...RELATIONSHIP_TONE,
   ...FEED_SOURCE_TONE,
   ...FEED_ENTRY_TONE,
+  ...APPLICATION_TONE,
 };
 
 export function StatusChip({
@@ -78,7 +104,10 @@ export function StatusChip({
     | RelationshipStatus
     | FeedSourceStatus
     | FeedSourceState
-    | FeedEntryAdminState;
+    | FeedEntryAdminState
+    | ApplicationStatus
+    | ApplicationOutcome
+    | "not_notified";
   label: string;
   /**
    * Overrides the default `status-<value>` handle. Record pages carry a

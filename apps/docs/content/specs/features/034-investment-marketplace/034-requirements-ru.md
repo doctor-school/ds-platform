@@ -63,12 +63,13 @@ lang: ru
 - Страница не обещает оплаты, цены или перевода на платформе; участие — договор вне платформы (CON-16, OWD-3).
 - Витрина врача (`apps/doctor`) не обслуживает маршрут `/investors` и не читает ни одного контракта заявок (ADR-0016 §8).
 
-## Принятые решения
+## Prior decisions (предшествующие решения)
 
 - PRD [`034-product-ru.md`](./034-product-ru.md), срез 1, и записанные в нём решения ведущего агента от 2026-10-28 (названия входов, канал заявки А, письмо «Заявка получена», без «Организация, не персона» на странице).
 - Тройка 033: [`033-requirements-ru.md`](../033-author-application/033-requirements-ru.md) и [`033-design.md`](../033-author-application/033-design.md) «Request kinds (the 034 seam)».
 - Как закрыты пункты PRD с пометкой _agent-proposed — UNCONFIRMED_: [`034-design.md`](./034-design.md) «Lead decisions».
-- ADR — во frontmatter `prior_decisions`.
+- ADR-0016 §2, §4, §6, §7, §8; ADR-0009 §2.3, §2.6; ADR-0011 §2; ADR-0013 §A1; ADR-0014 §2; ADR-0006 §4 (frontmatter `prior_decisions`).
+- 003 EARS-16 / EARS-17 (защита от ботов); 033 EARS-11…EARS-17, EARS-20, EARS-23, EARS-25 (очередь, в которую входит вид).
 
 ## Модель событий
 

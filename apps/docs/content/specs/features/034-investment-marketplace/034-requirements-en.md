@@ -68,7 +68,8 @@ lang: en
 - PRD [`034-product.md`](./034-product.md) slice 1 and its recorded lead decisions of 2026-10-28 (entry naming, request channel А, «Заявка получена» email, no «Организация, не персона» on the page).
 - The 033 triplet: [`033-requirements-en.md`](../033-author-application/033-requirements-en.md) and [`033-design.md`](../033-author-application/033-design.md) «Request kinds (the 034 seam)».
 - The settlements of the PRD's _agent-proposed — UNCONFIRMED_ items: [`034-design.md`](./034-design.md) «Lead decisions».
-- ADRs in the frontmatter `prior_decisions`.
+- ADR-0016 §2, §4, §6, §7, §8; ADR-0009 §2.3, §2.6; ADR-0011 §2; ADR-0013 §A1; ADR-0014 §2; ADR-0006 §4 (frontmatter `prior_decisions`).
+- 003 EARS-16 / EARS-17 (bot protection); 033 EARS-11…EARS-17, EARS-20, EARS-23, EARS-25 (the queue the kind joins).
 
 ## Event Model
 

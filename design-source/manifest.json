@@ -3,10 +3,10 @@
   "sourceArtifact": "https://claude.ai/artifact/LHpSoMqti9kRrhEbR9o2AQ",
   "files": {
     "academy-apply.dc.html": {
-      "sha256": "c2711e5005a4d11d134a73b2e496d7fffb1aef2604e6813451008daac16e1559",
-      "pulledSha256": "fd0f648b28166a10153ba7d1effead83aa2058466a9b50ea7c8cd86796e3b915",
-      "pulledAt": "2026-10-28T12:21:57.404Z",
-      "remotePath": null
+      "sha256": "681893c3d12adcb1589a796ae94d1f0233bae32dea4e2c9ec9ffbd725c21e530",
+      "pulledSha256": "55c4640533bd4e0a2c77e5bc8ca96ae680729c29c4d58efbaf552fca3e06492a",
+      "pulledAt": "2026-11-25T10:39:37.856Z",
+      "remotePath": "project/academy-apply.dc.html"
     },
     "academy-docs.dc.html": {
       "sha256": "bbca362a6d4763e706eef69f93bfb1812c4872e9ae8be508e0a56735af6629b5",

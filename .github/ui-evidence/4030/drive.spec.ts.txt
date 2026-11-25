@@ -233,15 +233,16 @@ test("admin: list, filters, take into work, note, close «Принята» / «�
   // cursor pager: more than one page of rows on the branch DB
   await expect(page.getByLabel("Поиск")).toHaveCount(0);
   const readout = page.getByTestId("applications-page").first();
+  // The API counts nothing: the readout names the current page only, never «из N».
+  await expect(readout).toHaveText("Страница 1");
   console.log(`PAGER page 1: ${await readout.innerText()}`);
   await page.getByRole("button", { name: "Вперёд" }).first().click();
-  // The branch DB keeps earlier drives' rows, so the count of pages varies.
-  await expect(readout).toContainText("Страница 2");
+  await expect(readout).toHaveText("Страница 2");
   console.log(`PAGER page 2: ${await readout.innerText()}`);
   await expect(page.getByTestId("applications-table").getByText(topic(4))).toHaveCount(0);
   await shot(page, "12b-list-page-2");
   await page.getByRole("button", { name: "Назад" }).first().click();
-  await expect(readout).toContainText("Страница 1");
+  await expect(readout).toHaveText("Страница 1");
 
   // 390 px
   await page.setViewportSize({ width: 390, height: 844 });

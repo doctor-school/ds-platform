@@ -5,7 +5,7 @@ import {
   applicationActions,
   applicationRefusal,
   applicationStatusLabelKey,
-  applicationsPageCount,
+  applicationsCursorPager,
   applicationsUrl,
   kindOptionLabel,
   rememberNextCursor,
@@ -158,11 +158,25 @@ describe("033 admin «Заявки» — the pure projections", () => {
     expect(applicationRefusal({ statusCode: 500 })).toBe("generic");
   });
 
-  it("EARS-13: the pager offers the pages reached plus the next one only while a next cursor exists", () => {
-    expect(applicationsPageCount([undefined], 1, null)).toBe(1);
-    expect(applicationsPageCount([undefined], 1, "c2")).toBe(2);
-    expect(applicationsPageCount([undefined, "c2"], 2, null)).toBe(2);
-    expect(applicationsPageCount([undefined, "c2", "c3"], 1, "c2")).toBe(3);
+  it("EARS-13: the cursor pager knows only whether a page exists before and after the current one", () => {
+    expect(applicationsCursorPager([undefined], 1, null)).toEqual({
+      hasPrevious: false,
+      hasNext: false,
+    });
+    expect(applicationsCursorPager([undefined], 1, "c2")).toEqual({
+      hasPrevious: false,
+      hasNext: true,
+    });
+    expect(applicationsCursorPager([undefined, "c2"], 2, null)).toEqual({
+      hasPrevious: true,
+      hasNext: false,
+    });
+    // Back on page 1 while page 2 is in flight: the remembered cursor still
+    // proves the next page exists.
+    expect(applicationsCursorPager([undefined, "c2"], 1, null)).toEqual({
+      hasPrevious: false,
+      hasNext: true,
+    });
   });
 
   it("EARS-13: the cursor of the page after the current one is kept, and a changed one drops the pages beyond", () => {

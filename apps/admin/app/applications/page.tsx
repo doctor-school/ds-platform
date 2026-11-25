@@ -23,7 +23,7 @@ import {
   APPLICATION_STATUS_FILTERS,
   APPLICATIONS_ROUTE,
   applicationStatusLabelKey,
-  applicationsPageCount,
+  applicationsCursorPager,
   applicationsUrl,
   kindOptionLabel,
   rememberNextCursor,
@@ -45,9 +45,9 @@ const FILTER_INITIAL: ApplicationsFilter = { kind: "", status: "" };
  * «Персональные данные стёрты» (EARS-20) marks; the «Вид» and «Статус» facets
  * apply instantly as removable chips; the row opens the application.
  *
- * The API pages by cursor and counts nothing, so the pager offers the pages the
- * operator reached plus the next one while the current page names a next
- * cursor, and the count readout is omitted rather than guessed. A filter change
+ * The API pages by cursor and counts nothing, so the pager offers previous /
+ * next and names only the current page («Страница N»), and the count readout
+ * is omitted rather than guessed. A filter change
  * starts again from the first page.
  */
 export default function ApplicationsListPage() {
@@ -271,7 +271,7 @@ export default function ApplicationsListPage() {
           rows={rows}
           getRowKey={(row) => row.id}
           total={null}
-          pageCount={applicationsPageCount(cursors, query.page, nextCursor)}
+          cursor={applicationsCursorPager(cursors, query.page, nextCursor)}
           isLoading={request.isLoading}
           error={request.isError ? t("applications.errors.loadFailed") : null}
           query={query}

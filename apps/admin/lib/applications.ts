@@ -7,6 +7,7 @@ import {
   type ApplicationOutcome,
   type ApplicationStatus,
 } from "@ds/schemas";
+import type { AdminListCursor } from "./admin-list-pager";
 
 /**
  * 033 EARS-13…EARS-17, EARS-20 — the pure projections behind «Заявки»
@@ -138,16 +139,19 @@ export function applicationRefusal(error: unknown): ApplicationRefusal {
 }
 
 /**
- * The cursor pager: the pages the operator reached are known, and one more
- * exists only while the current page names a next cursor. The API counts
- * nothing, so the pager never claims a page it has not seen evidence of.
+ * The cursor pager: a page before the current one exists from page 2 on, and
+ * the next one exists while its cursor is remembered or the current page names
+ * one. The API counts nothing, so the pager claims no total at all.
  */
-export function applicationsPageCount(
+export function applicationsCursorPager(
   known: readonly (string | undefined)[],
   page: number,
   nextCursor: string | null,
-): number {
-  return Math.max(known.length, page + (nextCursor ? 1 : 0));
+): AdminListCursor {
+  return {
+    hasPrevious: page > 1,
+    hasNext: known.length > page || nextCursor !== null,
+  };
 }
 
 /**

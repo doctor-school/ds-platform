@@ -14,6 +14,7 @@ import {
   ApplicationProblemCodes,
   ApplicationRefusalSchema,
   AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+  ApplicantApplicationListSchema,
   AuthorApplicationIntakeResultSchema,
   BotProtectionErrorCodes,
 } from "@ds/schemas";
@@ -81,7 +82,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const YEAR_AGO_AND_A_DAY = () => new Date(Date.now() - 367 * DAY);
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "033 EARS-6, EARS-7, EARS-20, EARS-23, EARS-24, EARS-25 — application queue core (e2e)",
+  "033 EARS-6, EARS-7, EARS-10, EARS-20, EARS-23, EARS-24, EARS-25 — application queue core (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -405,6 +406,72 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       const known = await submit(a, body({ specialtyCode: rows[0]!.code }));
       expect(known.statusCode, known.payload).toBe(201);
+    });
+
+    // ------------------------------------------------------------ EARS-10
+
+    const LIST_URL = "/v1/me/applications?kind=author";
+    const list = (a: Account | null, url = LIST_URL) =>
+      app.inject({ method: "GET", url, headers: a?.headers ?? device });
+
+    it("EARS-10: when a signed-in caller reads GET /v1/me/applications?kind=author, system shall return the caller's own author applications that are not closed, newest first, each as { id, submittedAt, topic, state: received } and nothing else", async () => {
+      const a = await account("app-read");
+      const other = await account("app-read-other");
+
+      const older = await stored(a.userId, {
+        submittedAt: new Date(Date.now() - 2 * DAY),
+      });
+      const inReview = await stored(a.userId, {
+        submittedAt: new Date(Date.now() - DAY),
+        status: "in_review",
+        statusChangedAt: new Date(Date.now() - DAY),
+      });
+      await stored(a.userId, { status: "closed" });
+      const erased = await stored(a.userId);
+      await app.get(ApplicationsService).eraseOnRequest(erased);
+      await stored(other.userId);
+      const sent = await submit(a, body({ topic: "Ортобиология" }));
+      expect(sent.statusCode, sent.payload).toBe(201);
+      const newest = AuthorApplicationIntakeResultSchema.parse(sent.json());
+
+      const res = await list(a);
+      expect(res.statusCode, res.payload).toBe(200);
+      expect(res.headers["cache-control"]).toBe("no-store");
+      const parsed = ApplicantApplicationListSchema.parse(res.json());
+      expect(parsed.items.map((i) => i.id)).toEqual([
+        newest.id,
+        inReview,
+        older,
+      ]);
+      expect(parsed.items[0]).toEqual({
+        id: newest.id,
+        submittedAt: newest.submittedAt,
+        topic: "Ортобиология",
+        state: "received",
+      });
+      for (const item of res.json().items as object[])
+        expect(Object.keys(item).sort()).toEqual([
+          "id",
+          "state",
+          "submittedAt",
+          "topic",
+        ]);
+      expect(res.payload).not.toMatch(/in_review|closed|declined|outcome/);
+    });
+
+    it("EARS-10: an account with no open application reads an empty list; an anonymous caller gets 401 and a missing or unknown kind 400", async () => {
+      const a = await account("app-read-empty");
+      await stored(a.userId, { status: "closed" });
+
+      const empty = await list(a);
+      expect(empty.statusCode, empty.payload).toBe(200);
+      expect(empty.json()).toEqual({ items: [] });
+
+      expect((await list(null)).statusCode).toBe(401);
+      expect((await list(a, "/v1/me/applications")).statusCode).toBe(400);
+      expect(
+        (await list(a, "/v1/me/applications?kind=investor")).statusCode,
+      ).toBe(400);
     });
 
     // ------------------------------------------------------------ EARS-20

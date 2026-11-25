@@ -19,11 +19,12 @@ import {
   APPLICATION_NOTE_ERASED_SENTINEL,
   type ApplicationProblemCode,
   ApplicationProblemCodes,
+  type ApplicantApplicationList,
   type AuthorApplicationIntake,
   type AuthorApplicationIntakeResult,
   isCanonicalIdempotencyKey,
 } from "@ds/schemas";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import {
   type AuditedTransaction,
@@ -265,6 +266,41 @@ export class ApplicationsService {
         submittedAt: created!.submittedAt.toISOString(),
       };
     });
+  }
+
+  /**
+   * EARS-10 — `GET /v1/me/applications?kind=author`: the caller's own author
+   * applications that are not `closed`, newest first, each as
+   * `{ id, submittedAt, topic, state: "received" }`. An erased application no
+   * longer carries the applicant, so it is never read back. The topic comes
+   * from the stored payload, never from a column an administrator writes.
+   */
+  async listOwnAuthor(sub: string): Promise<ApplicantApplicationList> {
+    const userId = await this.accountId(sub);
+    const rows = await this.db
+      .select({
+        id: applications.id,
+        submittedAt: applications.submittedAt,
+        topic: sql<string>`${applications.payload} ->> 'topic'`,
+      })
+      .from(applications)
+      .where(
+        and(
+          eq(applications.kind, "author"),
+          eq(applications.applicantUserId, userId),
+          ne(applications.status, "closed"),
+          isNull(applications.pdErasedAt),
+        ),
+      )
+      .orderBy(desc(applications.submittedAt), desc(applications.id));
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        submittedAt: r.submittedAt.toISOString(),
+        topic: r.topic,
+        state: "received" as const,
+      })),
+    };
   }
 
   /**

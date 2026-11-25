@@ -4,20 +4,20 @@ Backend core of the application queue (`033-design.md` «Capability owner»): th
 tables `applications` / `application_notes` (`packages/db/src/schema/applications.ts`),
 the contract in `packages/schemas/src/applications/`, and this module.
 
-| File                                           | What it owns                                                                                                    |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `applications.kinds.ts`                        | `APPLICATION_KIND_TABLE` — per kind: payload/contact schema, subject line, intake, consent purpose, `receiptTo` |
-| `applications-consent.ts`                      | the current consent version tag, stamped from the `@ds/legal-content` document (edition + sha256)               |
-| `applications.service.ts`                      | the author intake; `eraseApplication` (EARS-20); `eraseApplicationsOfAccount` (EARS-24); the purge steps        |
-| `applications.purge.ts`                        | the daily retention pass: expiry (EARS-23), then erasure one year after closing (EARS-20)                       |
-| `applications.me.controller.ts`                | `POST /v1/me/applications/author` (EARS-6, EARS-7)                                                              |
-| `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); 034's investor intake joins it                            |
-| `applications.partnership.service.ts`          | the partnership intake: replay lookup, fixed consent tag, one row with its contact                              |
-| `import-partnership-records.ts` (+ `.main.ts`) | the one-off import of the interim form's stored records (EARS-19)                                               |
-| `applications.admin.controller.ts`             | the admin «Заявки» routes `/v1/admin/applications*` (EARS-13…EARS-17, EARS-20)                                  |
-| `applications.admin.service.ts`                | the admin list, detail, status move, notes and erasure on request                                               |
-| `applications.admin-view.ts`                   | `APPLICATION_ADMIN_VIEWS` — per kind: the detail's labelled fields and the no-account contact                   |
-| `applications.admin.errors.ts`                 | `409 APPLICATION_TRANSITION_NOT_ALLOWED` / `409 ALREADY_ERASED` and the scoped problem filter                   |
+| File                                           | What it owns                                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `applications.kinds.ts`                        | `APPLICATION_KIND_TABLE` — per kind: payload/contact schema, subject line, intake, consent purpose, `receiptTo`   |
+| `applications-consent.ts`                      | the current consent version tag, stamped from the `@ds/legal-content` document (edition + sha256)                 |
+| `applications.service.ts`                      | the author intake and read; `eraseApplication` (EARS-20); `eraseApplicationsOfAccount` (EARS-24); the purge steps |
+| `applications.purge.ts`                        | the daily retention pass: expiry (EARS-23), then erasure one year after closing (EARS-20)                         |
+| `applications.me.controller.ts`                | `POST /v1/me/applications/author` (EARS-6, EARS-7); `GET /v1/me/applications?kind=author` (EARS-10)               |
+| `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); 034's investor intake joins it                              |
+| `applications.partnership.service.ts`          | the partnership intake: replay lookup, fixed consent tag, one row with its contact                                |
+| `import-partnership-records.ts` (+ `.main.ts`) | the one-off import of the interim form's stored records (EARS-19)                                                 |
+| `applications.admin.controller.ts`             | the admin «Заявки» routes `/v1/admin/applications*` (EARS-13…EARS-17, EARS-20)                                    |
+| `applications.admin.service.ts`                | the admin list, detail, status move, notes and erasure on request                                                 |
+| `applications.admin-view.ts`                   | `APPLICATION_ADMIN_VIEWS` — per kind: the detail's labelled fields and the no-account contact                     |
+| `applications.admin.errors.ts`                 | `409 APPLICATION_TRANSITION_NOT_ALLOWED` / `409 ALREADY_ERASED` and the scoped problem filter                     |
 
 ## Intake
 
@@ -55,6 +55,14 @@ original submission), `team_notice = imported` (never notified, no «Коман�
 `legacy_record_id` it does nothing. It prints `{ imported, alreadyPresent,
 invalid: [file names] }`. The prod procedure is in
 `operations/academy-partnership-submissions.md`.
+
+## Applicant read
+
+`GET /v1/me/applications?kind=author` — signed in, `no-store`, writes nothing.
+The caller's own `author` applications that are not `closed` and not erased,
+newest first, each `{ id, submittedAt, topic, state: "received" }` — the topic
+from the stored payload; no status, outcome or note reaches the applicant
+(EARS-10, EARS-16). A missing or other `kind` is `400`.
 
 ## Retention and erasure
 

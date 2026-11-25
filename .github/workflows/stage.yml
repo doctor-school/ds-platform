@@ -406,15 +406,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OUTCOME: ${{ steps.suite.outcome }}
         run: |
+          # The suite report plus every live leg's (#4222): a failed live tier is
+          # counted and named, so a red status never reads «0 failed».
           counts=$(node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            import { summarizeReport } from "./tools/staging/e2e-stage.mjs";
-            let report = {};
-            try { report = JSON.parse(readFileSync(process.argv[1], "utf8")); } catch {}
-            const s = summarizeReport(report);
-            const sum = (k) => s.projects.reduce((n, p) => n + p[k], 0);
-            console.log(`${sum("passed")} passed, ${sum("failed")} failed, ${sum("skipped")} skipped`);
-          ' "$REPORT_DIR/results.json")
+            import { suiteStatusDescriptionFromDir } from "./tools/staging/e2e-stage.mjs";
+            console.log(suiteStatusDescriptionFromDir(process.argv[1]));
+          ' "$REPORT_DIR")
           state=failure
           [ "$OUTCOME" = "success" ] && state=success
           echo "stage-suite: $state — $counts"

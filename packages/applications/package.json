@@ -1,0 +1,24 @@
+{
+  "name": "@ds/applications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform shared application-queue unit — the «Подать заявку» copy, its form and submission decisions and the /v1/me/applications client (feature 033, ADR-0013 A1).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ds/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}

@@ -900,6 +900,53 @@ export function reportStamp(now) {
     .replace(/\.\d+Z$/, "Z");
 }
 
+/** The stage box's root of shipped suite reports (`upload-report`, #4250). */
+export const BOX_REPORTS_ROOT = "/var/lib/ds-platform/e2e-reports";
+
+/**
+ * The key of one suite attempt's report dir under its SHA. A re-run of the workflow
+ * on the same SHA is a new attempt (GITHUB_RUN_ATTEMPT) or a new run (GITHUB_RUN_ID),
+ * so each lands in its own dir and a green re-run never overwrites the failed
+ * attempt's evidence. The box checks the key against its copy of this pattern
+ * (`REPORT_ATTEMPT_RE` in infra/deploy/bin/ds-deploy-entrypoint, pinned equal by
+ * tools/deploy/ds-deploy-entrypoint.test.mjs).
+ */
+export const REPORT_ATTEMPT_RE = /^attempt-([1-9][0-9]{0,4})-run-([1-9][0-9]{0,19})$/;
+
+export function reportAttemptKey({ runAttempt, runId }) {
+  const key = `attempt-${String(runAttempt ?? "").trim()}-run-${String(runId ?? "").trim()}`;
+  if (!REPORT_ATTEMPT_RE.test(key)) {
+    throw new Error(
+      `report attempt key needs GITHUB_RUN_ATTEMPT and GITHUB_RUN_ID as positive integers, got ${JSON.stringify(key)}`,
+    );
+  }
+  return key;
+}
+
+/** Where one attempt's report lands on the stage box. */
+export function boxReportDir(sha, key) {
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`bad sha ${JSON.stringify(sha)}`);
+  if (!REPORT_ATTEMPT_RE.test(key)) throw new Error(`bad report attempt key ${JSON.stringify(key)}`);
+  return `${BOX_REPORTS_ROOT}/${sha}/${key}/`;
+}
+
+/**
+ * The latest attempt among the dir names under one SHA's report dir: the highest run
+ * id (runs are numbered in start order), then the highest attempt of that run.
+ * Names that are not attempt keys (a pre-#4250 flat report's files) are ignored;
+ * null when there is no attempt.
+ */
+export function latestReportAttempt(names) {
+  let best = null;
+  for (const name of names) {
+    const m = REPORT_ATTEMPT_RE.exec(name);
+    if (!m) continue;
+    const at = { name, attempt: Number(m[1]), run: BigInt(m[2]) };
+    if (!best || at.run > best.run || (at.run === best.run && at.attempt > best.attempt)) best = at;
+  }
+  return best ? best.name : null;
+}
+
 // --- the effects --------------------------------------------------------------
 
 /**

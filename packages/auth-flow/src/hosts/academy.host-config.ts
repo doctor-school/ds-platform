@@ -54,6 +54,8 @@ export const ACADEMY_AUTH_FLOW = {
     // 006 EARS-6 — the room a bounced visitor returns to; the same value
     // `@ds/room` reads from `lib/room-config.ts`.
     room: "/webinars/:slug/room",
+    // 033 EARS-3 — the application page a gated guest returns to.
+    apply: "/apply",
   },
   // 013 EARS-15 — no carried target lands on the discovery listing, never the
   // marketing landing; this host keeps no specialty memory (row 38).

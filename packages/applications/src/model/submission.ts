@@ -85,7 +85,7 @@ export function submissionReducer(
 export function classifyFailure(error: {
   status: number;
   problems: ApplicationRefusal["problems"];
-  code?: string;
+  code?: string | undefined;
 }): ApplicationsFailure {
   if (error.status === 0 || error.status >= 500) return { kind: "unavailable" };
   if (error.status === 401) return { kind: "signed-out" };

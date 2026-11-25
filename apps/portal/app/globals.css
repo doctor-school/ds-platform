@@ -44,3 +44,9 @@
  * mounts — its client wrapper carries the header cluster's layout classes.
  */
 @source "../../../packages/room-page/src";
+
+/*
+ * And `@ds/applications` (033), the «Подать заявку» page `/apply` mounts — its
+ * page, account gate and form ship as .tsx.
+ */
+@source "../../../packages/applications/src";

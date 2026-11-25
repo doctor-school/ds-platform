@@ -55,6 +55,8 @@ const config: NextConfig = {
   outputFileTracingIncludes: {
     "/documents": ["../../packages/legal-content/documents/**"],
     "/documents/[slug]": ["../../packages/legal-content/documents/**"],
+    // 033 EARS-6 — «Подать заявку» stamps the form with the consent's version tag.
+    "/apply": ["../../packages/legal-content/documents/**"],
   },
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
@@ -66,8 +68,10 @@ const config: NextConfig = {
   // its cabinet reads the `@ds/congress-submissions/client` section read on a
   // host that configures one — both ship .tsx/.ts sources. `@ds/room-page`
   // (#2073) mounts `/webinars/:slug/room` and ships its client wrapper as .tsx.
+  // `@ds/applications` (033) mounts `/apply` and ships its form as .tsx.
   transpilePackages: [
     "@ds/account",
+    "@ds/applications",
     "@ds/auth-flow",
     "@ds/congress-submissions",
     "@ds/design-system",

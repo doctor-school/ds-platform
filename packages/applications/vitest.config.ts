@@ -1,14 +1,19 @@
 import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-// Unit config for `@ds/applications` (033, #4031). The model and the client are
-// pure TypeScript over `fetch`, so the node environment is enough; the include
-// is scoped to the co-located test files under `src`. The shared convention is
-// documented at apps/docs/content/architecture/component-testing.md.
+// Unit + component config for `@ds/applications` (033, #4031). Mirrors
+// `packages/congress-submissions/vitest.config.ts`: `@vitejs/plugin-react`
+// supplies the JSX transform, jsdom the DOM the page, its form and the browser
+// client need, and the include is scoped to the co-located test files under
+// `src`. The shared convention is documented at
+// apps/docs/content/architecture/component-testing.md.
 export default defineConfig({
+  plugins: [react()],
   test: {
-    environment: "node",
+    environment: "jsdom",
     globals: true,
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist"],
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

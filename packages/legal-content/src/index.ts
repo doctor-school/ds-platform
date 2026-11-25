@@ -12,3 +12,4 @@ export {
   type LegalDocument,
   type LoaderOptions,
 } from "./loader.js";
+export { documentVersionTag } from "./version.js";

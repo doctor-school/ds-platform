@@ -47,13 +47,15 @@ config does not hide (`/login`, `/register`, `/verify`, `/reset` and
 `/webinars/*/room`).
 
 The Academy home reads local fixtures and local WEBP portraits only. Its
-partnership form uses React Hook Form with one shared Zod schema and a Next.js
-Server Action. Accepted submissions are written as one atomic, idempotent,
-private JSON file per UUID under `ACADEMY_SUBMISSIONS_DIR`; there is no public
-read/list route and no database, queue, notification, or outbound integration.
-Production mounts a dedicated portal-only Docker volume at that directory. The
-directory is required, real, node-owned and `0700`; records are `0600`, and the
-writer fails closed when those invariants are absent.
+partnership form uses React Hook Form with one shared Zod schema and posts each
+attempt from the browser, same-origin through the `/v1/*` BFF rewrite, to the
+api's application queue (`POST /v1/public/applications/partnership`, 033
+EARS-18): one `Idempotency-Key` per attempt (a retry of the same values reuses
+it, an edit mints a new one) and the invisible SmartCaptcha token, whose site
+key the page reads from the runtime `SMARTCAPTCHA_SITE_KEY`. The portal writes
+nothing itself; the interim file store it once wrote is retired, and its stored
+records reach the queue through the api's one-off
+`applications:import-partnership` (EARS-19).
 
 ## Commands
 

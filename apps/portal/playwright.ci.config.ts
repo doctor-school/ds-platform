@@ -1,7 +1,3 @@
-import { chmodSync, mkdtempSync, realpathSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -14,12 +10,13 @@ import { defineConfig, devices } from "@playwright/test";
  * topology). THIS config is the one CI runs (`playwright-axe-portal` job): it
  * owns a `webServer` that boots the already-built portal with `next start`.
  * `testMatch` pins it to the backend-free auth-page axe scan and the Academy
- * home journey. The Academy form writes only into a guarded, CI-created private
- * temp directory, including accept/retry and real write-failure coverage. The
- * auth spec mocks its mount-time BFF read. So this tier remains hermetic: no
- * Postgres / Zitadel / Mailpit / API, and no submitted value leaves the process.
- * The showcase `playwright-axe` gate covers DS primitives; this tier covers the
- * composed product pages and persistence boundary that primitives cannot assert.
+ * home journey. The Academy partnership form posts to the api's queue intake
+ * (033 EARS-18); here the spec answers that same-origin request in the browser
+ * (accept, lost-response retry, unavailable), and the stage leg drives the real
+ * intake. The auth spec mocks its mount-time BFF read. So this tier remains
+ * hermetic: no Postgres / Zitadel / Mailpit / API, and no submitted value leaves
+ * the process. The showcase `playwright-axe` gate covers DS primitives; this
+ * tier covers the composed product pages that primitives cannot assert.
  *
  * Run locally (after `pnpm --filter @ds/portal build`):
  *   pnpm --filter @ds/portal test:e2e:ci
@@ -40,40 +37,6 @@ const DOUBLE_TOKEN = "storefront-double-token";
 const SESSION_DOUBLE_PORT = Number(
   process.env.STOREFRONT_SESSION_DOUBLE_PORT ?? 3218,
 );
-const ACADEMY_E2E_SAFE_MARKER = "ACADEMY_PARTNERSHIP_E2E_SAFE";
-
-function normalized(path: string): string {
-  const resolved = resolve(path);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
-function validateInheritedSafeDirectory(directory: string): string {
-  const resolvedDirectory = resolve(directory);
-  const realDirectory = realpathSync(resolvedDirectory);
-  const realTemporaryRoot = realpathSync(tmpdir());
-  if (
-    !statSync(resolvedDirectory).isDirectory() ||
-    normalized(realDirectory) !== normalized(resolvedDirectory) ||
-    normalized(dirname(realDirectory)) !== normalized(realTemporaryRoot) ||
-    !basename(realDirectory).startsWith("academy-partnership-e2e-")
-  ) {
-    throw new Error("Refusing an unsafe inherited Academy E2E directory");
-  }
-  return realDirectory;
-}
-
-const inheritedSafeDirectory =
-  process.env[ACADEMY_E2E_SAFE_MARKER] === "1"
-    ? process.env.ACADEMY_SUBMISSIONS_DIR
-    : undefined;
-const ACADEMY_SUBMISSIONS_DIR =
-  (inheritedSafeDirectory
-    ? validateInheritedSafeDirectory(inheritedSafeDirectory)
-    : undefined) ?? mkdtempSync(join(tmpdir(), "academy-partnership-e2e-"));
-if (!inheritedSafeDirectory) chmodSync(ACADEMY_SUBMISSIONS_DIR, 0o700);
-process.env[ACADEMY_E2E_SAFE_MARKER] = "1";
-process.env.ACADEMY_SUBMISSIONS_DIR = ACADEMY_SUBMISSIONS_DIR;
-
 export default defineConfig({
   testDir: "./e2e",
   // Only the backend-free axe, Academy and sign-in-entry specs run in CI (the
@@ -109,7 +72,6 @@ export default defineConfig({
     // double, the browser's `/v1/me/applications*` calls answered in-spec.
     /[\\/]e2e[\\/]apply\.e2e\.spec\.ts$/,
   ],
-  globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -152,8 +114,6 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         ...process.env,
-        [ACADEMY_E2E_SAFE_MARKER]: "1",
-        ACADEMY_SUBMISSIONS_DIR,
         INTERNAL_API_URL: `http://127.0.0.1:${DOUBLE_PORT}`,
         INTERNAL_API_TOKEN: DOUBLE_TOKEN,
         API_PROXY_TARGET: `http://127.0.0.1:${SESSION_DOUBLE_PORT}`,

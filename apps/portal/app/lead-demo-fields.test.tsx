@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LeadDemoFields, type LeadDemoFieldsProps } from "./lead-demo-fields";
 
-type SubmitAction = LeadDemoFieldsProps["submitAction"];
+type SubmitAction = NonNullable<LeadDemoFieldsProps["submitAction"]>;
 type SubmitResult = Awaited<ReturnType<SubmitAction>>;
 
 const VALID_NAME = "  Анна Соколова  ";
@@ -248,6 +248,81 @@ describe("Feature 013 Academy partnership form", () => {
     expect(submit).toBeDisabled();
 
     await act(async () => resolveSubmit?.({ status: "success" }));
+  });
+
+  describe("033 EARS-18 — the queue intake", () => {
+    it("EARS-18: a refused bot-protection proof shows the challenge copy, keeps the values and a retry reuses the idempotency key", async () => {
+      const submitAction = vi
+        .fn<SubmitAction>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("refused"), {
+            code: "BOT_PROTECTION_REJECTED",
+          }),
+        )
+        .mockResolvedValueOnce({ status: "success" });
+      const user = userEvent.setup();
+      render(<LeadDemoFields submitAction={submitAction} />);
+      await fillValidForm(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+      expect(
+        await screen.findByText(
+          "Проверка истекла или не пройдена. Подтвердите ещё раз.",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Имя/)).toHaveValue(VALID_NAME);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+      expect(
+        await screen.findByText("Спасибо! Заявка сохранена."),
+      ).toBeVisible();
+      expect(submitAction).toHaveBeenCalledTimes(2);
+      expect(submitAction.mock.calls[1]![0].idempotencyKey).toBe(
+        submitAction.mock.calls[0]![0].idempotencyKey,
+      );
+    });
+
+    it("EARS-18: with protection off the attempt is sent once, tokenless", async () => {
+      const submitAction = vi
+        .fn<SubmitAction>()
+        .mockResolvedValue({ status: "success" });
+      const user = userEvent.setup();
+      render(<LeadDemoFields submitAction={submitAction} />);
+      await fillValidForm(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+
+      expect(
+        await screen.findByText("Спасибо! Заявка сохранена."),
+      ).toBeVisible();
+      expect(submitAction).toHaveBeenCalledTimes(1);
+      expect(submitAction.mock.calls[0]![1]).toBeUndefined();
+      expect(
+        screen.queryByTestId("smartcaptcha-disclosure"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("EARS-18: with a site key the form carries the SmartCaptcha disclosure", () => {
+      render(
+        <LeadDemoFields
+          submitAction={vi.fn<SubmitAction>()}
+          botProtectionSiteKey="site-key"
+        />,
+      );
+
+      expect(screen.getByTestId("smartcaptcha-disclosure")).toHaveTextContent(
+        "Форма защищена Yandex SmartCaptcha.",
+      );
+    });
   });
 
   it("EARS-8: submit shall use the canonical on-primary surface treatment", () => {

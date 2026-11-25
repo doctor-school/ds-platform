@@ -209,7 +209,7 @@ stateDiagram-v2
 
 - **032 slice 1 «Registry and roles» (#3492)** — `blocked_by`: `project_organisations`, `organisation_roles` and the investor seed role must exist (EARS-4, EARS-17). **032 «Public projections» (#3494)** — `blocked_by` for EARS-8 / 9 / 13 / 15 (display predicate and the count).
 - **012 EARS-13 / EARS-14 for projects (#1295 / #1296)** — `blocked_by` of the «Organisations, order, lifecycle» package (EARS-4, 5, 7): project retire and restore do not exist today (`apps/admin/app/projects/[id]/page.tsx` publishes only). Both Issues are open and tracked; EARS-7 of 030 states the catalog consequences, the transitions themselves (#1295 retirement through the signed impact preview, #1296 restore) are those Issues' deliverable (Lead decisions 13, 15).
-- **033 slice 1 (#1802) and 034 slice 1 (#1824) pages** — PRD-only today. The catalog plate and «Войти в проект» lead to both, the free investor place to 034; the «Catalog and home block» package (EARS-10, 11, 12, 19) and the «Project page» package (EARS-14, 15, 16, 20, 21) are each `blocked_by` #1802 and #1824 until those pages exist, so no link ships to a missing page (PRD «no link leads to a missing page»; Lead decision 16).
+- **033 slice 1 page (#4031) and 034 slice 1 page (#4238)** — the «Подать заявку» page `/apply` and the «Инвесторам» page `/investors`. The catalog plate and «Войти в проект» lead to both, the free investor place to 034; the «Catalog and home block» package (EARS-10, 11, 12, 19; #3506) and the «Project page» package (EARS-14, 15, 16, 20, 21; #3507) are each `blocked_by` #4031 and #4238 until those pages exist, so no link ships to a missing page (PRD «no link leads to a missing page»; Lead decision 16).
 - **Specialty book** (`specialties_minzdrav`, 017) — on `main` and seeded; EARS-21 references it, no edge.
 - **029** consumes the shared card and the catalog read for its relaunched home; 030 already replaces the fixture section (EARS-12), so 029 moves the block, never re-implements it.
 
@@ -223,7 +223,7 @@ flowchart LR
   L[012 #1295 / #1296] --> B
   C --> D[Catalog and home block<br/>EARS-10,11,12,19]
   C --> E[Project page<br/>EARS-14,15,16,20,21]
-  P[033 #1802 / 034 #1824 pages] --> D
+  P[033 #4031 / 034 #4238 pages] --> D
   P --> E
   B --> J[Browser journeys<br/>V-9, V-10]
   D --> J
@@ -252,7 +252,7 @@ The PRD's _agent-proposed — UNCONFIRMED_ items, specified as the PRD writes th
 13. **Project retire / restore stay owned by 012 #1295 / #1296**; 030's lifecycle package is `blocked_by` them instead of re-implementing the 012 transition protocol.
 14. **Sought expert specialty** (canvas `academy-project.dc.html` «Войти в проект», both the `full` and the slice-1 branch): an optional project field referencing one entry of the Минздрав specialty book `specialties_minzdrav`, edited on the admin project form and projected by the project read; set, the expert card reads «Проект ищет эксперта по специальности «<name>».» with the verbatim book name (book wording is never inflected, so the canvas's declined sample is not reproduced); empty, the card shows no sentence about a specialty and keeps its heading and action (EARS-21).
 15. **Retire / restore prerequisites are real**: #1295 (012 EARS-13) and #1296 (012 EARS-14) are open, tracked Issues and stay the `blocked_by` of the «Organisations, order, lifecycle» package (Dependencies).
-16. **Application pages first**: the «Catalog and home block» and «Project page» packages are `blocked_by` #1802 (033 slice 1) and #1824 (034 slice 1) until those pages exist; no link is shipped to a missing page (Dependencies).
+16. **Application pages first**: the «Catalog and home block» and «Project page» packages are `blocked_by` #4031 (033 slice 1 page) and #4238 (034 slice 1 page) until those pages exist; no link is shipped to a missing page (Dependencies).
 17. **Catalog header copy is not pinned by EARS**: the canvas header «Всё для врачей бесплатно» conflicts with ADR-0016 §4 and with the platform rule that the wording «бесплатно» is not used; the header wording is a Stage-A copy item of the catalog-UI Issue (EARS-10 pins only the scale line).
 18. **Results are their own read**: `GET /v1/public/projects/{idOrSlug}/results` is separate from the project read, so the «Результаты» block loads, fails and retries alone while the rest of the page works (EARS-13, EARS-14).
 19. **A published project without results stays off the site**: the `public_project` predicate requires at least one result, so a migrated 012 project is invisible on every public read until the operator states its results, rather than shown half-filled (EARS-8, EARS-17).

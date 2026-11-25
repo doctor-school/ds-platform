@@ -49,6 +49,53 @@ export function videoDurationSec(step: LearningStepModel): number {
 }
 
 /**
+ * EARS-10 (#4060) — the furthest a provider-reported media length may shorten
+ * the completion target below the typed length, as a share of it. A typed
+ * length off by rounding or an intro/outro is absorbed; a client claiming a
+ * much shorter media cannot halve the watching any further than this.
+ */
+export const VIDEO_PROVIDER_LENGTH_MIN_SHARE = 0.5;
+
+/**
+ * EARS-10 (#4060) — the length a video step is watched to: the media length the
+ * provider's own player reported (the shortest one reported), never longer than
+ * the typed length and never under {@link VIDEO_PROVIDER_LENGTH_MIN_SHARE} of
+ * it; the typed length when the player reported none. It decides the target
+ * only: every position is still clamped by the server clock.
+ */
+export function videoTargetSec(typedSec: number, reportedSec: number | null): number {
+  if (typedSec <= 0 || reportedSec === null) return typedSec;
+  const floor = Math.ceil(typedSec * VIDEO_PROVIDER_LENGTH_MIN_SHARE);
+  return Math.max(floor, Math.min(typedSec, Math.floor(reportedSec)));
+}
+
+/**
+ * EARS-10 (#4060) — the media length a position report carries, kept only when
+ * the reported position has reached it (within {@link VIDEO_END_WINDOW_SEC}):
+ * the length the player reports at the end of playback. A length reported
+ * mid-play — a partial or streaming length (Rutube repeats `durationChange`
+ * while streaming), an ad's — is not kept, so it never lowers the target. The
+ * kept lengths' shortest is the one the target reads (LearningFactIndex).
+ */
+export function mediaLengthAtEnd(
+  reportedPositionSec: number,
+  mediaDurationSec: number | undefined,
+): number | undefined {
+  if (mediaDurationSec === undefined) return undefined;
+  return reportedPositionSec >= mediaDurationSec - VIDEO_END_WINDOW_SEC
+    ? mediaDurationSec
+    : undefined;
+}
+
+/** EARS-10 — {@link videoTargetSec} of a step over the doctor's facts. */
+export function videoStepTargetSec(
+  step: LearningStepModel,
+  ctx: LearningEvalContext,
+): number {
+  return videoTargetSec(videoDurationSec(step), ctx.facts.mediaLength(step.id));
+}
+
+/**
  * EARS-10 — the position the server accepts from a client report: never past
  * the real media length, and never further than the server wall-clock time
  * since the doctor's first accepted position report on the step at the
@@ -79,7 +126,7 @@ export function clampReportedPosition(input: {
 
 export { VIDEO_END_WINDOW_SEC } from "./video-end-window.js";
 
-/** EARS-10 — the watched share, positions capped at the real media duration. */
+/** EARS-10 — the watched share, positions capped at the media length watched to. */
 export function watchedShare(duration: number, maxPosition: number): number {
   if (duration <= 0) return 0;
   const position = Math.min(maxPosition, duration);
@@ -91,7 +138,7 @@ export function watchedPercent(
   step: LearningStepModel,
   ctx: LearningEvalContext,
 ): number {
-  return watchedShare(videoDurationSec(step), ctx.facts.maxPosition(step.id));
+  return watchedShare(videoStepTargetSec(step, ctx), ctx.facts.maxPosition(step.id));
 }
 
 export const LEARNING_ELEMENT_CATALOG: Readonly<

@@ -30,7 +30,9 @@ import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   clampReportedPosition,
   elementType,
+  mediaLengthAtEnd,
   videoDurationSec,
+  videoStepTargetSec,
   watchedPercent,
 } from "../catalog/element-types.js";
 import {
@@ -564,7 +566,7 @@ export class LearningDoctorService {
     if (step.type === "video") {
       // A published video always carries its provider source (EARS-4).
       if (!row.provider || !row.embedRef) throw notFound("step source");
-      const duration = videoDurationSec(step);
+      const duration = videoStepTargetSec(step, e.evaluator);
       return {
         type: "video",
         provider: row.provider,
@@ -673,6 +675,13 @@ export class LearningDoctorService {
           .orderBy(asc(learningFacts.occurredAt))
           .limit(1);
         data["reportedSec"] = fact.data.positionSec;
+        // The provider-reported media length is kept only when reported with
+        // the end (mediaLengthAtEnd): a partial length never lowers the target.
+        // It only shortens the target (videoTargetSec), never under half the
+        // typed length; the clamp below still uses the typed length, and the
+        // read caps the counted position at the target.
+        const mediaSec = mediaLengthAtEnd(fact.data.positionSec, fact.data.mediaDurationSec);
+        if (mediaSec !== undefined) data["mediaDurationSec"] = mediaSec;
         data["positionSec"] = clampReportedPosition({
           reportedSec: fact.data.positionSec,
           durationSec: videoDurationSec(step),
@@ -708,7 +717,7 @@ export class LearningDoctorService {
         return {
           positionSec: Math.min(
             evaluator.facts.maxPosition(fact.stepId),
-            videoDurationSec(step),
+            videoStepTargetSec(step, evaluator),
           ),
           watchedPercent: Math.min(100, watchedPercent(step, evaluator)),
         };

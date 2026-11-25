@@ -6,7 +6,9 @@ import { Button } from "@ds/design-system/button";
 import { resolveEmbed } from "@ds/room/embed";
 import {
   parseProviderClock,
+  parseProviderMedia,
   parseProviderSignal,
+  type ProviderMedia,
   providerClockHandshake,
 } from "@ds/room/player-signals";
 
@@ -98,6 +100,12 @@ export interface RecordingPlayerProps {
    */
   onClock?: (positionSec: number) => void;
   /**
+   * 024 EARS-10 (#4060) — the media length and «ended» the provider's own
+   * player reports, each time a message carries either. Only read alongside
+   * `onClock` (the same player API); cdnvideo never calls it.
+   */
+  onMedia?: (media: ProviderMedia) => void;
+  /**
    * 024 EARS-16 (#4011) — the frame is mounted by the viewer's explicit tap
    * (the step's «Смотреть видео»), so the provider starts playing at once
    * (`resolveEmbed` `autoplay`). Opt-in: 014's event page mounts its player
@@ -105,6 +113,8 @@ export interface RecordingPlayerProps {
    */
   autoplay?: boolean;
 }
+
+export type { ProviderMedia };
 
 export function RecordingPlayer({
   provider,
@@ -115,6 +125,7 @@ export function RecordingPlayer({
   unavailableBody,
   retryLabel,
   onClock,
+  onMedia,
   autoplay = false,
 }: RecordingPlayerProps) {
   // `attempt` doubles as the iframe `key`: bumping it unmounts the failed frame
@@ -157,6 +168,8 @@ export function RecordingPlayer({
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const clockRef = useRef(onClock);
   clockRef.current = onClock;
+  const mediaRef = useRef(onMedia);
+  mediaRef.current = onMedia;
   const listening = onClock !== undefined;
 
   useEffect(() => {
@@ -169,6 +182,8 @@ export function RecordingPlayer({
       if (!listening) return;
       const sec = parseProviderClock(provider, event);
       if (sec !== null) clockRef.current?.(sec);
+      const media = parseProviderMedia(provider, event);
+      if (media) mediaRef.current?.(media);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

@@ -303,6 +303,72 @@ export function parseProviderClock(
 }
 
 /**
+ * 024 EARS-10 (#4060) — what the provider's own player says about the media:
+ * its real length and whether playback has reached the end. Either may be
+ * absent from one message; a message that carries neither is `null`.
+ */
+export interface ProviderMedia {
+  /** The media length the player reports, in seconds, or null when this message has none. */
+  readonly durationSec: number | null;
+  /** The player reached the end of the media. */
+  readonly ended: boolean;
+}
+
+/** A finite, positive number of seconds, or null (a zero length is not yet known). */
+function length(value: unknown): number | null {
+  const n = seconds(value);
+  return n !== null && n > 0 ? n : null;
+}
+
+function media(durationSec: number | null, ended: boolean): ProviderMedia | null {
+  return durationSec === null && !ended ? null : { durationSec, ended };
+}
+
+/**
+ * 024 EARS-10 (#4060) — the media length and «ended» from a provider
+ * postMessage, or `null` when the message carries neither or is untrusted (the
+ * same origin guard as {@link parseProviderClock}).
+ *
+ * - **youtube** — IFrame Player API `infoDelivery` `info.duration`, and
+ *   `playerState` 0 (ended) in `infoDelivery` `info.playerState` or
+ *   `onStateChange` `info`.
+ * - **rutube** — `player:durationChange` `data.duration`; `player:playComplete`
+ *   (the video and its ads finished). `player:changeState` `stopped` is the
+ *   documented end of the video itself, but it is deliberately not read: the
+ *   end counts once playback, ads included, is complete (`playComplete`).
+ * - **vk** — every JS API event carries the player state, `duration` included;
+ *   the `ended` event is the end of playback (only with `js_api=1`, always set).
+ * - **cdnvideo** — none.
+ */
+export function parseProviderMedia(
+  provider: StreamProvider,
+  event: { origin: string; data: unknown },
+): ProviderMedia | null {
+  if (!PROVIDER_HAS_CLOCK[provider]) return null;
+  if (event.origin !== PROVIDER_ORIGIN[provider]) return null;
+  const msg = asRecord(event.data);
+  if (!msg) return null;
+  if (provider === "youtube") {
+    if (msg.event === "onStateChange") return media(null, msg.info === 0);
+    if (msg.event !== "infoDelivery") return null;
+    const info = asRecord(msg.info);
+    return info ? media(length(info.duration), info.playerState === 0) : null;
+  }
+  if (provider === "rutube") {
+    if (msg.type === "player:playComplete") return media(null, true);
+    if (msg.type !== "player:durationChange") return null;
+    const data = asRecord(msg.data);
+    return data ? media(length(data.duration), false) : null;
+  }
+  if (provider === "vk") {
+    const name = typeof msg.event === "string" ? msg.event : msg.type;
+    if (typeof name !== "string") return null;
+    return media(length(msg.duration), name === "ended");
+  }
+  return null;
+}
+
+/**
  * The message the parent posts into a provider frame so it starts reporting its
  * clock, or `null` when the provider reports unasked (rutube, vk) or never
  * (cdnvideo). YouTube's IFrame API stays silent until it hears `listening`.

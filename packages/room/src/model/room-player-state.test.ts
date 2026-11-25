@@ -7,6 +7,7 @@ import {
   initialPlayerState,
   mapYouTubeErrorCode,
   parseProviderClock,
+  parseProviderMedia,
   parseProviderSignal,
   playerReducer,
   providerClockHandshake,
@@ -351,5 +352,62 @@ describe("024 EARS-10 provider playback clock", () => {
     expect(JSON.parse(providerClockHandshake("youtube")!)).toMatchObject({ event: "listening" });
     expect(providerClockHandshake("rutube")).toBeNull();
     expect(providerClockHandshake("vk")).toBeNull();
+  });
+});
+
+// 024 EARS-10 (#4060) — the media length and the «ended» state the provider's own
+// player reports: completion is reached at the media's real end, not at a
+// staff-typed length. Same origin guard as the clock; cdnvideo reports nothing.
+describe("024 EARS-10 provider media length and ended", () => {
+  it("EARS-10: reads the YouTube infoDelivery duration and playerState 0 (ended), from the YouTube origin only", () => {
+    const yt = (data: unknown, origin = "https://www.youtube.com") =>
+      parseProviderMedia("youtube", { origin, data });
+    expect(yt(JSON.stringify({ event: "infoDelivery", info: { duration: 212.4, currentTime: 3 } }))).toEqual({
+      durationSec: 212.4,
+      ended: false,
+    });
+    expect(yt(JSON.stringify({ event: "infoDelivery", info: { playerState: 0 } }))).toEqual({
+      durationSec: null,
+      ended: true,
+    });
+    expect(yt(JSON.stringify({ event: "onStateChange", info: 0 }))).toEqual({ durationSec: null, ended: true });
+    expect(yt(JSON.stringify({ event: "infoDelivery", info: { playerState: 1 } }))).toBeNull();
+    expect(yt(JSON.stringify({ event: "infoDelivery", info: { duration: 0 } }))).toBeNull();
+    expect(
+      yt(JSON.stringify({ event: "infoDelivery", info: { duration: 212, playerState: 0 } }), "https://evil.example"),
+    ).toBeNull();
+  });
+
+  it("EARS-10: reads the Rutube player:durationChange duration and player:playComplete (ended)", () => {
+    const rt = (data: unknown, origin = "https://rutube.ru") => parseProviderMedia("rutube", { origin, data });
+    expect(rt(JSON.stringify({ type: "player:durationChange", data: { duration: 95 } }))).toEqual({
+      durationSec: 95,
+      ended: false,
+    });
+    expect(rt({ type: "player:playComplete", data: {} })).toEqual({ durationSec: null, ended: true });
+    expect(rt({ type: "player:changeState", data: { state: "paused" } })).toBeNull();
+    expect(rt({ type: "player:currentTime", data: { time: 12 } })).toBeNull();
+    expect(rt({ type: "player:playComplete" }, "https://evil.example")).toBeNull();
+  });
+
+  it("EARS-10: reads the VK event state duration and the ended event", () => {
+    const vk = (data: unknown, origin = "https://vk.com") => parseProviderMedia("vk", { origin, data });
+    expect(vk({ event: "timeupdate", state: "playing", time: 30.5, duration: 120 })).toEqual({
+      durationSec: 120,
+      ended: false,
+    });
+    expect(vk({ event: "ended", time: 120, duration: 120 })).toEqual({ durationSec: 120, ended: true });
+    expect(vk({ type: "ended" })).toEqual({ durationSec: null, ended: true });
+    expect(vk({ event: "timeupdate", state: "playing", time: 30.5 })).toBeNull();
+    expect(vk({ event: "ended", duration: 120 }, "https://evil.example")).toBeNull();
+  });
+
+  it("EARS-10: a negative or non-finite duration is no media length", () => {
+    expect(parseProviderMedia("rutube", { origin: "https://rutube.ru", data: { type: "player:durationChange", data: { duration: -5 } } })).toBeNull();
+    expect(parseProviderMedia("vk", { origin: "https://vk.com", data: { event: "timeupdate", duration: "NaN" } })).toBeNull();
+  });
+
+  it("EARS-10: cdnvideo reports no media length and no ended", () => {
+    expect(parseProviderMedia("cdnvideo", { origin: "https://cdnvideo.ru", data: { event: "ended", duration: 10 } })).toBeNull();
   });
 });

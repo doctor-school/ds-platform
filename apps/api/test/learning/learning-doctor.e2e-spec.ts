@@ -548,6 +548,89 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
+    // ── The provider's media length (EARS-10, #4060) ───────────────────────
+    // Staff typed 300 s; the provider's player reports the real media as 240 s.
+
+    const withMedia = (course: BuiltCourse, headers: Record<string, string>) =>
+      (positionSec: number, mediaDurationSec: number) =>
+        fact(headers, {
+          eventId: eventId(),
+          stepId: course.videoId,
+          source: "web",
+          kind: "position",
+          data: { positionSec, mediaDurationSec },
+        });
+    const stepRead = (course: BuiltCourse, headers: Record<string, string>) =>
+      call<{
+        body: { durationSec: number; watchedPercent: number };
+        step: { state: { status: string } };
+      }>(h, "GET", `/me/learning/steps/${course.videoId}`, headers);
+
+    it("EARS-10: a video typed longer than its media completes at the length the provider reports", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      const at = withMedia(typed, d.headers);
+      expect((await at(0, 240)).status).toBe(200);
+      h.advanceClock(120);
+      const end = await at(240, 240);
+      expect(end.status, JSON.stringify(end.body)).toBe(200);
+      expect(end.body.progress).toEqual({ positionSec: 240, watchedPercent: 100 });
+      const read = await stepRead(typed, d.headers);
+      expect(read.body.body.durationSec).toBe(240);
+      expect(read.body.body.watchedPercent).toBe(100);
+      expect(read.body.step.state.status).toBe("done");
+    });
+
+    it("EARS-10: a reported media length never lets a position past the time clamp — an over-fast end is not done", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      const res = await withMedia(typed, d.headers)(240, 240);
+      expect(res.status).toBe(200);
+      // The first report gets the slack only: 30 of 240.
+      expect(res.body.progress).toEqual({ positionSec: 30, watchedPercent: 12 });
+      const [row] = await storedFacts(d.personId, typed.videoId);
+      expect(row!.data).toMatchObject({ reportedSec: 240, positionSec: 30, mediaDurationSec: 240 });
+      expect((await stepRead(typed, d.headers)).body.step.state.status).not.toBe("done");
+    });
+
+    it("EARS-10: a forged short media length shortens the target no further than half the typed length", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      const at = withMedia(typed, d.headers);
+      expect((await at(0, 5)).status).toBe(200);
+      h.advanceClock(10);
+      const res = await at(5, 5);
+      // Target = max(5, 300 × 0.5) = 150; 5 of 150 s watched.
+      expect(res.body.progress).toEqual({ positionSec: 5, watchedPercent: 3 });
+      const read = await stepRead(typed, d.headers);
+      expect(read.body.body.durationSec).toBe(150);
+      expect(read.body.step.state.status).not.toBe("done");
+    });
+
+    it("EARS-10: a media length reported before the position reaches it (a partial or streaming length) does not shorten the target", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      const at = withMedia(typed, d.headers);
+      // An early, partial length: the position is nowhere near it.
+      expect((await at(0, 30)).status).toBe(200);
+      expect((await stepRead(typed, d.headers)).body.body.durationSec).toBe(300);
+      h.advanceClock(120);
+      // The real length, reported with the end, is the one that counts.
+      const end = await at(240, 240);
+      expect(end.body.progress).toEqual({ positionSec: 240, watchedPercent: 100 });
+      expect((await stepRead(typed, d.headers)).body.body.durationSec).toBe(240);
+      const rows = await storedFacts(d.personId, typed.videoId);
+      expect(rows.map((r) => r.data["mediaDurationSec"])).toEqual([undefined, 240]);
+    });
+
+    it("EARS-10: a media length longer than the typed one changes nothing; a malformed one is 400", async () => {
+      const d = await doctor(h);
+      const typed = await buildCourse(h, { durationSec: 300 });
+      expect((await withMedia(typed, d.headers)(0, 900)).status).toBe(200);
+      expect((await stepRead(typed, d.headers)).body.body.durationSec).toBe(300);
+      expect((await withMedia(typed, d.headers)(0, 0)).status).toBe(400);
+    });
+
     // ── The cascade and 025 (EARS-11, EARS-12, EARS-18) ───────────────────
 
     it("EARS-11/12:content steps → test passed → lesson done records one 025 lesson.completed fact", async () => {

@@ -23,6 +23,7 @@ export interface LearningItemRef {
 /** The doctor's facts, indexed for the evaluator. */
 export class LearningFactIndex {
   private readonly positions = new Map<string, number>();
+  private readonly mediaLengths = new Map<string, number>();
   private readonly openedSteps = new Set<string>();
   private readonly scores = new Map<string, number>();
   private readonly marks = new Set<string>();
@@ -34,6 +35,11 @@ export class LearningFactIndex {
       switch (f.kind) {
         case "position":
           this.positions.set(f.stepId, Math.max(this.positions.get(f.stepId) ?? 0, f.positionSec));
+          if (f.mediaDurationSec !== undefined && f.mediaDurationSec > 0)
+            this.mediaLengths.set(
+              f.stepId,
+              Math.min(this.mediaLengths.get(f.stepId) ?? Infinity, f.mediaDurationSec),
+            );
           break;
         case "opened":
           this.openedSteps.add(f.stepId);
@@ -57,6 +63,10 @@ export class LearningFactIndex {
 
   maxPosition(stepId: string): number {
     return this.positions.get(stepId) ?? 0;
+  }
+  /** The shortest media length the provider's player reported on the step (#4060), or null. */
+  mediaLength(stepId: string): number | null {
+    return this.mediaLengths.get(stepId) ?? null;
   }
   opened(stepId: string): boolean {
     return this.openedSteps.has(stepId);

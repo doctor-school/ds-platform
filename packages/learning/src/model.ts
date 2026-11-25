@@ -38,7 +38,7 @@ export interface LearningCourseModel {
 
 /** The progress facts the evaluator reads (024-design §2 «Facts»). */
 export type LearningFactModel =
-  | { kind: "position"; stepId: string; positionSec: number }
+  | { kind: "position"; stepId: string; positionSec: number; mediaDurationSec?: number }
   | { kind: "opened"; stepId: string }
   | { kind: "attempt-submitted"; stepId: string; score: number }
   | { kind: "manual-mark"; itemId: string }

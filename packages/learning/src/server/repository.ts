@@ -418,6 +418,9 @@ function toFact(r: {
             kind: "position",
             stepId: r.stepId,
             positionSec: Number(data["positionSec"] ?? 0),
+            ...(typeof data["mediaDurationSec"] === "number"
+              ? { mediaDurationSec: data["mediaDurationSec"] }
+              : {}),
           }
         : null;
     case "opened":

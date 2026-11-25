@@ -370,7 +370,15 @@ export const RecordLearningFactRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...factBase,
     kind: z.literal("position"),
-    data: z.strictObject({ positionSec: z.number().int().min(0).max(86_400) }),
+    data: z.strictObject({
+      positionSec: z.number().int().min(0).max(86_400),
+      /**
+       * The media length the provider's own player reports (#4060). It may only
+       * shorten the step's completion target below the typed length, never
+       * under half of it, and never moves a position past the time clamp.
+       */
+      mediaDurationSec: z.number().int().min(1).max(86_400).optional(),
+    }),
   }),
   z.strictObject({
     ...factBase,

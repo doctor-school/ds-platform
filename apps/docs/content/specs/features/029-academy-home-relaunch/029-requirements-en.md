@@ -61,7 +61,8 @@ lang: en
 
 ## Prior decisions
 
-See frontmatter `prior_decisions`. Additionally: 013 (live since August 2026) is replaced at `/` by this feature; its post-login landing outcome (008 EARS-7 amendment) is untouched.
+- ADR-0016 §2, §4, §8; ADR-0015; ADR-0014 §2; ADR-0006 §4; ADR-0013 §A1 (frontmatter `prior_decisions`), and the owner decisions of 2026-10-28, 2026-10-29, 2026-11-03, 2026-11-10, 2026-11-11 and 2026-11-25 recorded in [`029-product.md`](./029-product.md).
+- Feature 013 (live since August 2026) is replaced at `/` by this feature; its post-login landing outcome (008 EARS-7 amendment) is untouched.
 
 ## Event Model
 

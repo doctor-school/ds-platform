@@ -8,6 +8,7 @@ import {
   expertInitials,
   ExpertAdminDetailSchema,
   ExpertAdminListItemSchema,
+  PublicExpertCountSchema,
   EligibleExpertUserListSchema,
   EligibleExpertUserQuerySchema,
   CreateDirectionRequestSchema,
@@ -1009,6 +1010,21 @@ describe("012 EARS-25 / EARS-28 — event-kind dictionary contract (SSOT)", () =
     ).toBe(false);
     expect(
       PublicEventKindSchema.safeParse({ ...kind, status: "published" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("029 public expert count contract", () => {
+  it("EARS-4: the count body is exactly { count }, a non-negative integer", () => {
+    expect(PublicExpertCountSchema.parse({ count: 12 })).toEqual({ count: 12 });
+    expect(PublicExpertCountSchema.safeParse({ count: -1 }).success).toBe(
+      false,
+    );
+    expect(PublicExpertCountSchema.safeParse({ count: 1.5 }).success).toBe(
+      false,
+    );
+    expect(
+      PublicExpertCountSchema.safeParse({ count: 1, total: 1 }).success,
     ).toBe(false);
   });
 });

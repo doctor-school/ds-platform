@@ -2,7 +2,7 @@
 title: "029 — Academy home relaunch after the narrowing to backstage (Requirements)"
 description: "Requirements for feature 029: the Academy home at academy.doctor.school/ on the owner-drawn canvas — the split hero «Экспертам» / «Партнёрам» with count lines computed from the platform (public running projects of 030, published experts through a new count read, published organisations of 032 EARS-12), «Кто мы» with the mission and the evolutionary goal, the 030 projects block, the nearest events through the shared 019 block capped at three, the 048 materials rail, and the persona entries to the 033 «Подать заявку» and 034 «Как это работает» pages; the 013 fixture sections retire. The home ships together with 034 slice 1, the page its partner entries lead to, and carries no partnership form."
 slug: 029-academy-home-relaunch
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: academy-only
 storefronts_reason: "The Academy home at / of apps/portal only; the doctor storefront home is feature 017, which mounts the same 019 nearest-events block (#1485)."

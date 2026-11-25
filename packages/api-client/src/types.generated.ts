@@ -3769,7 +3769,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "author";
+            kind: "author" | "partnership";
             kindLabel: string;
             notes: {
                 /** Format: uuid */
@@ -3786,7 +3786,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                kind: "author";
+                kind: "author" | "partnership";
                 outcome: ("accepted" | "declined" | "expired") | null;
                 /** @enum {string} */
                 status: "new" | "in_review" | "closed";
@@ -3805,7 +3805,7 @@ export interface components {
             /** Format: date-time */
             submittedAt: string;
             /** @enum {string} */
-            teamNotice: "pending" | "sent" | "failed" | "skipped";
+            teamNotice: "pending" | "sent" | "failed" | "skipped" | "imported";
             version: number;
         };
         AdminApplicationListPageDto: {
@@ -3815,7 +3815,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                kind: "author";
+                kind: "author" | "partnership";
                 kindLabel: string;
                 outcome: ("accepted" | "declined" | "expired") | null;
                 /** @enum {string} */
@@ -3827,7 +3827,7 @@ export interface components {
             }[];
             kinds: {
                 /** @enum {string} */
-                kind: "author";
+                kind: "author" | "partnership";
                 label: string;
             }[];
             nextCursor: string | null;

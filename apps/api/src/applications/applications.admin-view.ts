@@ -2,14 +2,15 @@ import type {
   AdminApplicationField,
   ApplicationKind,
   AuthorApplicationPayload,
+  PartnershipRequestContact,
+  PartnershipRequestPayload,
 } from "@ds/schemas";
 
 /**
  * 033 EARS-14 — how the admin detail shows what an applicant sent: each
  * field with its label, in the form's order, values in their RU form. One
  * entry per closed `ApplicationKind` (`satisfies` below), so a new kind —
- * the interim partnership form (#4032), 034's investor — cannot reach the
- * admin without saying how it reads.
+ * 034's investor — cannot reach the admin without saying how it reads.
  */
 export interface ApplicationAdminView {
   /** The payload's fields; `specialtyName` is the resolved Минздрав name. */
@@ -60,11 +61,47 @@ function authorFields(
   return out;
 }
 
+/** The Academy home partnership form's fields, with the form's labels. */
+function partnershipFields(
+  payload: PartnershipRequestPayload,
+): AdminApplicationField[] {
+  const out: AdminApplicationField[] = [
+    { key: "name", label: "Имя", value: payload.name },
+  ];
+  if (payload.companyOrClinic !== undefined)
+    out.push({
+      key: "companyOrClinic",
+      label: "Компания или клиника",
+      value: payload.companyOrClinic,
+    });
+  out.push({ key: "role", label: "Роль", value: payload.role });
+  return out;
+}
+
+function partnershipContactFields(
+  contact: PartnershipRequestContact,
+): AdminApplicationField[] {
+  return [
+    {
+      key: "emailOrTelegram",
+      label: "Email или Telegram",
+      value: contact.emailOrTelegram,
+    },
+  ];
+}
+
 export const APPLICATION_ADMIN_VIEWS = {
   author: {
     fields: authorFields as ApplicationAdminView["fields"],
     contactFields: () => [],
     contactName: () => null,
+  },
+  partnership: {
+    fields: partnershipFields as ApplicationAdminView["fields"],
+    contactFields:
+      partnershipContactFields as ApplicationAdminView["contactFields"],
+    contactName: ((contact: PartnershipRequestContact) =>
+      contact.emailOrTelegram) as ApplicationAdminView["contactName"],
   },
 } satisfies Record<ApplicationKind, ApplicationAdminView>;
 

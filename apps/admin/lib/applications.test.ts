@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { AdminApplicationDetail } from "@ds/schemas";
+import {
+  APPLICATION_RECEIPT_NOTICES,
+  APPLICATION_TEAM_NOTICES,
+  type AdminApplicationDetail,
+} from "@ds/schemas";
+import ru from "../messages/ru.json";
 import {
   APPLICATION_STATUS_FILTERS,
   applicationActions,
@@ -188,5 +193,16 @@ describe("033 admin «Заявки» — the pure projections", () => {
       "x2",
     ]);
     expect(rememberNextCursor([undefined], 1, null)).toEqual([undefined]);
+  });
+});
+
+describe("033 «Заявки» detail — notification outcomes", () => {
+  it("EARS-14: every team and receipt notice outcome the API serves has its label", () => {
+    const labels: Record<string, string> = ru.applications.detail.noticeOutcome;
+    for (const outcome of [
+      ...APPLICATION_TEAM_NOTICES,
+      ...APPLICATION_RECEIPT_NOTICES,
+    ])
+      expect(labels[outcome], outcome).toEqual(expect.any(String));
   });
 });

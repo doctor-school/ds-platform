@@ -47,11 +47,12 @@ export const ApplicationReceiptNoticeSchema = z.enum(
 
 /**
  * EARS-13 — one row of the queue list. `applicant` is the account's current
- * display name (author kind, read live — decision 17) or the contact's name
- * (no-account kinds); `null` once the application's personal data is erased
- * (`erased: true`, «Персональные данные стёрты», EARS-20). `teamNotified` is
- * `false` for a team notice that is not `sent` («Команда не уведомлена»,
- * EARS-11: `pending`, `failed` and `skipped` alike).
+ * display name (author kind, read live — decision 17) or the contact the
+ * guest left (no-account kinds); `null` once the application's personal data
+ * is erased (`erased: true`, «Персональные данные стёрты», EARS-20).
+ * `teamNotified` is `false` for a team notice still owed («Команда не
+ * уведомлена», EARS-11: `pending`, `failed` and `skipped` alike); `sent` and
+ * the import's `imported` (no notice owed, EARS-19) are `true`.
  */
 export const AdminApplicationListItemSchema = z.strictObject({
   id: z.uuid(),

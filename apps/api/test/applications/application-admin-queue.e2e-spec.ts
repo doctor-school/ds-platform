@@ -13,6 +13,8 @@ import {
   AdminApplicationNoteSchema,
   APPLICATION_NOTE_ERASED_SENTINEL,
   AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+  PARTNERSHIP_CONSENT_PURPOSE,
+  PARTNERSHIP_CONSENT_VERSION_TAG,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -285,7 +287,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const page = AdminApplicationListPageSchema.parse(res.json());
       // The «Вид» filter reads its options and labels from the same kinds
       // table the rows' labels come from (033-design «Request kinds»).
-      expect(page.kinds).toEqual([{ kind: "author", label: "Автор" }]);
+      expect(page.kinds).toEqual([
+        { kind: "author", label: "Автор" },
+        { kind: "partnership", label: "Партнёрство" },
+      ]);
       const ids = page.items.map((i) => i.id);
       expect(ids.indexOf(newer)).toBeLessThan(ids.indexOf(older));
       expect(ids.indexOf(newer)).toBeGreaterThanOrEqual(0);
@@ -403,6 +408,67 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const two = await stored(a.id);
       const d = AdminApplicationDetailSchema.parse((await detail(one)).json());
       expect(d.otherApplications.map((o) => o.id)).toEqual([two]);
+    });
+
+    it("EARS-19: an imported partnership row lists without the «Команда не уведомлена» mark, its contact as the applicant, and its detail shows the form's fields and the contact as sent", async () => {
+      clock += 1000;
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO applications
+           (kind, status, payload, contact, subject_line, consent_purpose,
+            consent_version_tag, legacy_record_id, submitted_at, team_notice,
+            receipt_notice)
+         VALUES ('partnership', 'new', $1, $2, $3, $4, $5, $6, $7, 'imported',
+                 'not_applicable')
+         RETURNING id`,
+        [
+          JSON.stringify({
+            name: "Ирина",
+            companyOrClinic: "Клиника «Здоровье»",
+            role: "Партнёр",
+          }),
+          JSON.stringify({ emailOrTelegram: "@irina_partner" }),
+          "Клиника «Здоровье»",
+          PARTNERSHIP_CONSENT_PURPOSE,
+          PARTNERSHIP_CONSENT_VERSION_TAG,
+          randomUUID(),
+          new Date(clock),
+        ],
+      );
+      const id = rows[0]!.id;
+      createdApplications.push(id);
+
+      const page = AdminApplicationListPageSchema.parse(
+        (await list("?kind=partnership")).json(),
+      );
+      expect(page.items.find((i) => i.id === id)).toMatchObject({
+        kind: "partnership",
+        kindLabel: "Партнёрство",
+        applicant: "@irina_partner",
+        subjectLine: "Клиника «Здоровье»",
+        teamNotified: true,
+      });
+
+      const d = AdminApplicationDetailSchema.parse((await detail(id)).json());
+      expect(d.fields).toEqual([
+        { key: "name", label: "Имя", value: "Ирина" },
+        {
+          key: "companyOrClinic",
+          label: "Компания или клиника",
+          value: "Клиника «Здоровье»",
+        },
+        { key: "role", label: "Роль", value: "Партнёр" },
+      ]);
+      expect(d.applicant).toEqual({
+        type: "contact",
+        fields: [
+          {
+            key: "emailOrTelegram",
+            label: "Email или Telegram",
+            value: "@irina_partner",
+          },
+        ],
+      });
+      expect(d.teamNotice).toBe("imported");
     });
 
     // ------------------------------------------------------------- EARS-15
@@ -601,7 +667,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-17: every status move, note and erasure leaves a 010 audit row attributed to the acting administrator", async () => {
       const a = await applicant();
       const id = await stored(a.id);
-      const since = new Date();
+      // The ledger's `created_at` is the database's clock, so the window opens
+      // on that clock too — a stand whose clock trails the runner's drops rows.
+      const { rows: clockRows } = await pool.query<{ now: Date }>(
+        "SELECT now() AS now",
+      );
+      const since = clockRows[0]!.now;
       expect(
         (await move(id, { status: "in_review" }, await etagOf(id))).statusCode,
       ).toBe(200);

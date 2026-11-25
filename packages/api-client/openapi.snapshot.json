@@ -227,7 +227,7 @@
             "type": "string"
           },
           "kind": {
-            "enum": ["author"],
+            "enum": ["author", "partnership"],
             "type": "string"
           },
           "kindLabel": {
@@ -290,7 +290,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "enum": ["author"],
+                  "enum": ["author", "partnership"],
                   "type": "string"
                 },
                 "outcome": {
@@ -397,7 +397,7 @@
             "type": "string"
           },
           "teamNotice": {
-            "enum": ["pending", "sent", "failed", "skipped"],
+            "enum": ["pending", "sent", "failed", "skipped", "imported"],
             "type": "string"
           },
           "version": {
@@ -456,7 +456,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "enum": ["author"],
+                  "enum": ["author", "partnership"],
                   "type": "string"
                 },
                 "kindLabel": {
@@ -517,7 +517,7 @@
               "additionalProperties": false,
               "properties": {
                 "kind": {
-                  "enum": ["author"],
+                  "enum": ["author", "partnership"],
                   "type": "string"
                 },
                 "label": {

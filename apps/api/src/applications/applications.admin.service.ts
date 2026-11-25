@@ -183,7 +183,8 @@ export class ApplicationsAdminService {
           subjectLine: erased ? null : r.subjectLine,
           status: r.status as ApplicationStatus,
           outcome: r.outcome as ApplicationOutcome | null,
-          teamNotified: r.teamNotice === "sent",
+          // EARS-11, EARS-19: an imported row owes no notice, so no mark.
+          teamNotified: r.teamNotice === "sent" || r.teamNotice === "imported",
           erased,
         };
       }),

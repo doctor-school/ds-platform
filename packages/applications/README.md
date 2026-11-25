@@ -16,7 +16,10 @@ it; the doctor storefront imports nothing from it (033 EARS-2).
 `editing` / `unavailable` changes nothing, so a double tap sends one request.
 Every failure keeps the key: a network or `5xx` failure retries with it (the
 api answers the stored result on replay), and a refused body stored nothing.
-Only «Отправить ещё одну заявку» (`another` from `sent`) mints a new key.
+A `422 IDEMPOTENCY_KEY_REUSED` re-reads the applicant's applications: an open
+one settles as `sent`, a failed read is `unavailable` with the same key, and a
+read that succeeds with none (`rekey`) mints a new key. Otherwise only
+«Отправить ещё одну заявку» (`another` from `sent`) mints a new key.
 
 ## Tests
 

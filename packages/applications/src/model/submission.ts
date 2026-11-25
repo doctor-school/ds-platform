@@ -68,7 +68,9 @@ export function startSubmission(
  * when the phase moved to `sending` (a double tap sends one request). A
  * failure keeps the key: a network / `5xx` failure retries with it, and a
  * refused body stored nothing, so its key is still unused. A reused key stays
- * `sending` until the re-read settles it (`succeeded` or `rekey`).
+ * `sending` until the re-read settles it: `succeeded` when it finds an open
+ * application, `failed` / `unavailable` with the same key when the read fails,
+ * and `rekey` (a new key) only when the read succeeds and finds none.
  */
 export function submissionReducer(
   state: SubmissionState,

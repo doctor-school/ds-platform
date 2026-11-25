@@ -20,6 +20,7 @@ import {
 } from "../model/form";
 import {
   classifyFailure,
+  keyReuseOutcome,
   showRepeatBanner,
   startSubmission,
   type SubmissionEvent,
@@ -50,7 +51,9 @@ export interface AuthorApplicationHost {
 /**
  * 033 EARS-4…10 — the signed-in half of «Подать заявку»: the repeat banner
  * from the applicant read, the form with its inline errors, the server-failure
- * state that retries with the same idempotency key, and «Заявка отправлена».
+ * state that retries with the same idempotency key (a key the server already
+ * holds is settled by re-reading the applicant's applications), and «Заявка
+ * отправлена».
  * The submission lifecycle is `@ds/applications`' `submissionReducer`; a request
  * is sent only when that reducer moved to `sending`, so a double tap sends one.
  */
@@ -126,7 +129,11 @@ export function AuthorApplication({
             ? classifyFailure(error)
             : ({ kind: "unavailable" } as const);
         dispatch({ type: "failed", failure });
-        if (failure.kind === "fields") {
+        if (failure.kind === "key-reused") {
+          const settled = keyReuseOutcome(await readOwnAuthorApplications());
+          dispatch(settled);
+          if (settled.type === "succeeded") setRepeat(true);
+        } else if (failure.kind === "fields") {
           const refused = fieldErrorsFromRefusal(failure.problems);
           if (refused) {
             setErrors(refused.errors);

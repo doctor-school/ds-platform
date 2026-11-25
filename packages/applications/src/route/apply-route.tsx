@@ -70,7 +70,7 @@ export async function ApplyRoute({
     throw new Error(
       `ApplyRoute: legal document ${AUTHOR_APPLICATION_CONSENT_DOCUMENT_SLUG} is missing`,
     );
-  const runtime = withRuntimeBotProtection(authFlow as AuthFlowHostConfig);
+  const runtime = withRuntimeBotProtection(authFlow);
 
   return (
     <ApplyPage

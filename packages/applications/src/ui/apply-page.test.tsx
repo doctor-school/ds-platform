@@ -253,6 +253,63 @@ describe("ApplyPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("EARS-8: a lost reply then an edited retry answered 422 IDEMPOTENCY_KEY_REUSED shows «Заявка отправлена» when the re-read finds the open application", async () => {
+    const user = userEvent.setup();
+    answerPost = () => Promise.reject(new TypeError("network"));
+    render(<ApplyPage {...props()} />);
+    await fillValid(user);
+    await user.click(screen.getByRole("button", { name: copy.form.submit }));
+    expect(await screen.findByText(copy.unavailable.lead)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Тема/), " суставов");
+    answerPost = () =>
+      json(422, { problems: [{ code: "IDEMPOTENCY_KEY_REUSED" }] });
+    answerRead = () =>
+      json(200, {
+        items: [
+          {
+            id: "0193b6c2-6c1a-7000-8000-000000000001",
+            submittedAt: "2026-11-25T10:00:00.000Z",
+            topic: "Ортобиология",
+            state: "received",
+          },
+        ],
+      });
+    await user.click(
+      screen.getByRole("button", { name: copy.unavailable.retry }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: copy.sent.title }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(copy.errors.refused)).toBeNull();
+  });
+
+  it("EARS-8: a 422 IDEMPOTENCY_KEY_REUSED whose re-read finds nothing shows the server-failure state, and the next send uses a new key", async () => {
+    const user = userEvent.setup();
+    answerPost = () =>
+      json(422, { problems: [{ code: "IDEMPOTENCY_KEY_REUSED" }] });
+    render(<ApplyPage {...props()} />);
+    await fillValid(user);
+    await user.click(screen.getByRole("button", { name: copy.form.submit }));
+    expect(await screen.findByText(copy.unavailable.lead)).toBeInTheDocument();
+    expect(screen.queryByText(copy.errors.refused)).toBeNull();
+    expect(screen.getByLabelText(/^Тема/)).toHaveValue("Ортобиология");
+
+    answerPost = () =>
+      json(201, {
+        id: "0193b6c2-6c1a-7000-8000-000000000002",
+        submittedAt: "2026-11-25T10:00:00.000Z",
+      });
+    await user.click(
+      screen.getByRole("button", { name: copy.unavailable.retry }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: copy.sent.title }),
+    ).toBeInTheDocument();
+    expect(posts()).toHaveLength(2);
+    expect(keyOf(posts()[1]!)).not.toBe(keyOf(posts()[0]!));
+  });
+
   it("EARS-9: a success replaces the form with «Заявка отправлена»; «ещё одну» opens an empty form with a new key", async () => {
     const user = userEvent.setup();
     render(<ApplyPage {...props()} />);

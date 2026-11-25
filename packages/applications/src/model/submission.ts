@@ -1,5 +1,6 @@
 import {
   type ApplicantApplicationList,
+  ApplicationProblemCodes,
   type ApplicationRefusal,
   type AuthorApplicationIntakeResult,
   BotProtectionErrorCodes,
@@ -11,8 +12,9 @@ const defaultKey: KeyFactory = () => crypto.randomUUID();
 
 /**
  * EARS-8, EARS-9 — one form instance's submission. The key is minted when the
- * form opens and kept through every retry of that instance; only «Отправить
- * ещё одну заявку» mints a new one.
+ * form opens and kept through every retry of that instance; «Отправить ещё
+ * одну заявку» mints a new one, and so does a key the server already holds
+ * for another body when no open application confirms it (`rekey`).
  */
 export type SubmissionState =
   | { phase: "editing"; idempotencyKey: string }
@@ -28,6 +30,12 @@ export type SubmissionState =
 export type ApplicationsFailure =
   /** EARS-8 — network or `5xx`: keep the input, offer the retry. */
   | { kind: "unavailable" }
+  /**
+   * EARS-8 — `422 IDEMPOTENCY_KEY_REUSED`: an application under this key is
+   * already stored (its reply was lost, the retry carried an edited body). The
+   * page re-reads the applicant's applications to settle it.
+   */
+  | { kind: "key-reused" }
   /** EARS-5 — `400` with field errors. */
   | { kind: "fields"; problems: ApplicationRefusal["problems"] }
   /** The session ended — the account gate of EARS-3. */
@@ -41,6 +49,8 @@ export type SubmissionEvent =
   | { type: "submit" }
   | { type: "failed"; failure: ApplicationsFailure }
   | { type: "succeeded"; result: AuthorApplicationIntakeResult }
+  /** EARS-8 — the key is spent and nothing confirms it: a new key, retry offered. */
+  | { type: "rekey" }
   | { type: "another" };
 
 export function startSubmission(
@@ -52,9 +62,10 @@ export function startSubmission(
 /**
  * EARS-8, EARS-9 — the submission transitions. A `submit` while `sending` or
  * `sent` returns the same state object, so the caller sends a request only
- * when the phase moved to `sending` (a double tap sends one request). Every
+ * when the phase moved to `sending` (a double tap sends one request). A
  * failure keeps the key: a network / `5xx` failure retries with it, and a
- * refused body stored nothing, so its key is still unused.
+ * refused body stored nothing, so its key is still unused. A reused key stays
+ * `sending` until the re-read settles it (`succeeded` or `rekey`).
  */
 export function submissionReducer(
   state: SubmissionState,
@@ -68,10 +79,15 @@ export function submissionReducer(
         ? { phase: "sending", idempotencyKey }
         : state;
     case "failed":
-      if (state.phase !== "sending") return state;
+      if (state.phase !== "sending" || event.failure.kind === "key-reused")
+        return state;
       return event.failure.kind === "unavailable"
         ? { phase: "unavailable", idempotencyKey }
         : { phase: "editing", idempotencyKey };
+    case "rekey":
+      return state.phase === "sending"
+        ? { phase: "unavailable", idempotencyKey: nextKey() }
+        : state;
     case "succeeded":
       return state.phase === "sending"
         ? { phase: "sent", idempotencyKey, result: event.result }
@@ -89,6 +105,13 @@ export function classifyFailure(error: {
 }): ApplicationsFailure {
   if (error.status === 0 || error.status >= 500) return { kind: "unavailable" };
   if (error.status === 401) return { kind: "signed-out" };
+  if (
+    error.status === 422 &&
+    error.problems.some(
+      (p) => p.code === ApplicationProblemCodes.idempotencyKeyReused,
+    )
+  )
+    return { kind: "key-reused" };
   if (
     error.code === BotProtectionErrorCodes.required ||
     error.code === BotProtectionErrorCodes.rejected
@@ -110,4 +133,20 @@ export type OwnApplicationsRead =
  */
 export function showRepeatBanner(read: OwnApplicationsRead): boolean {
   return read.ok && read.list.items.length > 0;
+}
+
+/**
+ * EARS-8, EARS-9 — settles a `422 IDEMPOTENCY_KEY_REUSED` from the re-read: an
+ * open application means the earlier send was stored, so the page shows
+ * «Заявка отправлена»; a failed read or none found offers the retry with a
+ * new key, never an error that repeats on every send.
+ */
+export function keyReuseOutcome(read: OwnApplicationsRead): SubmissionEvent {
+  const stored = read.ok ? read.list.items[0] : undefined;
+  return stored
+    ? {
+        type: "succeeded",
+        result: { id: stored.id, submittedAt: stored.submittedAt },
+      }
+    : { type: "rekey" };
 }

@@ -18,10 +18,12 @@ export const SMARTCAPTCHA_SITE_KEY_ENV = "SMARTCAPTCHA_SITE_KEY";
  * inactive placeholder and the protected action resumes tokenless, matching the
  * api guard's no-op when no provider is configured.
  */
-export function withRuntimeBotProtection(
-  config: AuthFlowHostConfig,
+export function withRuntimeBotProtection<
+  C extends Partial<Pick<AuthFlowHostConfig, "botProtection">>,
+>(
+  config: C,
   env: NodeJS.ProcessEnv = process.env,
-): AuthFlowHostConfig {
+): C & Required<Pick<AuthFlowHostConfig, "botProtection">> {
   const siteKey = env[SMARTCAPTCHA_SITE_KEY_ENV]?.trim() || undefined;
   return { ...config, botProtection: { siteKey } };
 }

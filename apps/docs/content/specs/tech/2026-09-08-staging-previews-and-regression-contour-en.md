@@ -58,7 +58,7 @@ portal image with its BFF rewrite target `api` mapped to the container's own
 loopback (`extra_hosts`), so the partnership form's queue intake fails
 server-side. The fixture carries no credentials or volumes and has its own
 healthcheck. The static edge route `academy-partnership-unavailable-<slot>`
-uses the staging gate for the guest home and assets and denies all other paths.
+uses the staging gate for the guest home, its assets and the one intake POST `/v1/public/applications/partnership` (answered by the fixture portal) and denies all other paths.
 Only stage-main converge can apply a change to this shared edge.
 **Hostnames.** `*.stage.doctor.school` wildcard `A` record in the DNS zone (owner-managed, like the production records). Every consumer — Caddy, `slot.mjs`, the suite — derives its names from one convention, and nothing keeps a list of them:
 

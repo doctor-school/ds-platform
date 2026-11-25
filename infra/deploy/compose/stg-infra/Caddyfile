@@ -262,14 +262,15 @@ http://127.0.0.1:2020 {
 		reverse_proxy {re.slot.2}-api:3000
 	}
 
-	# Academy partnership EARS-7. The fixture has only the guest home and assets.
-	# Its POST follows the same Next action as the normal portal, against a
-	# non-directory. All other paths, including the internal API, stop at the edge.
+	# 033 EARS-18 (013 EARS-7). The fixture has only the guest home, its assets and
+	# the one intake POST. The browser posts the attempt same-origin to the
+	# fixture portal, whose `/v1/*` rewrite targets an `api` pinned to its own
+	# loopback, so the intake answers 5xx. All other paths stop at the edge.
 	@stage_partnership_unavailable header_regexp partnership_unavailable Host "^academy-partnership-unavailable-(main|pr-[1-9][0-9]{0,9})[.]"
 	handle @stage_partnership_unavailable {
 		@fixture_post {
 			method POST
-			path /
+			path /v1/public/applications/partnership
 		}
 		handle @fixture_post {
 			import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001

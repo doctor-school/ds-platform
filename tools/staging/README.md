@@ -386,7 +386,9 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 ### Academy partnership intake failure (#4121, 033 EARS-18)
 
-The Academy live tier submits the real form on the guest portal; it posts into
+The Academy live tier submits the real form on the guest portal (bot protection
+is on, so the accept case resolves the widget through `@ds/e2e/captcha-stub` with
+`E2E_CAPTCHA_TEST_TOKEN`, and the spec is not run without it); it posts into
 the api's application queue (`POST /v1/public/applications/partnership`). Its
 acceptance case checks that a retry after a lost response leaves exactly one
 `partnership` row for the run's synthetic contact. For the failure case the slot
@@ -398,8 +400,9 @@ requires the guest home to respond and `api` to resolve to loopback. The normal
 slot health gate checks both portals against the same SHA-tagged image.
 
 The shared stage edge routes `academy-partnership-unavailable-<slot>.<domain>`
-through the usual staging gate for the home and its assets. All other routes
-return 404. The browser test observes the actual intake POST answering `5xx`
+through the usual staging gate for the home, its assets and the one intake
+`POST /v1/public/applications/partnership`, which the fixture portal itself
+answers. All other routes return 404. The browser test observes the actual intake POST answering `5xx`
 from the fixture origin and checks the retained form values. The slot's queue
 must have zero rows for that run's synthetic contact both before and after.
 

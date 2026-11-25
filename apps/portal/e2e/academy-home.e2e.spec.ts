@@ -7,6 +7,10 @@ import {
   stageAcademyAddress,
   stagePartnershipUnavailableOrigin,
 } from "@ds/e2e";
+import {
+  captchaTestTokenFromEnv,
+  prepareCaptchaForJourney,
+} from "@ds/e2e/captcha-stub";
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 const SECTION_ORDER = [
@@ -712,6 +716,17 @@ test.describe("Feature 013 — static public Academy home", () => {
     if (observe) {
       expect(await observe()).toEqual({ count: 0, exactRow: false });
     }
+    if (stage) {
+      // A stage slot runs bot protection ON and the portal hands the form the
+      // real site key; the invisible widget never yields a token in headless
+      // Playwright, so `captcha.js` resolves with the box's test token
+      // (`@ds/e2e/captcha-stub`). The hermetic CI tier renders no widget.
+      await prepareCaptchaForJourney(
+        page.context(),
+        stage.origin,
+        process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+      );
+    }
     const mutationUrls: string[] = [];
     page.on("request", (request) => {
       if (request.method() === "POST") mutationUrls.push(request.url());
@@ -764,6 +779,12 @@ test.describe("Feature 013 — static public Academy home", () => {
       /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
     );
     expect(await retry.headerValue("idempotency-key")).toBe(key);
+    if (stage) {
+      // Each attempt carries its own one-shot widget token to the api guard.
+      const token = captchaTestTokenFromEnv();
+      expect(await first.headerValue("x-smartcaptcha-token")).toBe(token);
+      expect(await retry.headerValue("x-smartcaptcha-token")).toBe(token);
+    }
     expect(first.postDataJSON()).toEqual({
       name: stage ? "Stage E2E 4121" : "Анна Соколова",
       companyOrClinic: stage ? "Stage fixture" : "Клиника",

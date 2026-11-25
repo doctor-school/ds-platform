@@ -9,7 +9,7 @@ import {
 
 /**
  * 033-design «Request kinds (the 034 seam)» — one entry per closed
- * `ApplicationKind`. A new kind (the interim partnership form #4034, 034's
+ * `ApplicationKind`. A new kind (the interim partnership form #4032, 034's
  * investor) extends the enum in `@ds/schemas`, adds its entry here and widens
  * `applications_kind_check`; the queue's storage, retention, erasure and audit
  * work unchanged, and the notifications slice (#4029) resolves the receipt

@@ -64,4 +64,4 @@ add the kind's intake. Storage, retention, erasure and audit need no change.
 Notifications (EARS-11, EARS-12) — #4029; admin queue (EARS-13…17, the
 `erase-personal-data` endpoint over `ApplicationsService.eraseOnRequest`) —
 #4030; the «Подать заявку» page and `GET /v1/me/applications` — #4031; the
-interim partnership intake and import — #4034.
+interim partnership intake and import — #4032; the browser journeys — #4034.

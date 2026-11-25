@@ -17,7 +17,7 @@ const body = {
   consentVersion: "2026-11-25.sha256-abc",
 };
 
-describe("033 application queue contract", () => {
+describe("033 EARS-6, EARS-7, EARS-20, EARS-23 — application queue contract", () => {
   it("EARS-6: the author intake carries the consent version tag of purpose author-application-personal-data", () => {
     expect(AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE).toBe(
       "author-application-personal-data",

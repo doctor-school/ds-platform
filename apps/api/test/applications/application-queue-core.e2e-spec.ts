@@ -81,7 +81,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const YEAR_AGO_AND_A_DAY = () => new Date(Date.now() - 367 * DAY);
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "033 application queue core (e2e)",
+  "033 EARS-6, EARS-7, EARS-20, EARS-23, EARS-24, EARS-25 — application queue core (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;

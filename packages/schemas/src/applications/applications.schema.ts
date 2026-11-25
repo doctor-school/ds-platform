@@ -6,7 +6,7 @@ import { z } from "zod";
  *
  * `ApplicationKind` is CLOSED: a kind exists only once its payload schema, its
  * intake and its entry in the api's `APPLICATION_KINDS` table exist. The queue
- * core (#4028) ships `author`; the interim partnership intake (#4034) and 034's
+ * core (#4028) ships `author`; the interim partnership intake (#4032) and 034's
  * investor intake (#1824) each extend this enum, the api table and the
  * `applications_kind_check` constraint in their own migration.
  */

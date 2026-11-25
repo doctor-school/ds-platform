@@ -30,6 +30,7 @@
 
 import type {
   feedEntryMessages,
+  feedEntryVkObjects,
   feedSources,
   NewFeedEntry,
   NewMaterial,
@@ -41,6 +42,14 @@ import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 /** The API's `ACADEMY_SOURCE_NAME` and `TELEGRAM_SOURCE_NAME` (048 EARS-9, EARS-26). */
 const ACADEMY_SOURCE_NAME = "Академия";
 const TELEGRAM_SOURCE_NAME = "BBM Academy · Telegram";
+/** The API's `VK_POST_SOURCE_NAME` and `VK_VIDEO_SOURCE_NAME` (048 EARS-41, EARS-42). */
+const VK_POST_SOURCE_NAME = "BBM Academy · VK";
+const VK_VIDEO_SOURCE_NAME = "BBM Academy · VK Видео";
+/** The golden VK community id (bound by the source check, 048 EARS-44). */
+const GOLDEN_VK_GROUP_ID = 229_000_001;
+/** 048 slice 3 (#4004) — the VK community's wall posts and VK Видео videos. */
+const VK_POSTS = 18;
+const VK_VIDEOS = 4;
 
 /** The API's `FEED_PREVIEW_PREFIX` and the cover upload's `COVER_PREFIX`. */
 const FEED_PREVIEW_PREFIX = "feed-previews";
@@ -421,6 +430,7 @@ export interface GoldenFeedVolume {
   feedEntries: NewFeedEntry[];
   feedSources: (typeof feedSources.$inferInsert)[];
   feedEntryMessages: (typeof feedEntryMessages.$inferInsert)[];
+  feedEntryVkObjects: (typeof feedEntryVkObjects.$inferInsert)[];
 }
 
 const paragraph = (text: string) => ({
@@ -436,6 +446,7 @@ export function buildGoldenFeedVolume(now: Date): GoldenFeedVolume {
     feedEntries: [],
     feedSources: [],
     feedEntryMessages: [],
+    feedEntryVkObjects: [],
   };
 
   const own = [
@@ -603,5 +614,84 @@ export function buildGoldenFeedVolume(now: Date): GoldenFeedVolume {
     }
   });
 
+  buildVkVolume(out, at);
   return out;
+}
+
+/**
+ * 048 slice 3 (#4004) — one bound VK community with 22 publications: wall
+ * posts on the news channel's topics in their own words, a few VK Видео videos, one post
+ * removed in VK (EARS-45, «Удалён в VK» in «Публикации», EARS-47). Previews
+ * are referenced VK URLs on production; a slot has no VK, so the volume
+ * carries none and the cards render their text layout. Each publication's
+ * dedup key is its `feed_entry_vk_objects` row (EARS-43).
+ */
+function buildVkVolume(
+  out: GoldenFeedVolume,
+  at: (days: number) => Date,
+): void {
+  const spec = SOURCES[0]!;
+  const ordinal = GOLDEN_VOLUME_ORDINAL_BASE + SOURCES.length;
+  const sourceId = goldenUuid(GOLDEN_GROUP.feedSources, ordinal);
+  const created = at(-80);
+  out.feedSources.push({
+    id: sourceId,
+    platform: "vk",
+    address: "bbm_academy",
+    enabled: true,
+    vkGroupId: GOLDEN_VK_GROUP_ID,
+    vkLastEventAt: at(-1),
+    status: "ok",
+    statusReason: null,
+    checkedAt: at(-1),
+    version: 1,
+    createdAt: created,
+    updatedAt: at(-1),
+  });
+  const gid = GOLDEN_VK_GROUP_ID;
+  for (let i = 0; i < VK_POSTS + VK_VIDEOS; i++) {
+    const video = i % 6 === 5;
+    const objectId = 100 + i * 3;
+    const entryId = goldenUuid(
+      GOLDEN_GROUP.feedEntries,
+      GOLDEN_VOLUME_ORDINAL_BASE + 5000 + i,
+    );
+    const publishedAt = at(-(2 + i * 3));
+    const topic = spec.topics[i % spec.topics.length]!;
+    out.feedEntries.push({
+      id: entryId,
+      sourcePlatform: "vk",
+      sourceRef: `${sourceId}:${gid}:${video ? "video" : "post"}:${objectId}`,
+      materialId: null,
+      kind: video ? "video" : "post",
+      title: video
+        ? `Запись эфира: ${topic[0]}`
+        : `${topic[0]}: разбор ${i + 1} в сообществе Академии ВКонтакте — коротко о главном и ссылка на запись эфира.`,
+      imageRef: null,
+      imageUrl: null,
+      sourceName: video ? VK_VIDEO_SOURCE_NAME : VK_POST_SOURCE_NAME,
+      authorExpertId: null,
+      partnerOrganisationId: null,
+      href: video
+        ? `https://vk.com/video-${gid}_${objectId}`
+        : `https://vk.com/wall-${gid}_${objectId}`,
+      publishedAt,
+      feedSourceId: sourceId,
+      durationSeconds: video ? 1200 + ((i * 437) % 2400) : null,
+      sourceOff: false,
+      hiddenAt: null,
+      // The seventh post was deleted on the wall (EARS-45).
+      removedAt: i === 7 ? at(-(1 + i)) : null,
+      createdAt: publishedAt,
+      updatedAt: publishedAt,
+    });
+    out.feedEntryVkObjects.push({
+      feedSourceId: sourceId,
+      vkGroupId: gid,
+      objectKind: video ? "video" : "post",
+      vkObjectId: objectId,
+      feedEntryId: entryId,
+      createdAt: publishedAt,
+    });
+  }
 }

@@ -2954,6 +2954,7 @@ describe("#3705 golden material", () => {
         },
       ],
       feedEntryMessages: [],
+      feedEntryVkObjects: [],
     };
     expect(goldenReferentialIssues(broken)).toEqual([
       `feed_entries.materialId references an unknown row: ${goldenUuid(GOLDEN_GROUP.materials, 999)}`,
@@ -3368,9 +3369,15 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
 
 describe("#4192 golden feed at volume, as a channel looks", () => {
   const dataset = buildGoldenDataset(now, subjects);
-  // What the rail reads: a card neither hidden nor switched off (EARS-22).
+  // What the rail reads: a card neither hidden, switched off (EARS-22) nor
+  // removed in VK (EARS-45), of a platform the card contract serves — VK
+  // joins the rail with its card variants (#4006).
   const visible = dataset.feedEntries.filter(
-    (e) => e.hiddenAt == null && e.sourceOff !== true,
+    (e) =>
+      e.hiddenAt == null &&
+      e.sourceOff !== true &&
+      e.removedAt == null &&
+      e.sourcePlatform !== "vk",
   );
   const posts = visible.filter((e) => e.kind === "post");
 
@@ -3529,6 +3536,8 @@ describe("#4172 golden volume covers the schema", () => {
     // Runtime in-flight state.
     telegram_update_cursor:
       "the poller's own offset per real bot id (048 EARS-24); a seeded offset would make a live bot skip or replay real updates",
+    feed_vk_call_months:
+      "the VK API client's own monthly call count (048 EARS-44); a seeded count would misstate the real account's budget",
     event_role_grants:
       "an authorization binding read only by the access check; no list screen ships (#2378) — the stage committee grant is the named one",
     // 025 holds: a price on a golden event changes its registration on every

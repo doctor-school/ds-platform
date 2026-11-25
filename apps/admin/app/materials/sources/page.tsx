@@ -5,7 +5,11 @@ import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert } from "@ds/design-system";
 import type { DataTableColumn } from "@ds/design-system/blocks";
-import type { FeedSourceAdmin, FeedSourceAdminList } from "@ds/schemas";
+import {
+  FEED_VK_MONTHLY_CALL_CAP,
+  type FeedSourceAdmin,
+  type FeedSourceAdminList,
+} from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
   ADMIN_DATA_LIST_INITIAL_QUERY,
@@ -15,6 +19,10 @@ import {
 import { FeedSourceRowActions } from "@/components/feed-source-row-actions";
 import { MaterialsSubnav } from "@/components/materials-subnav";
 import { StatusChip } from "@/components/status-chip";
+import {
+  feedSourceAddressLabel,
+  vkCallsNearCap,
+} from "@/lib/feed-source-address";
 import { formatMskDateTime } from "@/lib/msk";
 import { feedSourcesUrl } from "@/providers/data-provider";
 
@@ -25,7 +33,11 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  * address as `t.me/<имя>`, «Включён» / «Выключен», the EARS-31 status with
  * the time of the last check, the number of its posts in the feed, and per
  * row «Изменить адрес» + «Выключить» / «Включить»; «Добавить источник» opens
- * the add form; «Источников пока нет.» when there is none.
+ * the add form; «Источников пока нет.» when there is none. A VK source
+ * (EARS-38, EARS-44) is listed as `vk.com/<имя>` with its VK reasons, and
+ * while one is listed the line «Вызовов VK в этом месяце: N из 10 000» stands
+ * above the list — a warning from 8 000 on, the threshold at which the check
+ * itself reads «Лимит вызовов VK почти исчерпан».
  *
  * The API answers the list WHOLE (no page, no `q`), so the page asks for no
  * search or facet the route would refuse, and the pager slices what it holds.
@@ -49,6 +61,10 @@ export default function FeedSourcesListPage() {
   const all = result.data?.data ?? [];
   const start = (query.page - 1) * query.pageSize;
   const rows = all.slice(start, start + query.pageSize);
+  const vkCalls = result.data?.vkCallsThisMonth ?? 0;
+  const hasVk = all.some((row) => row.platform === "vk");
+  const nearCap = vkCallsNearCap(vkCalls);
+  const formatCount = (n: number) => n.toLocaleString("ru-RU");
 
   const columns: DataTableColumn<FeedSourceAdmin>[] = [
     {
@@ -139,6 +155,19 @@ export default function FeedSourcesListPage() {
             {banner.text}
           </Alert>
         ) : null}
+        {hasVk ? (
+          <Alert
+            variant={nearCap ? "warn" : "info"}
+            className="mb-4"
+            data-testid="feed-sources-vk-calls"
+            data-state={nearCap ? "warn" : "normal"}
+          >
+            {t(nearCap ? "feedSources.vkCallsWarn" : "feedSources.vkCalls", {
+              calls: formatCount(vkCalls),
+              cap: formatCount(FEED_VK_MONTHLY_CALL_CAP),
+            })}
+          </Alert>
+        ) : null}
         <AdminDataList<FeedSourceAdmin, never>
           title={t("feedSources.listTitle")}
           description={t("feedSources.listDescription")}
@@ -152,10 +181,10 @@ export default function FeedSourcesListPage() {
             width: "20%",
             title: (row) => (
               <span data-testid={`feed-source-row-${row.address}`}>
-                {`t.me/${row.address}`}
+                {feedSourceAddressLabel(row.platform, row.address)}
               </span>
             ),
-            label: (row) => `t.me/${row.address}`,
+            label: (row) => feedSourceAddressLabel(row.platform, row.address),
           }}
           columns={columns}
           rows={rows}

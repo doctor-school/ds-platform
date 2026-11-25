@@ -450,6 +450,7 @@
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/status-chip.tsx",
         "apps/admin/lib/feed-source-errors.ts",
+        "apps/admin/lib/feed-source-address.ts",
         "apps/admin/providers/data-provider.ts",
         "apps/admin/messages/ru.json"
       ],

@@ -47,12 +47,15 @@ const FEED_SOURCE_TONE: Record<FeedSourceStatus | FeedSourceState, string> = {
 /**
  * 048 EARS-32 — a post's state in «Публикации»: «В ленте» on the success pair,
  * «Скрыт» on the destructive pair (an administrator took it out), «Источник
- * выключен» on the `draft` pair (out for a reason that is not the post's own).
+ * выключен» on the `draft` pair (out for a reason that is not the post's own);
+ * EARS-47 «Удалён в VK» on the `draft` pair too — out of the feed because the
+ * community removed it, not because an administrator did.
  */
 const FEED_ENTRY_TONE: Record<FeedEntryAdminState, string> = {
   in_feed: "bg-success-tint text-success-text",
   hidden: "bg-destructive-tint text-destructive-text",
   source_off: "bg-warning-tint text-foreground",
+  removed: "bg-warning-tint text-foreground",
 };
 
 /** «Включён» / «Выключен» of a feed source. */

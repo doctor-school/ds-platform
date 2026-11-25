@@ -1,5 +1,5 @@
 {
-  "id": "41237572-e05a-4e52-a49d-9c243acf9d5b",
+  "id": "b3dcb1e4-fed5-4d04-8cc2-e9d61ca8ca62",
   "prevId": "f228d0df-6d4d-43e2-8bf1-60bc5768b895",
   "version": "7",
   "dialect": "postgresql",
@@ -4746,6 +4746,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4969,6 +4975,18 @@
         "feed_entries_preview_attempts_non_negative": {
           "name": "feed_entries_preview_attempts_non_negative",
           "value": "\"feed_entries\".\"preview_attempts\" >= 0"
+        },
+        "feed_entries_video_is_vk": {
+          "name": "feed_entries_video_is_vk",
+          "value": "\"feed_entries\".\"kind\"::text <> 'video' OR \"feed_entries\".\"source_platform\"::text = 'vk'"
+        },
+        "feed_entries_vk_image_is_url": {
+          "name": "feed_entries_vk_image_is_url",
+          "value": "\"feed_entries\".\"source_platform\"::text <> 'vk' OR \"feed_entries\".\"image_ref\" IS NULL"
+        },
+        "feed_entries_academy_not_removed": {
+          "name": "feed_entries_academy_not_removed",
+          "value": "\"feed_entries\".\"source_platform\" <> 'academy' OR \"feed_entries\".\"removed_at\" IS NULL"
         }
       },
       "isRLSEnabled": false
@@ -5056,6 +5074,111 @@
       },
       "isRLSEnabled": false
     },
+    "public.feed_entry_vk_objects": {
+      "name": "feed_entry_vk_objects",
+      "schema": "",
+      "columns": {
+        "feed_source_id": {
+          "name": "feed_source_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vk_group_id": {
+          "name": "vk_group_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "object_kind": {
+          "name": "object_kind",
+          "type": "feed_vk_object_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vk_object_id": {
+          "name": "vk_object_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "feed_entry_id": {
+          "name": "feed_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "feed_entry_vk_objects_feed_entry_id_idx": {
+          "name": "feed_entry_vk_objects_feed_entry_id_idx",
+          "columns": [
+            {
+              "expression": "feed_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "feed_entry_vk_objects_feed_source_id_feed_sources_id_fk": {
+          "name": "feed_entry_vk_objects_feed_source_id_feed_sources_id_fk",
+          "tableFrom": "feed_entry_vk_objects",
+          "tableTo": "feed_sources",
+          "columnsFrom": ["feed_source_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "feed_entry_vk_objects_feed_entry_id_feed_entries_id_fk": {
+          "name": "feed_entry_vk_objects_feed_entry_id_feed_entries_id_fk",
+          "tableFrom": "feed_entry_vk_objects",
+          "tableTo": "feed_entries",
+          "columnsFrom": ["feed_entry_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "feed_entry_vk_objects_feed_source_id_vk_group_id_object_kind_vk_object_id_pk": {
+          "name": "feed_entry_vk_objects_feed_source_id_vk_group_id_object_kind_vk_object_id_pk",
+          "columns": [
+            "feed_source_id",
+            "vk_group_id",
+            "object_kind",
+            "vk_object_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "feed_entry_vk_objects_object_id_positive": {
+          "name": "feed_entry_vk_objects_object_id_positive",
+          "value": "\"feed_entry_vk_objects\".\"vk_object_id\" > 0"
+        },
+        "feed_entry_vk_objects_group_id_positive": {
+          "name": "feed_entry_vk_objects_group_id_positive",
+          "value": "\"feed_entry_vk_objects\".\"vk_group_id\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.feed_sources": {
       "name": "feed_sources",
       "schema": "",
@@ -5090,6 +5213,18 @@
         "telegram_chat_id": {
           "name": "telegram_chat_id",
           "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vk_group_id": {
+          "name": "vk_group_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vk_last_event_at": {
+          "name": "vk_last_event_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -5171,6 +5306,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "feed_sources_vk_group_id_key": {
+          "name": "feed_sources_vk_group_id_key",
+          "columns": [
+            {
+              "expression": "vk_group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5184,7 +5334,15 @@
         },
         "feed_sources_address_pattern": {
           "name": "feed_sources_address_pattern",
-          "value": "\"feed_sources\".\"address\" ~ '^[a-z][a-z0-9_]{4,31}$'"
+          "value": "CASE WHEN \"feed_sources\".\"platform\"::text = 'vk' THEN \"feed_sources\".\"address\" ~ '^[a-z0-9_.]{2,32}$' ELSE \"feed_sources\".\"address\" ~ '^[a-z][a-z0-9_]{4,31}$' END"
+        },
+        "feed_sources_vk_columns_vk_only": {
+          "name": "feed_sources_vk_columns_vk_only",
+          "value": "\"feed_sources\".\"platform\"::text = 'vk' OR (\"feed_sources\".\"vk_group_id\" IS NULL AND \"feed_sources\".\"vk_last_event_at\" IS NULL)"
+        },
+        "feed_sources_vk_group_id_positive": {
+          "name": "feed_sources_vk_group_id_positive",
+          "value": "\"feed_sources\".\"vk_group_id\" IS NULL OR \"feed_sources\".\"vk_group_id\" > 0"
         },
         "feed_sources_reason_iff_failing": {
           "name": "feed_sources_reason_iff_failing",
@@ -5197,6 +5355,48 @@
         "feed_sources_version_positive": {
           "name": "feed_sources_version_positive",
           "value": "\"feed_sources\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.feed_vk_call_months": {
+      "name": "feed_vk_call_months",
+      "schema": "",
+      "columns": {
+        "month": {
+          "name": "month",
+          "type": "date",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "calls": {
+          "name": "calls",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "feed_vk_call_months_calls_non_negative": {
+          "name": "feed_vk_call_months_calls_non_negative",
+          "value": "\"feed_vk_call_months\".\"calls\" >= 0"
+        },
+        "feed_vk_call_months_first_day": {
+          "name": "feed_vk_call_months_first_day",
+          "value": "extract(day from \"feed_vk_call_months\".\"month\") = 1"
         }
       },
       "isRLSEnabled": false
@@ -7717,104 +7917,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.learning_school_interests": {
-      "name": "learning_school_interests",
-      "schema": "",
-      "columns": {
-        "person_id": {
-          "name": "person_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "school_id": {
-          "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "learning_school_interest_state",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "registered_at": {
-          "name": "registered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "withdrawn_at": {
-          "name": "withdrawn_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notified_at": {
-          "name": "notified_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "learning_school_interests_school_idx": {
-          "name": "learning_school_interests_school_idx",
-          "columns": [
-            {
-              "expression": "school_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "learning_school_interests_person_id_users_id_fk": {
-          "name": "learning_school_interests_person_id_users_id_fk",
-          "tableFrom": "learning_school_interests",
-          "tableTo": "users",
-          "columnsFrom": ["person_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "learning_school_interests_school_id_learning_schools_id_fk": {
-          "name": "learning_school_interests_school_id_learning_schools_id_fk",
-          "tableFrom": "learning_school_interests",
-          "tableTo": "learning_schools",
-          "columnsFrom": ["school_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "learning_school_interests_person_id_school_id_pk": {
-          "name": "learning_school_interests_person_id_school_id_pk",
-          "columns": ["person_id", "school_id"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.learning_schools": {
       "name": "learning_schools",
       "schema": "",
@@ -8368,7 +8470,7 @@
     "public.feed_entry_kind": {
       "name": "feed_entry_kind",
       "schema": "public",
-      "values": ["news", "column", "post"]
+      "values": ["news", "column", "post", "video"]
     },
     "public.feed_entry_preview_state": {
       "name": "feed_entry_preview_state",
@@ -8378,12 +8480,17 @@
     "public.feed_source_platform": {
       "name": "feed_source_platform",
       "schema": "public",
-      "values": ["academy", "telegram"]
+      "values": ["academy", "telegram", "vk"]
     },
     "public.feed_source_status": {
       "name": "feed_source_status",
       "schema": "public",
       "values": ["unchecked", "ok", "failing"]
+    },
+    "public.feed_vk_object_kind": {
+      "name": "feed_vk_object_kind",
+      "schema": "public",
+      "values": ["post", "video"]
     },
     "public.material_kind": {
       "name": "material_kind",
@@ -8399,11 +8506,6 @@
       "name": "learning_document_kind",
       "schema": "public",
       "values": ["certificate", "certificate-nmo"]
-    },
-    "public.learning_school_interest_state": {
-      "name": "learning_school_interest_state",
-      "schema": "public",
-      "values": ["active", "withdrawn"]
     },
     "public.learning_state": {
       "name": "learning_state",

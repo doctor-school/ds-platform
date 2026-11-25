@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -54,6 +55,8 @@ export const feedEntryKind = pgEnum("feed_entry_kind", [
   "news",
   "column",
   "post",
+  // 048 slice 3 — a VK Видео video (EARS-42); only of the VK platform.
+  "video",
 ]);
 
 /**
@@ -68,6 +71,13 @@ export const FEED_POST_TEXT_MAX = 500;
 export const feedSourcePlatform = pgEnum("feed_source_platform", [
   "academy",
   "telegram",
+  "vk",
+]);
+
+/** 048 EARS-43 — the kind of a VK object an entry is made of. */
+export const feedVkObjectKind = pgEnum("feed_vk_object_kind", [
+  "post",
+  "video",
 ]);
 
 /** 048 EARS-31 — «Не проверен» / «Работает» / «Ошибка». */
@@ -84,8 +94,11 @@ export const feedEntryPreviewState = pgEnum("feed_entry_preview_state", [
   "failed",
 ]);
 
-/** 048 EARS-21 — the stored address: a lowercase public username. */
+/** 048 EARS-21 — the stored Telegram address: a lowercase public username. */
 export const FEED_SOURCE_ADDRESS_PATTERN = "^[a-z][a-z0-9_]{4,31}$";
+
+/** 048 EARS-38 — the stored VK address: a lowercase community screen name. */
+export const FEED_VK_SOURCE_ADDRESS_PATTERN = "^[a-z0-9_.]{2,32}$";
 
 /**
  * 048 slice 2 (#3993) — one official account of a connected network the feed
@@ -106,6 +119,13 @@ export const feedSources = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     /** Bound by the source check or the first matching update (EARS-31). */
     telegramChatId: bigint("telegram_chat_id", { mode: "bigint" }),
+    /** Slice 3 — the VK community id, bound by the source check (EARS-44). */
+    vkGroupId: bigint("vk_group_id", { mode: "number" }),
+    /**
+     * Slice 3 — the last accepted Callback event of the community, set to the
+     * binding time on bind (EARS-44 «VK не присылает новые записи»).
+     */
+    vkLastEventAt: timestamp("vk_last_event_at", { withTimezone: true }),
     status: feedSourceStatus("status").notNull().default("unchecked"),
     /** One of the fixed EARS-31 reasons while `failing`. */
     statusReason: text("status_reason"),
@@ -122,10 +142,20 @@ export const feedSources = pgTable(
   (t) => [
     uniqueIndex("feed_sources_platform_address_key").on(t.platform, t.address),
     uniqueIndex("feed_sources_telegram_chat_id_key").on(t.telegramChatId),
+    uniqueIndex("feed_sources_vk_group_id_key").on(t.vkGroupId),
     check("feed_sources_network_platform", sql`${t.platform} <> 'academy'`),
+    // Each network's own address rule (EARS-21, EARS-38).
     check(
       "feed_sources_address_pattern",
-      sql`${t.address} ~ ${sql.raw(`'${FEED_SOURCE_ADDRESS_PATTERN}'`)}`,
+      sql`CASE WHEN ${t.platform}::text = 'vk' THEN ${t.address} ~ ${sql.raw(`'${FEED_VK_SOURCE_ADDRESS_PATTERN}'`)} ELSE ${t.address} ~ ${sql.raw(`'${FEED_SOURCE_ADDRESS_PATTERN}'`)} END`,
+    ),
+    check(
+      "feed_sources_vk_columns_vk_only",
+      sql`${t.platform}::text = 'vk' OR (${t.vkGroupId} IS NULL AND ${t.vkLastEventAt} IS NULL)`,
+    ),
+    check(
+      "feed_sources_vk_group_id_positive",
+      sql`${t.vkGroupId} IS NULL OR ${t.vkGroupId} > 0`,
     ),
     check(
       "feed_sources_reason_iff_failing",
@@ -276,6 +306,8 @@ export const feedEntries = pgTable(
     sourceOff: boolean("source_off").notNull().default(false),
     /** Slice 2 — set while an administrator hides the entry (EARS-32). */
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    /** Slice 3 — set while the VK post is gone from the wall (EARS-45). */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -340,6 +372,21 @@ export const feedEntries = pgTable(
     check(
       "feed_entries_preview_attempts_non_negative",
       sql`${t.previewAttempts} >= 0`,
+    ),
+    // Slice 3 — a `video` card comes only from VK (EARS-42).
+    check(
+      "feed_entries_video_is_vk",
+      sql`${t.kind}::text <> 'video' OR ${t.sourcePlatform}::text = 'vk'`,
+    ),
+    // Slice 3 — a VK preview is referenced, never copied (048-design §Preview).
+    check(
+      "feed_entries_vk_image_is_url",
+      sql`${t.sourcePlatform}::text <> 'vk' OR ${t.imageRef} IS NULL`,
+    ),
+    // Slice 3 — an own material leaves the feed by unpublish, never removal.
+    check(
+      "feed_entries_academy_not_removed",
+      sql`${t.sourcePlatform} <> 'academy' OR ${t.removedAt} IS NULL`,
     ),
   ],
 );
@@ -414,3 +461,69 @@ export const telegramUpdateCursor = pgTable(
 );
 
 export type TelegramUpdateCursor = typeof telegramUpdateCursor.$inferSelect;
+
+/**
+ * 048 slice 3 (#4004) — the dedup key of VK publications (048-design §Data
+ * model (slice 3)), mirroring `feed_entry_messages`: the post id of a post
+ * entry, every own-community video attached to it and the video id of a video
+ * entry, keyed `(feed_source_id, vk_group_id, object_kind, vk_object_id)`:
+ * VK numbers posts and videos per community, so an object is the community
+ * it came from plus its kind and id (Lead decision 17). The Callback,
+ * the reconcile and the import write through it, so no publication becomes
+ * two entries, and a video entry absorbed by its post re-points its key to the
+ * post entry (EARS-40, EARS-43, EARS-45, EARS-46).
+ */
+export const feedEntryVkObjects = pgTable(
+  "feed_entry_vk_objects",
+  {
+    feedSourceId: uuid("feed_source_id")
+      .notNull()
+      .references(() => feedSources.id, { onDelete: "restrict" }),
+    vkGroupId: bigint("vk_group_id", { mode: "number" }).notNull(),
+    objectKind: feedVkObjectKind("object_kind").notNull(),
+    vkObjectId: bigint("vk_object_id", { mode: "number" }).notNull(),
+    feedEntryId: uuid("feed_entry_id")
+      .notNull()
+      .references(() => feedEntries.id, { onDelete: "cascade" }), // retained-data-ok: the rows are the entry's own VK object ids (EARS-43), meaningless without the entry; deleting the entry deletes them
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.feedSourceId, t.vkGroupId, t.objectKind, t.vkObjectId],
+    }),
+    index("feed_entry_vk_objects_feed_entry_id_idx").on(t.feedEntryId),
+    check("feed_entry_vk_objects_object_id_positive", sql`${t.vkObjectId} > 0`),
+    check("feed_entry_vk_objects_group_id_positive", sql`${t.vkGroupId} > 0`),
+  ],
+);
+
+export type FeedEntryVkObject = typeof feedEntryVkObjects.$inferSelect;
+
+/**
+ * 048 slice 3 (#4004) — the VK API calls of one calendar month (Moscow time)
+ * of the VK ID account (048-design §Call budget (slice 3); EARS-44, EARS-51):
+ * one row per month, keyed by its first day, incremented by
+ * `vk-api.client.ts` on every call. The cap is per account, so the counter is
+ * too — no source column.
+ */
+export const feedVkCallMonths = pgTable(
+  "feed_vk_call_months",
+  {
+    month: date("month", { mode: "string" }).primaryKey(),
+    calls: integer("calls").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("feed_vk_call_months_calls_non_negative", sql`${t.calls} >= 0`),
+    check(
+      "feed_vk_call_months_first_day",
+      sql`extract(day from ${t.month}) = 1`,
+    ),
+  ],
+);
+
+export type FeedVkCallMonth = typeof feedVkCallMonths.$inferSelect;

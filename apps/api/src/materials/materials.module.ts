@@ -1,4 +1,6 @@
 import { Inject, Module, type OnModuleInit } from "@nestjs/common";
+import { HttpAdapterHost } from "@nestjs/core";
+import type { FastifyInstance } from "fastify";
 import { feedEntries, materials } from "@ds/db";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
@@ -32,11 +34,20 @@ import { TelegramPreviewService } from "./telegram/telegram-preview.service.js";
 import { TelegramSourceCheck } from "./telegram/telegram-source-check.service.js";
 import { TelegramUpdateCursorRepository } from "./telegram/telegram-update-cursor.repository.js";
 import { TelegramUpdatePoller } from "./telegram/telegram-update-poller.service.js";
+import { VkApiClient } from "./vk/vk-api.client.js";
+import { VK_API, type VkApi } from "./vk/vk-api.types.js";
+import { installVkCallbackJsonParser } from "./vk/vk-callback-body.js";
+import { VkCallbackController } from "./vk/vk-callback.controller.js";
+import { VkCallMonthsRepository } from "./vk/vk-call-months.repository.js";
+import { VK_CONFIG, vkConfigFromEnv, type VkConfig } from "./vk/vk-config.js";
+import { VkFeedSource } from "./vk/vk.feed-source.js";
+import { VkSourceCheck } from "./vk/vk-source-check.service.js";
+import { VkWallReconcile } from "./vk/vk-wall-reconcile.service.js";
 
 /**
  * 048 — the materials feed, slice 1 (#3512 opens it with the admin authoring
  * surface; #3513 adds the anonymous feed and material reads); slice 2 adds the
- * «Источники» source list (#3993).
+ * «Источники» source list (#3993); slice 3 the VK connector (#4004).
  *
  * `TaxonomyModule` is imported for the SHARED 012 mechanisms, never copied
  * (Lead decision 11): `IdempotencyService` (one `idempotency_keys` record),
@@ -53,6 +64,7 @@ import { TelegramUpdatePoller } from "./telegram/telegram-update-poller.service.
     FeedEntriesAdminController,
     PublicFeedController,
     PublicMaterialsController,
+    VkCallbackController,
   ],
   providers: [
     MaterialsRepository,
@@ -75,11 +87,25 @@ import { TelegramUpdatePoller } from "./telegram/telegram-update-poller.service.
     TelegramSourceCheck,
     TelegramUpdateCursorRepository,
     TelegramUpdatePoller,
+    { provide: VK_CONFIG, useFactory: () => vkConfigFromEnv() },
+    VkCallMonthsRepository,
+    {
+      provide: VK_API,
+      inject: [VK_CONFIG, VkCallMonthsRepository],
+      useFactory: (
+        config: VkConfig | null,
+        counter: VkCallMonthsRepository,
+      ): VkApi => new VkApiClient(config?.serviceKey ?? null, counter),
+    },
+    VkFeedSource,
+    VkSourceCheck,
+    VkWallReconcile,
   ],
 })
 export class MaterialsModule implements OnModuleInit {
   constructor(
     @Inject(MediaSlotRegistry) private readonly slots: MediaSlotRegistry,
+    @Inject(HttpAdapterHost) private readonly http: HttpAdapterHost,
   ) {}
 
   /**
@@ -91,5 +117,14 @@ export class MaterialsModule implements OnModuleInit {
    */
   onModuleInit(): void {
     this.slots.register(materials.coverRef, feedEntries.imageRef);
+    // EARS-39 — the Callback route refuses an unparsable body with `401`. Nest
+    // registers Fastify's body parsers before any `onModuleInit` and Fastify
+    // freezes them only at `ready()`, so the swap lands in time; a graph
+    // booted without an HTTP server (the endpoint-authz gate) has none.
+    const adapter = this.http.httpAdapter as
+      { getInstance(): FastifyInstance; getType(): string } | undefined;
+    if (adapter?.getType() === "fastify") {
+      installVkCallbackJsonParser(adapter.getInstance());
+    }
   }
 }

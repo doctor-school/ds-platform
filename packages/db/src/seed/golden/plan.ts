@@ -17,6 +17,7 @@ import { events, streamConfig } from "../../schema/events.js";
 import {
   feedEntries,
   feedEntryMessages,
+  feedEntryVkObjects,
   feedSources,
   materials,
 } from "../../schema/materials.js";
@@ -201,6 +202,8 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "feed_sources",
   "feed_entries",
   "feed_entry_messages",
+  // 048 slice 3 (#4004) — a VK publication's key references its card.
+  "feed_entry_vk_objects",
   "learning_schools",
   "learning_courses",
   "learning_modules",
@@ -495,6 +498,14 @@ export function buildGoldenSeedPlan(
       "feedSourceId",
       "messageId",
     ]),
+    // 048 EARS-43 — one row per VK object of a card, keyed as the connector
+    // dedups it.
+    step(
+      "feed_entry_vk_objects",
+      feedEntryVkObjects,
+      dataset.feedEntryVkObjects,
+      ["feedSourceId", "vkGroupId", "objectKind", "vkObjectId"],
+    ),
     step("learning_schools", learningSchools, dataset.learningSchools, ["id"]),
     step("learning_courses", learningCourses, dataset.learningCourses, ["id"]),
     step("learning_modules", learningModules, dataset.learningModules, ["id"]),
@@ -809,6 +820,18 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   check(
     "feed_entry_messages",
     dataset.feedEntryMessages,
+    "feedEntryId",
+    idSet(dataset.feedEntries),
+  );
+  check(
+    "feed_entry_vk_objects",
+    dataset.feedEntryVkObjects,
+    "feedSourceId",
+    feedSourceIds,
+  );
+  check(
+    "feed_entry_vk_objects",
+    dataset.feedEntryVkObjects,
     "feedEntryId",
     idSet(dataset.feedEntries),
   );

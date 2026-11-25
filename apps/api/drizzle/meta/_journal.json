@@ -509,8 +509,15 @@
     {
       "idx": 72,
       "version": "7",
-      "when": 1795516016212,
-      "tag": "0072_023_school_interests",
+      "when": 1795522430763,
+      "tag": "0072_048_vk_connector",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1795576390717,
+      "tag": "0073_023_school_interests",
       "breakpoints": true
     }
   ]

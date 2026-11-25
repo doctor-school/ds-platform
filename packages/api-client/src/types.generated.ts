@@ -2404,6 +2404,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/integrations/vk/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["VkCallbackController_callback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/learning/courses/{courseSlug}/path": {
         parameters: {
             query?: never;
@@ -9763,6 +9779,23 @@ export interface operations {
         };
     };
     HealthController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VkCallbackController_callback: {
         parameters: {
             query?: never;
             header?: never;

@@ -23,6 +23,7 @@ import {
 } from "@ds/design-system";
 import type { FeedSourceAdmin } from "@ds/schemas";
 import { FeedSourceForm } from "@/components/feed-source-form";
+import { feedSourceAddressLabel } from "@/lib/feed-source-address";
 import {
   feedSourceErrorKey,
   feedSourceAddressRefusal,
@@ -65,7 +66,7 @@ export function FeedSourceRowActions({
   const [editErrorKey, setEditErrorKey] = useState<string | null>(null);
   const [addressRefusal, setAddressRefusal] = useState<string | null>(null);
   const pending = mutation.isPending;
-  const label = `t.me/${source.address}`;
+  const label = feedSourceAddressLabel(source.platform, source.address);
 
   function switchState(command: "disable" | "enable") {
     onStarted();
@@ -169,7 +170,9 @@ export function FeedSourceRowActions({
           <DialogHeader>
             <DialogTitle>{t("feedSources.editTitle")}</DialogTitle>
             <DialogDescription>
-              {t("feedSources.editDescription", { address: label })}
+              {t(`feedSources.editDescription.${source.platform}`, {
+                address: label,
+              })}
             </DialogDescription>
           </DialogHeader>
           {editErrorKey ? (
@@ -179,6 +182,7 @@ export function FeedSourceRowActions({
           ) : null}
           <FeedSourceForm
             mode="edit"
+            platform={source.platform}
             defaultAddress={source.address}
             submitLabel={t("common.save")}
             cancelLabel={t("feedSources.actions.cancel")}
@@ -233,7 +237,7 @@ export function FeedSourceRowActions({
               {t("feedSources.disableConfirm.title", { address: label })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("feedSources.disableConfirm.description")}
+              {t(`feedSources.disableConfirm.description.${source.platform}`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

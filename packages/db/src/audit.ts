@@ -98,6 +98,11 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
       "operational poller state of the 048 Telegram long poll, no domain truth (048-design «Offset», EARS-24/25/31): one row per bot holding the getUpdates `next_offset`, `polled_at` and the failing-update mark, advanced by the poller on every answered poll — no editor or administrator writes it, so the ledger's «which principal changed this» has no answer and auditing every offset advance would be pure churn (the idempotency_keys / presence_beats argument, 010-design §5); the feed entries the poll writes are what an editor acts on",
   },
   {
+    table: "feed_vk_call_months",
+    rationale:
+      "operational call counter of the 048 VK connector, no domain truth (048-design «Call budget (slice 3)», EARS-44/51): one row per calendar month incremented by the VK API client on every outbound call — no editor or administrator writes it, so the ledger's «which principal changed this» has no answer and auditing every increment would be pure churn (the telegram_update_cursor argument, 010-design §5)",
+  },
+  {
     table: "specialties_minzdrav",
     rationale:
       "seeded reference book with NO actor write path — the only writer is the provenance-stamped boot seed (017-design §2), so every row change has the same WHO (the deploy) and the same WHY (the committed nomenclature order, already in git); no storefront or admin surface can mutate it, and 017 EARS-3 tests that absence. The ledger's question «which principal changed this and when» has no domain answer here (010-design §5)",

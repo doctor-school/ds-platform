@@ -135,6 +135,37 @@ export const ApiEnvSchema = z.looseObject({
       })
       .optional(),
   ),
+  // 048 slice 3 (ADR-0011 §2.2 channel #11, EARS-39, EARS-51) — the VK
+  // connector's three server-side secrets: the service key of the VK ID app,
+  // the Callback secret and the confirmation string of the community's
+  // Callback settings. Optional at boot: with any of them unset the connector
+  // is off (the Callback route answers 404, nothing calls VK and the source
+  // check reports «VK не подключён на сервере»). Never logged, returned or
+  // stored.
+  VK_SERVICE_KEY: blankIsUnset(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9._-]{16,512}$/, {
+        message: "VK_SERVICE_KEY must be a VK service key",
+      })
+      .optional(),
+  ),
+  VK_CALLBACK_SECRET: blankIsUnset(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9]{8,50}$/, {
+        message: "VK_CALLBACK_SECRET must be 8–50 Latin letters and digits",
+      })
+      .optional(),
+  ),
+  VK_CALLBACK_CONFIRMATION: blankIsUnset(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,64}$/, {
+        message: "VK_CALLBACK_CONFIRMATION must be the confirmation string",
+      })
+      .optional(),
+  ),
   // 048 slice 2 (ADR-0011 §2.2 channel #10, EARS-24, EARS-36) — the Telegram
   // connector's one server-side secret. Optional at boot: with the bot token
   // unset the connector is off (no update poller runs and nothing calls the

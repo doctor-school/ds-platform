@@ -32,19 +32,9 @@ Feature: 029 — Academy home relaunch after the narrowing to backstage
     When the guest returns and taps "Все события"
     Then the guest is on "/webinars"
 
-  @journey @EARS-10
-  Scenario: A partner reaches the team before the investor page exists
-    Given the partner entries are not delivered
-    And a guest opens the Academy home
-    Then the "Партнёрам" card has no action
-    And there is no "Инвесторам" block
-    When the guest fills the partnership form with consent and submits it
-    Then the form shows its success state
-
   @journey @EARS-8
   Scenario: A partner reaches the investor page
-    Given the partner entries are delivered
-    And a guest opens the Academy home
+    Given a guest opens the Academy home
     When the guest taps "Как это работает" in the "Партнёрам" card
     Then the guest is on "/investors"
     When the guest returns and taps "Как это работает" in the "Инвесторам" block

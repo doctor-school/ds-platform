@@ -64,7 +64,7 @@ The page, top to bottom, follows the canvas switch defaults (#1799: «its switch
 - **No nearest event / the events read fails** → the shared block's own empty state or its error state with «Повторить» (019).
 - **No material / the feed read fails** → the rail's own empty or error state (048 EARS-16).
 
-**Partner entry before 034 slice 1 ships.** The partner entries are a separable part of this feature: they lead to a page that does not exist until 034 slice 1 lands. _(agent-proposed — UNCONFIRMED; the lead decides with the owner whether the home ships before 034 slice 1.)_ If the home ships first, the «Партнёрам» card's action and the «Инвесторам» persona block are not rendered, and the home keeps the existing partnership form — whose submissions already go into the shared application queue by 033 EARS-18 — as its last section, so a partner is never left without a way in; the 034 entries then replace that form. If the home waits for 034 slice 1, it ships with both entries and without the form.
+**The home ships with 034 slice 1.** The partner entries lead to `/investors`, the page of 034 slice 1 ([#4238](https://github.com/doctor-school/ds-platform/issues/4238)), so the home is released together with that page: there is no interim state of the home before 034, and the home carries no partnership form. Owner decision 2026-11-25 in chat — answer «Б»: the home ships together with the first slice of 034 («Как это работает», #4238), with no interim home state before 034; recorded on [#1799](https://github.com/doctor-school/ds-platform/issues/1799#issuecomment-7152648887).
 
 ## Product acceptance criteria
 
@@ -86,7 +86,6 @@ The page, top to bottom, follows the canvas switch defaults (#1799: «its switch
 
 ## Open questions
 
-- **Shipping the home before 034 slice 1** — the lead's call with the owner (see «Partner entry before 034 slice 1 ships»). The spec keeps the partner entries a separate requirement and a separate delivery slice so either answer is a sequencing choice, not a re-specification.
 - **REQ-123 «BBM: Академия смыслов».** The registry row lists the background inscription, the owner-drawn canvas has none. This PRD follows the canvas; the owner confirms at Stage A.
 - **Nearest-events cap.** The canvas draws two cards; this PRD takes **3**, the doctor home's cap, so both storefront homes cap the shared block alike. _(lead decision; owner sees it at Stage A)_
 
@@ -97,7 +96,7 @@ The canvas `design-source/academy-home.dc.html` is **owner-drawn** (vendored by 
 - **The materials rail** («Новости, блог и видео», `scope` = «срез 1», states norm / load / empty / err) — approved by the owner on 2026-11-11 ([#3516 comment 6796895267](https://github.com/doctor-school/ds-platform/issues/3516#issuecomment-6796895267)).
 - **The split-hero composition «в»** — approved on 2026-08-13 for the 013 canvas «Главная» (013-product «Approved mockup»); the canvas comment keeps it («Stage A, остаётся»).
 
-There is **no recorded Stage-A approval of the current canvas as a whole** (the backstage hero texts, «Кто мы» with the goal row, the persona entries). The 030 and 033 specs carry their home entries as «Stage A pending» too. The owner's Stage-A pick on the full current canvas, with the data mapping of this PRD (count lines, the events cap, «бесплатное» removed, the partner entry before 034), is recorded here before the home is built.
+There is **no recorded Stage-A approval of the current canvas as a whole** (the backstage hero texts, «Кто мы» with the goal row, the persona entries). The 030 and 033 specs carry their home entries as «Stage A pending» too. The owner's Stage-A pick on the full current canvas, with the data mapping of this PRD (count lines, the events cap, «бесплатное» removed), is recorded here before the home is built.
 
 ## Prior art
 

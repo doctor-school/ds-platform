@@ -1,6 +1,6 @@
 ---
 title: "029 — Academy home relaunch (Design)"
-description: "Design of feature 029: how the Academy home composes the mounted owner blocks (030 projects block, 019 EventsFeed, 048 FeedRail), the count lines over three public reads with per-segment failure isolation, the new public expert count read, the retirement of the 013 fixture sections, the reuse table against the capability-ownership registry, and the two delivery slices with their technical blockers."
+description: "Design of feature 029: how the Academy home composes the mounted owner blocks (030 projects block, 019 EventsFeed, 048 FeedRail), the count lines over three public reads with per-segment failure isolation, the new public expert count read, the retirement of the 013 fixture sections, the reuse table against the capability-ownership registry, and the one delivery slice, shipped with 034 slice 1, and its work packages with their technical blockers."
 slug: 029-academy-home-relaunch-design
 status: Draft
 lang: en
@@ -22,8 +22,7 @@ flowchart TD
   V --> PR["«Что мы делаем» — 030 EARS-12 home block (shared project card)"]
   V --> EV["«Ближайшие эфиры» — @ds/events-storefront/feed EventsFeed, limit 3 (EARS-7)"]
   V --> MF["«Новости, блог и видео» — materials-feed-section.tsx → FeedRail (048 EARS-14)"]
-  V --> PE["Persona entries — host-only (EARS-9; EARS-8 in slice 2)"]
-  V -. slice 1 only .-> LF["Interim partnership form — 033 EARS-18 (EARS-10)"]
+  V --> PE["Persona entries — host-only (EARS-8, EARS-9)"]
   H --> C1["GET /v1/public/projects (030 EARS-8) → count stage=running"]
   H --> C2["GET /v1/public/experts/count (EARS-4, new)"]
   H --> C3["GET /v1/public/organisations/count (032 EARS-12)"]
@@ -48,7 +47,7 @@ sequenceDiagram
 ```
 
 - The three reads run in parallel with the page's other reads; each is settled on its own (`Promise.allSettled`-shaped), so a rejected read drops only its segment (EARS-3, EARS-5) and never fails the page.
-- The projects read is the same `GET /v1/public/projects` the 030 home block uses; the running count is the number of items with `stage === "running"` — no new projects endpoint.
+- The projects read is the same `GET /v1/public/projects` the 030 home block uses, fetched once per render and shared by the hero and the block; the running count is the number of items with `stage === "running"` — no new projects endpoint.
 - Plural forms come from one Russian plural helper (one/few/many by the last two digits); the helper is a host-local pure function unless the design system already exports one — the implementer checks `@ds/design-system` first.
 - Caching: the reads follow the home's current fetch policy (no `revalidate` beyond what 048 / 030 use), so a publish shows on the next request (US-9).
 
@@ -60,17 +59,17 @@ sequenceDiagram
 
 ## 4. Retirement of the 013 sections (EARS-1)
 
-| Today (`academy-home-view.tsx`)                                              | 029                                                                                     |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `AcademyHero`                                                                | replaced by the split hero (EARS-2, EARS-3, EARS-5)                                     |
-| `WhatSection`, `WhySection`, `PartnerValueSection`, `FormatsSection`         | removed                                                                                 |
-| `ExpertsSection` (fixture `EXPERTS`)                                         | removed                                                                                 |
-| `EventsSection` (fixture `WebinarCard`s)                                     | replaced by `EventsFeed` (EARS-7)                                                       |
-| `ProjectsSection` (fixtures)                                                 | replaced by the 030 EARS-12 block (#3506 lands it)                                      |
-| `MaterialsFeedSection`                                                       | kept (048 EARS-14)                                                                      |
-| `LeadDemoSection` + `lead-demo-fields.tsx` + `academy-partnership-action.ts` | kept in slice 1 (EARS-10, 033 EARS-18 writes to the queue); removed in slice 2 (EARS-8) |
-| `fixtures.ts`                                                                | deleted; its host-allowlist row removed in the same PR                                  |
-| `AcademyHomeFooter`                                                          | unchanged (shell)                                                                       |
+| Today (`academy-home-view.tsx`)                                              | 029                                                                                                                          |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `AcademyHero`                                                                | replaced by the split hero (EARS-2, EARS-3, EARS-5)                                                                          |
+| `WhatSection`, `WhySection`, `PartnerValueSection`, `FormatsSection`         | removed                                                                                                                      |
+| `ExpertsSection` (fixture `EXPERTS`)                                         | removed                                                                                                                      |
+| `EventsSection` (fixture `WebinarCard`s)                                     | replaced by `EventsFeed` (EARS-7)                                                                                            |
+| `ProjectsSection` (fixtures)                                                 | replaced by the 030 EARS-12 block (#3506 lands it)                                                                           |
+| `MaterialsFeedSection`                                                       | kept (048 EARS-14)                                                                                                           |
+| `LeadDemoSection` + `lead-demo-fields.tsx` + `academy-partnership-action.ts` | removed; the partner entries lead to `/investors` (EARS-8), and the stored records are in the queue by 033 EARS-18 / EARS-19 |
+| `fixtures.ts`                                                                | deleted; its host-allowlist row removed in the same PR                                                                       |
+| `AcademyHomeFooter`                                                          | unchanged (shell)                                                                                                            |
 
 ## 5. Reuse (ADR-0013 §A1, capability-ownership registry)
 
@@ -82,8 +81,7 @@ sequenceDiagram
 | Partner count                  | Organisation registry — `apps/api/src/taxonomy` (032 EARS-12)                                         | the line                                                                          |
 | Expert count                   | 012 expert registry — `apps/api/src/taxonomy`                                                         | `GET /v1/public/experts/count` (EARS-4)                                           |
 | Expert entries                 | Application queue / `@ds/applications` (033) — route `/apply`                                         | links                                                                             |
-| Partner entries                | 034 investor page `/investors` (slice 1, spec PR #4232)                                               | links (slice 2)                                                                   |
-| Interim partnership form       | Application queue (033 EARS-18)                                                                       | kept as the last section in slice 1                                               |
+| Partner entries                | 034 investor page `/investors` (034 slice 1, #4238)                                                   | links                                                                             |
 | Hero, «Кто мы», persona blocks | host-only surface (`academy-home-view.tsx` row)                                                       | the copy and layout from `@ds/design-system` primitives (Button, Container, Link) |
 
 No new shared package and no new host file beyond what these rows hold; if the count-line formatting is extracted to its own module it takes a host-allowlist row in the same PR.
@@ -96,15 +94,18 @@ From the canvas at its defaults (goal А — «Миссия | Эволюцион
 - «Что мы делаем» — data / absent (030 EARS-12).
 - «Ближайшие эфиры» — the block's skeleton / data / empty / error with «Повторить» (019).
 - Rail — the 048 states (EARS-16).
-- Persona row — slice 1: «Экспертам» alone (EARS-9, EARS-10); slice 2: «Экспертам» + «Инвесторам» (EARS-8). The single-card row of slice 1 is not drawn on the canvas and goes to the owner with the Stage-A pick (PRD «Approved mockup»).
+- Persona row — «Экспертам» + «Инвесторам» side by side, stacked on a phone (EARS-8, EARS-9).
 
 Copy deviation from the canvas: «бесплатное» / «бесплатным» removed from the goal, «Кто мы» and the mission (owner 2026-11-10). The canvas switch panel («Панель развилок и состояний») is a canvas tool, not page content.
 
 ## 7. Delivery slices
 
-| Slice | Work package     | EARS                                    | `blocked_by` (technical dependency → why)                                                                                                                                                                                                                                                                                                                                           |
-| ----- | ---------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Home composition | EARS-1…EARS-7, EARS-9, EARS-10, EARS-11 | **#3506** (030 home block + shared project card — «Что мы делаем» mounts it); **#4031** (033 `/apply` page — both «Экспертам» entries lead there, a link to a missing route is a dead end); **#4032** (033 EARS-18 — the interim form kept by EARS-10 must write to the queue, not to files). Satisfied: #3492 / #3494 (032 count), #3516 / #3517 (048 rail), #1485 (`EventsFeed`). |
-| 2     | Partner entries  | EARS-8                                  | **#1824** (034 slice 1 — both «Как это работает» actions lead to `/investors`; the edge re-points to 034's page EARS Issue once the 034 spec (PR #4232) opens its Issues); slice 1 (EARS-8 replaces the EARS-10 state).                                                                                                                                                             |
+The home ships as **one delivery slice, together with 034 slice 1**: owner decision 2026-11-25 in chat, answer «Б» — the home ships with the first slice of 034 («Как это работает», #4238), with no interim home state before 034 (recorded on [#1799](https://github.com/doctor-school/ds-platform/issues/1799#issuecomment-7152648887)). The slice is cut into three work packages:
 
-Order is the owner's: the home is first on the Academy track queue and its prerequisites run in parallel (owner 2026-11-25). Whether slice 1 ships before slice 2 is an open owner fork the lead holds (PRD «Open questions»); the spec supports both: if the home waits, the two slices ship in one release and EARS-10 never reaches production.
+| Work package                  | EARS                         | `blocked_by` (technical dependency → why)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Expert count read (#4242)     | EARS-4                       | none — the 012 `experts.status` column exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Home composition (#4243)      | EARS-1…EARS-3, EARS-5…EARS-9 | **#4242** (the «Экспертам» line reads it); **#3506** (030 home block + shared project card — «Что мы делаем» mounts it); **#4031** (033 `/apply` page — both «Экспертам» entries lead there, a link to a missing route is a dead end); **#4238** (034 slice 1 page `/investors` — both «Как это работает» actions lead there); **#4032** (033 EARS-18 / EARS-19 — the composition removes the interim partnership form and its server action, whose stored records 033 imports into the shared queue before their file storage is retired). Satisfied: #3492 / #3494 (032 count), #3505 (030 catalog read), #3516 / #3517 (048 rail), #1485 (`EventsFeed`). |
+| Home browser journeys (#4244) | EARS-11 (V-4…V-8)            | **#4243** (the journeys drive the composed page).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
+Order is the owner's: the home is first on the Academy track queue and its prerequisites run in parallel (owner 2026-11-25); the work packages may be built in parallel with 034 slice 1, and the home release waits for it. The PR that ships 029 at `/` also updates the 013 docs (status and pointer to 029, the replaced sections and the lead-form requirements).

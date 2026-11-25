@@ -628,6 +628,26 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/4012#issuecomment-7092687106"
       ]
+    },
+    "feature-033-application-queue-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/applications/page.tsx",
+        "apps/admin/app/applications/[id]/page.tsx",
+        "apps/admin/components/admin-data-list.tsx",
+        "apps/admin/components/application-dialogs.tsx",
+        "apps/admin/components/status-chip.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "applications-list",
+        "application-detail",
+        "application-erase",
+        "application-stale"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/4030#issuecomment-7155996396"
+      ]
     }
   }
 }

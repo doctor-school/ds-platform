@@ -8,11 +8,11 @@
  * is the holder of the automatic side; nothing on the box duplicates it.
  *
  * The operator side has no Actions run, so an operator run records its hold on the box
- * (`SLOT_HOLD_PATH`, root-owned, written through `sudo` over the operator's ssh). It
+ * (`SLOT_HOLD_PATH`, root-owned, written as root over the operator's ssh). It
  * names the holder and the moment it was taken, and carries `until` — the stale bound
  * after which a crashed holder no longer owns the slot.
  *
- *   - `e2e:stage main` from a workstation refuses (exit 2) while another operator's
+ *   - `e2e:stage main` from a workstation refuses (exit 3) while another operator's
  *     hold is live, takes its own hold, then refuses while a `stage.yml` run of `main`
  *     is not `completed` (and drops its hold); it drops the hold when it ends.
  *   - The converge (`slot.mjs up|sync|reset main`, the release driver's unit included)
@@ -44,6 +44,17 @@ export const OPERATOR_HOLD_MS = 2 * 60 * 60 * 1000;
  * still reported live past this is GitHub's own wedge, not a converge.
  */
 export const ACTIONS_RUN_HOLD_MS = (55 + 90 + 15) * 60 * 1000;
+
+/**
+ * The exit of a run that does not get the slot (held, or the hold / `gh` unreadable):
+ * apart from e2e:stage's 1 (a leg failed) and 2 (the slot does not serve the target or
+ * the run was narrowed), so a caller such as tools/deploy/stage-main-check.mjs names
+ * the right cause.
+ */
+export const HOLD_REFUSED_EXIT = 3;
+
+/** The release driver's bound on a failure note's reason (FAILURE_REASON_MAX). */
+const FAILURE_REASON_MAX = 160;
 
 /** The `gh run list` fields `actionsRunHolder` reads. */
 export const STAGE_RUN_FIELDS = "databaseId,status,event,createdAt,displayTitle,url";
@@ -158,26 +169,68 @@ export function readHoldScript() {
   return `if sudo test -f ${SLOT_HOLD_PATH}; then sudo cat ${SLOT_HOLD_PATH}; fi`;
 }
 
-const b64 = (record) => Buffer.from(`${JSON.stringify(record)}\n`, "utf8").toString("base64");
+const b64 = (text) => Buffer.from(text, "utf8").toString("base64");
+const recordText = (record) => `${JSON.stringify(record)}\n`;
+// `$(…)` strips trailing newlines on both sides, so a record compares equal to the
+// trimmed text a read returned.
+const decoded = (text) => `"$(printf '%s' '${b64(text)}' | base64 -d)"`;
 
-/** Writes the record atomically (temp + rename), root-owned 0644 so the driver reads it. */
-export function writeHoldScript(record) {
+/**
+ * The take, as ROOT (`remoteBash({ asRoot: true })`): create-if-absent, never an
+ * overwrite. The record is written to a temp file and HARD-LINKED onto the hold path —
+ * `ln` fails when the path exists, so of two takes inside one round-trip exactly one
+ * wins. Prints `taken`, or `held` and the record that stands (`parseTakeResult`).
+ */
+export function takeHoldScript(record, dir = SLOT_HOLD_DIR) {
   return [
-    "set -euo pipefail",
-    `sudo install -d -m 0755 -o root -g root ${SLOT_HOLD_DIR}`,
-    `tmp=$(sudo mktemp ${SLOT_HOLD_DIR}/.main.XXXXXX)`,
-    `printf '%s' '${b64(record)}' | base64 -d | sudo tee -- "$tmp" >/dev/null`,
-    `sudo chmod 0644 -- "$tmp"`,
-    `sudo mv -f -- "$tmp" ${SLOT_HOLD_PATH}`,
+    "set -eu",
+    `install -d -m 0755 ${dir}`,
+    `tmp=$(mktemp ${dir}/.main.XXXXXX)`,
+    `printf '%s' '${b64(recordText(record))}' | base64 -d > "$tmp"`,
+    'chmod 0644 "$tmp"',
+    `if ln -- "$tmp" ${dir}/main.json 2>/dev/null; then rm -f -- "$tmp"; echo taken; ` +
+      `else rm -f -- "$tmp"; echo held; cat ${dir}/main.json 2>/dev/null || true; fi`,
   ].join("\n");
 }
 
-/** Drops the record only while it is still `record` — never another holder's hold. */
-export function clearHoldScript(record) {
-  return (
-    `if [ "$(sudo cat ${SLOT_HOLD_PATH} 2>/dev/null | base64 -w0)" = '${b64(record)}' ]; ` +
-    `then sudo rm -f -- ${SLOT_HOLD_PATH}; fi`
-  );
+/**
+ * The reclaim of a stale hold, as ROOT — a separate, explicit step: the record is
+ * renamed aside (one rename wins), and only when it is still exactly `staleText`, the
+ * record the caller decided was stale, is it dropped and `record` taken as above.
+ * Anything else (another reclaimer's fresh hold) is linked back and reported `held`.
+ */
+export function reclaimHoldScript(staleText, record, dir = SLOT_HOLD_DIR) {
+  return [
+    "set -eu",
+    `install -d -m 0755 ${dir}`,
+    `aside=${dir}/.stale.$$`,
+    `if mv -T -- ${dir}/main.json "$aside" 2>/dev/null; then`,
+    `  if [ "$(cat "$aside")" = ${decoded(staleText)} ]; then rm -f -- "$aside"; ` +
+      `else ln -- "$aside" ${dir}/main.json 2>/dev/null || true; rm -f -- "$aside"; ` +
+      `echo held; cat ${dir}/main.json 2>/dev/null || true; exit 0; fi`,
+    "fi",
+    takeHoldScript(record, dir).split("\n").slice(2).join("\n"),
+  ].join("\n");
+}
+
+/** Drops the record only while it is still `record` — never another holder's hold. As ROOT. */
+export function clearHoldScript(record, dir = SLOT_HOLD_DIR) {
+  return [
+    "set -eu",
+    `aside=${dir}/.clear.$$`,
+    `if mv -T -- ${dir}/main.json "$aside" 2>/dev/null; then`,
+    `  if [ "$(cat "$aside")" != ${decoded(recordText(record))} ]; then ln -- "$aside" ${dir}/main.json 2>/dev/null || true; fi`,
+    '  rm -f -- "$aside"',
+    "fi",
+  ].join("\n");
+}
+
+/** `{ taken: true }`, or `{ taken: false, held: <the record text that stands> }`. */
+export function parseTakeResult(out) {
+  const [first, ...rest] = String(out ?? "").trim().split(/\r?\n/);
+  if (first === "taken") return { taken: true };
+  if (first === "held") return { taken: false, held: rest.join("\n") };
+  throw new Error(`the slot hold take gave an unexpected answer: ${JSON.stringify(first)}`);
 }
 
 /**
@@ -188,7 +241,17 @@ export function clearHoldScript(record) {
  */
 export function convergeHoldCheck({ text, now, command }) {
   const decision = slotHoldDecision({ hold: parseHold(text), now });
-  if (decision.action === "refuse") return { refusal: holdRefusal(decision, `slot ${command} main`) };
+  if (decision.action === "refuse") {
+    return {
+      refusal: holdRefusal(decision, `slot ${command} main`),
+      // The release driver records it for `status stage-main`; stage.yml prints it in
+      // the converge step and its summary. The holder is HOLDER_RE-bounded text.
+      failureNote: {
+        phase: "slot-hold",
+        reason: `slot main is held by ${decision.holder} since ${decision.since}`.slice(0, FAILURE_REASON_MAX),
+      },
+    };
+  }
   if (decision.action === "reclaim") return { note: `# ${decision.reason}; the converge proceeds` };
   return {};
 }

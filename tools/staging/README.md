@@ -552,17 +552,19 @@ limits themselves are proven by the `apps/api` unit and api-e2e suites (#2683).
 
 Everything it needs comes from the same places the converge reads: the hostnames from
 `slotHostnames()`, the base domain and the basic-auth user from `/etc/ds-platform/stage.env`
-over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. An operator without
-SSH to the box can export `STAGE_BASE_DOMAIN`, `E2E_HTTP_USER` and `E2E_HTTP_PASS` instead
-and the box is never contacted. The password is passed to Playwright as `httpCredentials`
-and never printed.
+over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. A run with
+`STAGE_BASE_DOMAIN`, `E2E_HTTP_USER` and `E2E_HTTP_PASS` exported reads none of them from
+the box — the Actions suite job does that, and so can a PR-slot run without SSH. A
+workstation run of slot `main` needs SSH regardless: it takes the slot's hold on the box
+first, and refuses (exit 3) when it cannot (see «One run owns slot `main`» below).
+The password is passed to Playwright as `httpCredentials` and never printed.
 
 **The signed-in leg needs the golden passwords too**, and they are NOT covered by
 `STAGE_BASIC_AUTH_PASS`. With SSH access, `e2e:stage` reads them in the same single
 `/etc/ds-platform/stage.env` read it already uses for topology and forwards exactly the
 four live allowlisted names to Playwright; it never forwards the rest of the box's secret
 set and never prints a value. An explicit `DS_GOLDEN_PASSWORD_*` on THIS machine wins over
-the box value, which is also how an operator in the no-SSH mode supplies credentials.
+the box value, which is also how a run in the no-SSH mode supplies credentials.
 
 The registry (`packages/e2e/lib/golden.ts`) turns the feature file's seed name into the env
 var `packages/db/src/seed/golden/idp.ts` declares for that account, and an unavailable one
@@ -576,7 +578,7 @@ as, and a scenario asking for that seed name to sign in is a scenario defect rat
 missing secret. `DS_GOLDEN_PASSWORD_ADMIN` is read only by the admin suite: the `admin` host
 tag is deliberately selected by NO storefront project (`packages/e2e/lib/host-tags.ts`), so a
 `--project academy`/`doctor` run never reaches for it. The four are the same owner-placed
-values `reset-identities` converges from. An operator without SSH to the box exports only
+values `reset-identities` converges from. A run without SSH to the box exports only
 the values the selected suite needs; they are secrets, and like the basic-auth password the
 suite never prints them.
 
@@ -596,20 +598,44 @@ other run (#4096). `tools/staging/slot-hold.mjs` holds the decision:
   concurrency group already serialises those runs, so any run of a `main` push that is not
   `completed` (queued, pending or in progress) holds the slot for both its jobs.
 - **A workstation run of `main`** records its hold on the box,
-  `/var/lib/ds-platform/slot-holds/main.json` (root-owned, written through `sudo` over the
+  `/var/lib/ds-platform/slot-holds/main.json` (root-owned, written as root over the
   operator's ssh): the holder (`operator <user>@<host> e2e:stage main (pid N)`), since when,
-  and a stale bound. It takes the hold first, then reads `gh run list`; it refuses with
-  exit 2, naming the holder and since when, while another operator's hold is live or a
-  `stage.yml` run of `main` is not completed, and drops its hold when it ends (Ctrl-C too).
-  The Actions suite job (`GITHUB_ACTIONS=true`) takes no hold: it runs inside its own run.
+  and a stale bound. The take is create-if-absent (a hard link onto the path, which fails
+  when it exists), so of two operators starting at once exactly one wins and the other is
+  told who holds. It takes the hold first, then reads `gh run list`. It refuses with
+  **exit 3**, naming the holder and since when, while another operator's hold is live or a
+  `stage.yml` run of `main` is not completed. It drops its hold when it ends, also on
+  Ctrl-C, a kill or a closed terminal. The Actions suite job (`GITHUB_ACTIONS=true`) takes
+  no hold: it runs inside its own run.
 - **The converge** (`slot.mjs up|sync|reset main`, the release driver's unit included)
-  refuses while an operator hold is live, naming it.
-- **Stale holders** never wedge the slot: an operator hold is stale 2 h after it was taken,
-  a `stage.yml` run 160 min after it was created (its two job limits, 55 + 90 min, plus
-  15 min); a stale or unreadable record is reclaimed with a line naming whose hold it was.
+  refuses while an operator hold is live, naming it, and exits 3. The release driver records
+  the reason as the unit's failure note (`slot-hold: slot main is held by <holder> since
+<when>`), and the `stage.yml` converge step prints it in its `::error::` line and its step
+  summary. A converge refused this way stays red until `stage.yml` is re-run for that SHA
+  after the holder is done. Nothing retries it.
+- **Stale holders** never wedge the slot. An operator hold is stale 2 h after it was taken,
+  and a `stage.yml` run 160 min after it was created (its two job limits, 55 + 90 min, plus
+  15 min). A stale or unreadable record is reclaimed as a separate step. The record is
+  renamed aside and replaced only while it is still the one judged stale; anything else is
+  put back and the reclaimer refuses. The reclaim prints whose hold it was.
 
 A run that cannot read the box or `gh run list` refuses rather than guessing. PR slots
-(`pr-<N>`) take no hold.
+(`pr-<N>`) take no hold. `pnpm deploy:prod`'s `--ref` pre-flight (`tools/deploy/stage-main-check.mjs`)
+names an exit 3 as «slot main is held», apart from exit 2's «does not serve the target, or
+narrowed».
+
+**Clearing a leaked hold by hand.** A holder killed with no chance to clean up (SIGKILL,
+power loss, a dropped ssh during the clear) leaves its record until the stale bound. Read it
+first: `ssh ds-stage-1 sudo cat /var/lib/ds-platform/slot-holds/main.json`. Confirm that
+the process it names (`<host>`, `pid N`) is gone. Then remove it:
+`ssh ds-stage-1 sudo rm /var/lib/ds-platform/slot-holds/main.json`. After that, re-run
+`stage.yml` for any `main` SHA whose converge it refused.
+
+**Not covered.** A workstation converge (`pnpm stage:slot up main`, including the
+`deploy:prod --ref` pre-flight's) takes no hold and does not check for a live `stage.yml`
+run, so it can still recreate containers under a running Actions suite. Only the
+automatic `stage.yml` run and a workstation `e2e:stage main` run are serialised here
+(tracked in `DEBT.md`).
 
 ### The live-tier legs (#3168)
 

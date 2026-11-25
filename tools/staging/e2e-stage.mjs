@@ -70,13 +70,16 @@ import {
   STAGE_RUN_FIELDS,
   actionsRunHold,
   clearHoldScript,
+  HOLD_REFUSED_EXIT,
   holdRecord,
   holdRefusal,
   operatorHolder,
   parseHold,
+  parseTakeResult,
   readHoldScript,
+  reclaimHoldScript,
   slotHoldDecision,
-  writeHoldScript,
+  takeHoldScript,
 } from "./slot-hold.mjs";
 import { boxSpawnArgs, remoteBash, sshCapture } from "../deploy/lib/remote.mjs";
 
@@ -1063,8 +1066,13 @@ export const realEffects = {
     return operatorHolder({ user, host: hostname(), pid: process.pid });
   },
   readSlotHold: () => sshCapture(STAGE_1, readHoldScript(), { stderr: "pipe" }),
-  writeSlotHold: (record) => sshCapture(STAGE_1, writeHoldScript(record), { stderr: "pipe" }),
-  clearSlotHold: (record) => sshCapture(STAGE_1, clearHoldScript(record), { stderr: "pipe" }),
+  // The take, the reclaim and the clear run as root on the box (slot-hold.mjs).
+  takeSlotHold: (record) =>
+    sshCapture(STAGE_1, takeHoldScript(record), { stderr: "pipe", asRoot: true }),
+  reclaimSlotHold: (staleText, record) =>
+    sshCapture(STAGE_1, reclaimHoldScript(staleText, record), { stderr: "pipe", asRoot: true }),
+  clearSlotHold: (record) =>
+    sshCapture(STAGE_1, clearHoldScript(record), { stderr: "pipe", asRoot: true }),
   stageMainRuns: () => {
     const out = spawnSync(
       assertShellInert([
@@ -1080,22 +1088,21 @@ export const realEffects = {
       return undefined;
     }
   },
-  // Ctrl-C / a kill: drop the hold synchronously before exiting, so an interrupted run
-  // does not block converges until its stale bound.
+  // Ctrl-C, a kill or a closed terminal: drop the hold synchronously before exiting, so
+  // an interrupted run does not block converges until its stale bound.
   guardSlotHold: (record) => {
     const onSignal = (signal) => {
-      spawnSync(...boxSpawnArgs(STAGE_1, remoteBash()), {
+      spawnSync(...boxSpawnArgs(STAGE_1, remoteBash({ asRoot: true })), {
         input: clearHoldScript(record),
         stdio: ["pipe", "ignore", "ignore"],
         timeout: 30_000,
       });
-      process.exit(signal === "SIGINT" ? 130 : 143);
+      process.exit(128 + ({ SIGHUP: 1, SIGINT: 2, SIGTERM: 15 })[signal]);
     };
-    process.once("SIGINT", onSignal);
-    process.once("SIGTERM", onSignal);
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+    for (const signal of signals) process.once(signal, onSignal);
     return () => {
-      process.off("SIGINT", onSignal);
-      process.off("SIGTERM", onSignal);
+      for (const signal of signals) process.off(signal, onSignal);
     };
   },
 };
@@ -1561,16 +1568,17 @@ export function slotHoldApplies(slot, env) {
 }
 
 /**
- * Runs `run` while this run owns slot `main`: refuses (exit 2, naming the holder)
- * while another operator's hold is live or a `stage.yml` run of `main` is not
- * `completed`; reclaims a stale hold; drops its own hold when the run ends.
+ * Runs `run` while this run owns slot `main`: refuses (exit `HOLD_REFUSED_EXIT`,
+ * naming the holder) while another operator's hold is live, another take wins the
+ * race, or a `stage.yml` run of `main` is not `completed`; reclaims a stale hold as
+ * its own step; drops its own hold when the run ends.
  */
 export async function withSlotHold(effects, run) {
   const now = effects.now().getTime();
   const self = effects.holderName();
   const refuse = (line) => {
     effects.log(line);
-    return exitCodeFor({ preflightOk: false, legs: [] });
+    return HOLD_REFUSED_EXIT;
   };
   const why = (err) => (err instanceof Error ? err.message : String(err));
 
@@ -1588,10 +1596,24 @@ export async function withSlotHold(effects, run) {
   if (onBox.action === "reclaim") effects.log(`e2e:stage reclaims slot main: ${onBox.reason}.`);
 
   const record = holdRecord({ holder: self, now });
+  let took;
   try {
-    await effects.writeSlotHold(record);
+    took = parseTakeResult(
+      onBox.action === "reclaim"
+        ? await effects.reclaimSlotHold(text, record)
+        : await effects.takeSlotHold(record),
+    );
   } catch (err) {
     return refuse(`e2e:stage refuses: the hold on slot main cannot be taken on the box (${why(err)}).`);
+  }
+  if (!took.taken) {
+    // Another take won between the read and this one: the record that stands is its.
+    const lost = slotHoldDecision({ hold: parseHold(took.held), now, self });
+    return refuse(
+      lost.action === "refuse"
+        ? holdRefusal(lost, "e2e:stage")
+        : "e2e:stage refuses: the hold on slot main changed while this run took it; run it again.",
+    );
   }
   const release = async () => {
     try {
@@ -1664,9 +1686,10 @@ export async function runE2eStage(
 /** The run against the slot itself, once it is this run's (see `withSlotHold`). */
 async function runOnSlot({ options, env, effects, liveTiers, recordVerdict }) {
   const { slot } = options;
-  // The box is read ONLY for what the operator's own env does not already carry, so
-  // an operator without ssh can run the suite with `STAGE_BASE_DOMAIN` +
-  // `E2E_HTTP_USER`/`E2E_HTTP_PASS` exported.
+  // The box is read ONLY for what the caller's own env does not already carry: the
+  // Actions suite job and a PR-slot run without ssh export `STAGE_BASE_DOMAIN` +
+  // `E2E_HTTP_USER`/`E2E_HTTP_PASS`. A workstation run of `main` has already been to the
+  // box for its hold (`withSlotHold`, #4259), so it needs ssh in any case.
   const selfSufficient = Boolean(
     env.STAGE_BASE_DOMAIN && env.E2E_HTTP_USER && env.E2E_HTTP_PASS,
   );

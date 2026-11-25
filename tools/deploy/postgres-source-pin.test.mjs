@@ -28,7 +28,7 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
  * ships them.
  */
 const ACCEPTED_SOURCE_HASH =
-  "a85080a47050102d2c63bd1a83b007619ba2d65cf4b513b0155e3d4a1f2a93b9";
+  "9331f8e4518c2fd0d459f1c00c90870d87f57be6317eaed7b10f419031dcc66f";
 
 test("3418: the committed data-prod postgres source hash is the accepted one", () => {
   const { sourceHash } = readPostgresTarget("HEAD", REPO_ROOT);

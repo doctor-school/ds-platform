@@ -540,8 +540,11 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    A failed upload is a warning and a step-summary line, never the suite verdict.
    Nothing is uploaded as an Actions artifact — the repository's logs and artifacts are
    public (release-pipeline spec §4).
-4. The commit status `stage-suite` becomes `success` / `failure` with counts only
-   (`412 passed, 3 failed, 12 skipped`). A failed converge sets it to `failure` and the
+4. The commit status `stage-suite` becomes `success` / `failure` with the suite and
+   live-tier counts (`412 passed, 3 failed (live/academy/default), 12 skipped`), then
+   every red verdict the counts cannot show, read from the run's `status-verdict.json`:
+   `; live/doctor/room died; key-journey D8,A3 failed; axe/academy blocking` (140 chars,
+   names past the cap fold into `+N more`). A failed converge sets it to `failure` and the
    suite does not run; a run cancelled between the two jobs is closed as `failure` by
    the `close-status` job, so the status is never left pending.
 

@@ -599,8 +599,8 @@ other run (#4096). `tools/staging/slot-hold.mjs` holds the decision:
   `completed` (queued, pending or in progress) holds the slot for both its jobs.
 - **A workstation run of `main`** records its hold on the box,
   `/var/lib/ds-platform/slot-holds/main.json` (root-owned, written as root over the
-  operator's ssh): the holder (`operator <user>@<host> e2e:stage main (pid N)`), since when,
-  and a stale bound. The take is create-if-absent (a hard link onto the path, which fails
+  operator's ssh): the holder (`operator <user>@<host> e2e:stage main (pid N)`), an opaque
+  8-hex hold id, since when, and a stale bound. The take is create-if-absent (a hard link onto the path, which fails
   when it exists), so of two operators starting at once exactly one wins and the other is
   told who holds. It takes the hold first, then reads `gh run list`. It refuses with
   **exit 3**, naming the holder and since when, while another operator's hold is live or a
@@ -609,9 +609,11 @@ other run (#4096). `tools/staging/slot-hold.mjs` holds the decision:
   no hold: it runs inside its own run.
 - **The converge** (`slot.mjs up|sync|reset main`, the release driver's unit included)
   refuses while an operator hold is live, naming it, and exits 3. The release driver records
-  the reason as the unit's failure note (`slot-hold: slot main is held by <holder> since
-<when>`), and the `stage.yml` converge step prints it in its `::error::` line and its step
-  summary. A converge refused this way stays red until `stage.yml` is re-run for that SHA
+  the reason as the unit's failure note (`slot-hold: slot main is held by an operator
+e2e:stage main run (hold <id>) since <when>`), and the `stage.yml` converge step prints it
+  in its `::error::` line and its step summary. That log is public, so the note names the
+  hold by its id only; the `<user>@<host>` stays in the box-side record and the converge's
+  journal, and the operator's own terminal shows it. A converge refused this way stays red until `stage.yml` is re-run for that SHA
   after the holder is done. Nothing retries it.
 - **Stale holders** never wedge the slot. An operator hold is stale 2 h after it was taken,
   and a `stage.yml` run 160 min after it was created (its two job limits, 55 + 90 min, plus

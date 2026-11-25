@@ -25,6 +25,8 @@
  * `slot-hold.test.mjs` pins it on a machine with no box.
  */
 
+import { randomBytes } from "node:crypto";
+
 /** The hold record on the stage box; `/var/lib/ds-platform` already holds the e2e reports. */
 export const SLOT_HOLD_DIR = "/var/lib/ds-platform/slot-holds";
 export const SLOT_HOLD_PATH = `${SLOT_HOLD_DIR}/main.json`;
@@ -60,6 +62,7 @@ const FAILURE_REASON_MAX = 160;
 export const STAGE_RUN_FIELDS = "databaseId,status,event,createdAt,displayTitle,url";
 
 const HOLDER_RE = /^[\w .:@()/#+-]{1,160}$/;
+const HOLD_ID_RE = /^[0-9a-f]{8}$/;
 
 /** The holder name of an operator run: who, from where, which process. */
 export function operatorHolder({ user, host, pid }) {
@@ -67,12 +70,18 @@ export function operatorHolder({ user, host, pid }) {
   return `operator ${clean(user)}@${clean(host)} e2e:stage main (pid ${Number(pid) || 0})`;
 }
 
-/** The record an operator run writes: holder, since, until (ISO-8601 UTC). */
-export function holdRecord({ holder, now, boundMs = OPERATOR_HOLD_MS }) {
+/**
+ * The record an operator run writes: holder, an opaque hold id, since, until
+ * (ISO-8601 UTC). The holder (`<user>@<host>`) stays on the box and the operator's
+ * terminal; anything the public Actions log shows names the hold by its `id` only.
+ */
+export function holdRecord({ holder, now, boundMs = OPERATOR_HOLD_MS, id = randomBytes(4).toString("hex") }) {
   if (!HOLDER_RE.test(holder)) throw new Error(`bad slot holder: ${JSON.stringify(holder)}`);
+  if (!HOLD_ID_RE.test(id)) throw new Error(`bad slot hold id: ${JSON.stringify(id)}`);
   return {
     slot: "main",
     holder,
+    id,
     since: new Date(now).toISOString(),
     until: new Date(now + boundMs).toISOString(),
   };
@@ -92,12 +101,14 @@ export function parseHold(text) {
       doc?.slot !== "main" ||
       typeof doc.holder !== "string" ||
       !HOLDER_RE.test(doc.holder) ||
+      typeof doc.id !== "string" ||
+      !HOLD_ID_RE.test(doc.id) ||
       Number.isNaN(since) ||
       Number.isNaN(until)
     ) {
       return { unreadable: true };
     }
-    return { holder: doc.holder, since: doc.since, until: doc.until };
+    return { holder: doc.holder, id: doc.id, since: doc.since, until: doc.until };
   } catch {
     return { unreadable: true };
   }
@@ -126,6 +137,7 @@ export function slotHoldDecision({ hold, now, self }) {
   return {
     action: "refuse",
     holder: hold.holder,
+    id: hold.id,
     since: hold.since,
     reason: `slot main is held by ${hold.holder} since ${hold.since} (stale after ${hold.until})`,
   };
@@ -245,10 +257,14 @@ export function convergeHoldCheck({ text, now, command }) {
     return {
       refusal: holdRefusal(decision, `slot ${command} main`),
       // The release driver records it for `status stage-main`; stage.yml prints it in
-      // the converge step and its summary. The holder is HOLDER_RE-bounded text.
+      // the converge step and its summary — the PUBLIC Actions log, so the note names the
+      // hold by its opaque id, never the operator's `<user>@<host>` (the box journal has it).
       failureNote: {
         phase: "slot-hold",
-        reason: `slot main is held by ${decision.holder} since ${decision.since}`.slice(0, FAILURE_REASON_MAX),
+        reason: `slot main is held by an operator e2e:stage main run (hold ${decision.id}) since ${decision.since}`.slice(
+          0,
+          FAILURE_REASON_MAX,
+        ),
       },
     };
   }

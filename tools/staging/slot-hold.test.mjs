@@ -170,14 +170,27 @@ test("parseTakeResult: anything but `taken` / `held` is an error", () => {
   assert.throws(() => parseTakeResult("garbage"), /unexpected answer/);
 });
 
+test("an operator hold record carries an opaque 8-hex hold id", () => {
+  const record = holdRecord({ holder: OTHER, now: T0 });
+  assert.match(record.id, /^[0-9a-f]{8}$/);
+  assert.notEqual(holdRecord({ holder: OTHER, now: T0 }).id, record.id);
+  assert.equal(parseHold(JSON.stringify(record)).id, record.id);
+  assert.deepEqual(parseHold(JSON.stringify({ ...record, id: "x; rm" })), { unreadable: true });
+});
+
 test("converge path: a live operator hold refuses the converge, naming the holder", () => {
-  const text = JSON.stringify(holdRecord({ holder: OTHER, now: T0 }));
+  const record = holdRecord({ holder: OTHER, now: T0, id: "0a1b2c3d" });
+  const text = JSON.stringify(record);
   const live = convergeHoldCheck({ text, now: T0 + 60_000, command: "up" });
-  // B2: the note the release driver records for `status stage-main`, which stage.yml prints.
+  // B2: the note the release driver records for `status stage-main`, which stage.yml prints
+  // to the PUBLIC Actions log and step summary — an operator hold, its id and since when,
+  // never the workstation user or host.
   assert.deepEqual(live.failureNote, {
     phase: "slot-hold",
-    reason: "slot main is held by operator agent@ws-2 e2e:stage main (pid 7) since 2026-11-19T09:00:00.000Z",
+    reason: "slot main is held by an operator e2e:stage main run (hold 0a1b2c3d) since 2026-11-19T09:00:00.000Z",
   });
+  assert.ok(!live.failureNote.reason.includes("agent"), live.failureNote.reason);
+  assert.ok(!live.failureNote.reason.includes("ws-2"), live.failureNote.reason);
   assert.ok(live.failureNote.reason.length <= 160);
   assert.match(live.refusal, /^slot up main refuses: slot main is held by operator agent@ws-2 e2e:stage main \(pid 7\) since 2026-11-19T09:00:00.000Z/);
   assert.deepEqual(convergeHoldCheck({ text: "", now: T0, command: "up" }), {});

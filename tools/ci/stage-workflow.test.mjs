@@ -223,7 +223,7 @@ describe("stage.yml", () => {
   };
 
   it("4259: a converge refused by a slot hold names the holder in the log and the step summary", () => {
-    const reason = "slot main is held by operator agent@ws-2 e2e:stage main (pid 7) since 2026-11-25T13:48:00.835Z";
+    const reason = "slot main is held by an operator e2e:stage main run (hold 0a1b2c3d) since 2026-11-25T13:48:00.835Z";
     const { status, out, summary } = runPoll(JSON.stringify({
       release: { state: "failed", step: "-" },
       driver: { active: "failed", rc: 3, failure: { phase: "slot-hold", reason } },

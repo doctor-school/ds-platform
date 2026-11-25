@@ -120,6 +120,7 @@ Feature: 033 — Author application: the «Подать заявку» page and 
     Then 3 applications of kind "partnership" are stored
     And the second run reports 3 already present
     And no team notification is sent for them
+    And the admin list shows no «Команда не уведомлена» mark on them
 
   @EARS-20
   Scenario: The applicant's personal data is erased on request

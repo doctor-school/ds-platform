@@ -526,6 +526,13 @@
       "when": 1795587290686,
       "tag": "0074_023_school_interests",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1795587584684,
+      "tag": "0075_033_partnership_kind",
+      "breakpoints": true
     }
   ]
 }

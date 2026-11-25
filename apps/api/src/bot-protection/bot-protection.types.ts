@@ -38,7 +38,11 @@ export type BotProtectionAction =
   // 033 EARS-7 (#4028): the Academy author application intake. Signed in, but
   // gated anyway so every intake of the application queue is bot-protected
   // without a per-kind exception (033-design «Lead decisions» 10).
-  | "application";
+  | "application"
+  // 033 EARS-18 (#4032): the Academy home's partnership form — a guest intake
+  // into the same queue, its own action so a later action-scoped provider can
+  // tell the no-account door from the signed-in one.
+  | "partnership";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

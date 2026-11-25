@@ -71,6 +71,40 @@ docker compose exec -T portal sh -lc \
   show success. Restore the same named volume or capacity, then re-run the
   metadata checks above; exact client retries remain idempotent.
 
+## Import into the application queue (033 EARS-19)
+
+The partnership form moves into the 033 application queue
+([033 design «Import of the interim records»](../specs/features/033-author-application/033-design.md)).
+The api ships a one-off import of these records:
+`node dist/applications/import-partnership-records.main.js <dir>` in the api
+image, `pnpm --filter @ds/api applications:import-partnership <dir>` on a
+workstation. It inserts one `partnership` application per valid record, keyed
+by the record id (`legacy_record_id`), with its `acceptedAt` as the submission
+time, its consent tag, status `new` and team notice `imported` (no team email;
+the admin list shows no «Команда не уведомлена» mark). A record already
+imported is left as it is, so a re-run is safe. It prints one JSON line
+`{ imported, alreadyPresent, invalid: [file names] }` and never a record's
+content.
+
+Run order on production, each step only after the previous one is verified:
+
+1. Release the portal whose form posts to `POST /v1/public/applications/partnership`
+   — from then on no new file is written here.
+2. Count the records (the liveness command above).
+3. Run the import in a one-off api container with this volume mounted read-only.
+   The records are `0700`/`0600` for the portal runtime user, so the container
+   must run as that same uid (`--user "$(docker compose exec -T portal id -u)"`):
+
+   ```bash
+   docker compose run --rm --no-deps --user "<portal uid>"      -v academy_partnership_submissions:/import:ro api      node dist/applications/import-partnership-records.main.js /import
+   ```
+
+4. Check that `imported + alreadyPresent + invalid` equals the file count and
+   that `invalid` is empty; an invalid name is investigated before going on,
+   never deleted.
+5. Removing the volume from Compose (and the volume itself) is an irreversible
+   data action: it waits for the owner's explicit «go», recorded on #4032.
+
 ## Retention, backup, and withdrawal
 
 These files contain personal data and immutable consent evidence. The linked

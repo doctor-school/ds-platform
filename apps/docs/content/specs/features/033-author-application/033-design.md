@@ -54,7 +54,7 @@ erDiagram
     uuid idempotency_key "unique with kind"
     uuid legacy_record_id "unique, import only"
     timestamptz submitted_at
-    text team_notice "pending | sent | failed | skipped"
+    text team_notice "pending | sent | failed | skipped | imported"
     text receipt_notice "pending | sent | failed | not_applicable"
     timestamptz status_changed_at
     uuid status_changed_by "admin user id, null for expiry"
@@ -110,7 +110,7 @@ sequenceDiagram
   A->>DB: receipt_notice = sent | failed | not_applicable
 ```
 
-The sends run after the response, on the request's process (no outbox, no scheduler — the congress precedent of `apps/api/src/congress/README.md`): the row is the record of truth, a crash between commit and send leaves `pending`, which the admin list shows like `failed` and `skipped` («Команда не уведомлена»). An idempotent replay returns the stored `{ id, submittedAt }` and sends nothing. The team is read at send time from 047: the active staff accounts holding `platform_admin`, the same people who can open the queue. There is no team-list config, no env and no prod step; zero recipients records `skipped` and never touches boot.
+The sends run after the response, on the request's process (no outbox, no scheduler — the congress precedent of `apps/api/src/congress/README.md`): the row is the record of truth, a crash between commit and send leaves `pending`, which the admin list shows like `failed` and `skipped` («Команда не уведомлена»); `imported` marks a row the one-off partnership import brought in, which no notice is owed for and the list marks nothing on. An idempotent replay returns the stored `{ id, submittedAt }` and sends nothing. The team is read at send time from 047: the active staff accounts holding `platform_admin`, the same people who can open the queue. There is no team-list config, no env and no prod step; zero recipients records `skipped` and never touches boot.
 
 **Egress (ADR-0011 §2, channel 7).** Email is a channel whose processors must be RF-located; the 003 chain's Resend reserve is outside the RF and is admitted only for «the recipient address and short-lived code, never medical/profile payload», any wider scope reopening the decision (`003-design.md` §14, line 887). The queue emails stay inside that scope: the recipient address plus non-personal text — the kind, the submission time, an admin link carrying the application's opaque id, the projects link. No topic, name, company, contact, about or note is ever in a body, so a reserve send carries nothing the 003 posture does not already admit, and ADR-0011 is not reopened. The team recipients are the `platform_admin` accounts' own emails, the same class of address the 003 chain already sends sign-in codes to.
 
@@ -136,7 +136,7 @@ Erasure is orthogonal to status: it can run in any status, sets `pd_erased_at`, 
 
 ## Import of the interim records (EARS-19)
 
-`pnpm --filter @ds/api applications:import-partnership <dir>` reads each `<id>.json` (`AcademyPartnershipRecord` of `academy-partnership-store.ts`), validates it against `PartnershipRequestPayload`, inserts `kind = partnership`, `legacy_record_id = id`, `submitted_at` from the record, consent purpose / version tag from the record, `team_notice = skipped`, `receipt_notice = not_applicable`, on conflict of `legacy_record_id` do nothing; prints `imported / already present / invalid` and the invalid names. Run order on prod: deploy with the re-pointed form → run the import against the volume mounted read-only into a one-off api container → compare counts with the file count → remove the volume from Compose. Removing the volume is an irreversible data action and waits for the owner's explicit «go» (AGENTS.md §6), tracked in the partnership Issue as a deferred prod action.
+`pnpm --filter @ds/api applications:import-partnership <dir>` reads each `<id>.json` (`AcademyPartnershipRecord` of `academy-partnership-store.ts`), validates it against `PartnershipRequestPayload`, inserts `kind = partnership`, `legacy_record_id = id`, `submitted_at` from the record, consent purpose / version tag from the record, status `new`, `team_notice = imported`, `receipt_notice = not_applicable`, on conflict of `legacy_record_id` do nothing; prints `imported / already present / invalid` and the invalid names. Run order on prod: deploy with the re-pointed form → run the import against the volume mounted read-only into a one-off api container → compare counts with the file count → remove the volume from Compose. Removing the volume is an irreversible data action and waits for the owner's explicit «go» (AGENTS.md §6), tracked in the partnership Issue as a deferred prod action.
 
 ## Endpoints
 

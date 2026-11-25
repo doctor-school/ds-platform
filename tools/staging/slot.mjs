@@ -34,7 +34,7 @@
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -110,6 +110,7 @@ import {
   unionUris,
 } from "./idp.mjs";
 import { STG_INFRA_COMPOSE_PATH, applyStageEdgeConfig } from "./edge-config.mjs";
+import { HOLD_REFUSED_EXIT, convergeHoldCheck, readHoldScript } from "./slot-hold.mjs";
 
 /** Raised for an unusable input or plan — the caller must fail closed. */
 export class SlotError extends Error {
@@ -3568,6 +3569,27 @@ async function main() {
     console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${source})`);
     for (const name of recordedImageNames(images)) console.log(`  ${name}: ${images[name]}`);
   }
+  // #4259: one run owns slot `main` at a time — a converge of it (the release driver's
+  // or an operator's) refuses while an operator `e2e:stage main` run holds it.
+  if (
+    options.slot === "main" &&
+    (COMMANDS_WITH_SLOT_AND_REF.has(options.command) || options.command === "reset")
+  ) {
+    const hold = convergeHoldCheck({
+      text: await sshCapture(STAGE_1, readHoldScript()),
+      now: Date.now(),
+      command: options.command,
+    });
+    if (hold.refusal) {
+      // The release driver's unit sets the file and records the note for `status
+      // stage-main`, which stage.yml's converge step prints (#4259, as prod.mjs's die()).
+      if (process.env.DS_RELEASE_FAILURE_FILE) {
+        writeFileSync(process.env.DS_RELEASE_FAILURE_FILE, `${JSON.stringify(hold.failureNote)}\n`);
+      }
+      throw Object.assign(new SlotError(hold.refusal), { exitCode: HOLD_REFUSED_EXIT });
+    }
+    if (hold.note) console.log(hold.note);
+  }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
   const effects = realEffects(boxEnv, {
@@ -3640,6 +3662,6 @@ const invokedDirectly =
 if (invokedDirectly) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
-    process.exitCode = 1;
+    process.exitCode = err?.exitCode ?? 1;
   });
 }

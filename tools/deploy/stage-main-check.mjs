@@ -22,6 +22,7 @@ import path from "node:path";
 import { sshCapture } from "./lib/remote.mjs";
 import { PROBE_SSH_OPTIONS } from "../staging/slot-probe.mjs";
 import { STAGE_1, requiredOperatorPassword } from "../staging/slot.mjs";
+import { HOLD_REFUSED_EXIT } from "../staging/slot-hold.mjs";
 
 const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 
@@ -138,13 +139,19 @@ export function runStageMainCheck({
       };
     }
     const node = process.execPath;
-    if (
-      !run(
-        node,
-        [path.join(tree, "tools/staging/slot.mjs"), "up", "main", "--ref", sha],
-        tree,
-      )
-    ) {
+    const up = effects.run(
+      node,
+      [path.join(tree, "tools/staging/slot.mjs"), "up", "main", "--ref", sha],
+      { cwd: tree, env: childEnv },
+    ).status;
+    // #4259: the hold exit is a held slot, never a converge that broke.
+    if (up === HOLD_REFUSED_EXIT) {
+      return {
+        ok: false,
+        reason: `the stage \`main\` slot was not converged to ${short}: slot main is held by an operator \`e2e:stage main\` run (the line above names it and since when)`,
+      };
+    }
+    if (up !== 0) {
       return {
         ok: false,
         reason: `the stage \`main\` slot did not converge to ${short} (\`stage:slot up main --ref ${sha}\` failed)`,
@@ -164,6 +171,12 @@ export function runStageMainCheck({
       return {
         ok: false,
         reason: `\`e2e:stage main\` refused the release check on ${short} — the slot does not serve the target, or the run was narrowed`,
+      };
+    }
+    if (e2e === HOLD_REFUSED_EXIT) {
+      return {
+        ok: false,
+        reason: `\`e2e:stage main\` refused the release check on ${short} — slot main is held by another run, or its hold could not be read (the line above names it)`,
       };
     }
     if (e2e !== 0) {

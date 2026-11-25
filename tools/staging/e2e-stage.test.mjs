@@ -53,7 +53,10 @@ import {
   latestReportAttempt,
   REPORT_ATTEMPT_RE,
   reportAttemptKey,
+  slotHoldApplies,
+  withSlotHold,
 } from "./e2e-stage.mjs";
+import { holdRecord, operatorHolder } from "./slot-hold.mjs";
 import { boxObservingGrep } from "./box-observing.mjs";
 import {
   AXE_LEG_CONFIGS,
@@ -680,6 +683,17 @@ const BOX_TESTS = [
   { consumer: "apps/portal/e2e/b.e2e.spec.ts", title: "EARS-7: a record" },
 ];
 
+/** #4259: slot `main` free — no hold on the box, no live stage.yml run. */
+const FREE_SLOT_HOLD = {
+  holderName: () => "operator test@ws e2e:stage main (pid 1)",
+  readSlotHold: async () => "",
+  takeSlotHold: async () => "taken",
+  reclaimSlotHold: async () => "taken",
+  clearSlotHold: async () => {},
+  stageMainRuns: () => [],
+  guardSlotHold: () => () => {},
+};
+
 function harness(overrides = {}) {
   const calls = [];
   const lines = [];
@@ -702,6 +716,7 @@ function harness(overrides = {}) {
     issueState: () => "OPEN",
     log: (line) => lines.push(line),
     now: () => new Date("2026-09-14T10:11:12Z"),
+    ...FREE_SLOT_HOLD,
     ...overrides,
   };
   return { calls, lines, writes, effects };
@@ -2913,5 +2928,112 @@ describe("4250: every stage-suite attempt keeps its own report dir on the box", 
     );
     assert.equal(latestReportAttempt(["results.json"]), null);
     assert.equal(latestReportAttempt([]), null);
+  });
+});
+
+describe("the hold on slot main (#4259)", () => {
+  const ENV = { STAGE_BASIC_AUTH_PASS: "s3cret" };
+  const NOW = Date.parse("2026-09-14T10:11:12Z");
+  const OTHER = operatorHolder({ user: "agent", host: "ws-2", pid: 7 });
+  const tracked = (overrides) => {
+    const events = [];
+    const h = harness({
+      takeSlotHold: async (record) => (events.push(["write", record.holder]), "taken"),
+      clearSlotHold: async (record) => events.push(["clear", record.holder]),
+      ...overrides,
+    });
+    return { ...h, events };
+  };
+
+  it("applies to a workstation run of main only — not the Actions suite job, not a PR slot", () => {
+    assert.equal(slotHoldApplies("main", {}), true);
+    assert.equal(slotHoldApplies("main", { GITHUB_ACTIONS: "true" }), false);
+    assert.equal(slotHoldApplies("pr-12", {}), false);
+  });
+
+  it("held by another operator: refuses with exit 2 naming the holder, drives nothing, takes no hold", async () => {
+    const { calls, lines, effects, events } = tracked({
+      readSlotHold: async () => JSON.stringify(holdRecord({ holder: OTHER, now: NOW - 60_000 })),
+    });
+    const code = await runE2eStage(["main"], { env: ENV, effects });
+    assert.equal(code, 3);
+    assert.equal(calls.length, 0);
+    assert.deepEqual(events, []);
+    assert.match(lines.join("\n"), /e2e:stage refuses: slot main is held by operator agent@ws-2 e2e:stage main \(pid 7\) since 2026-09-14T10:10:12.000Z/);
+  });
+
+  it("held by a live stage.yml run of main: refuses naming the run and drops its own hold", async () => {
+    const { calls, lines, effects, events } = tracked({
+      stageMainRuns: () => [{
+        databaseId: 44500619750, status: "in_progress", event: "workflow_run",
+        createdAt: "2026-09-14T09:54:00Z", displayTitle: "Stage main 44fc3bddf",
+        url: "https://github.com/o/r/actions/runs/44500619750",
+      }],
+    });
+    const code = await runE2eStage(["main"], { env: ENV, effects });
+    assert.equal(code, 3);
+    assert.equal(calls.length, 0);
+    assert.deepEqual(events.map(([e]) => e), ["write", "clear"]);
+    assert.match(lines.join("\n"), /held by Actions run 44500619750 \(Stage main 44fc3bddf, in_progress\).* since 2026-09-14T09:54:00.000Z/);
+  });
+
+  it("free: takes the hold, runs the suite under it, drops it at the end", async () => {
+    const order = [];
+    const { effects } = harness({
+      takeSlotHold: async () => (order.push("write"), "taken"),
+      clearSlotHold: async () => order.push("clear"),
+      run: () => (order.push("run"), { status: 0 }),
+    });
+    await runE2eStage(["main"], { env: ENV, effects });
+    assert.equal(order[0], "write");
+    assert.equal(order.at(-1), "clear");
+    assert.ok(order.includes("run"));
+  });
+
+  it("S1: two operators inside one round-trip — the loser of the take refuses (3) naming the winner", async () => {
+    const winner = JSON.stringify(holdRecord({ holder: OTHER, now: NOW }));
+    const { calls, lines, effects, events } = tracked({
+      takeSlotHold: async () => `held\n${winner}`,
+    });
+    assert.equal(await runE2eStage(["main"], { env: ENV, effects }), 3);
+    assert.equal(calls.length, 0);
+    assert.deepEqual(events, [], "the loser clears nothing — the hold is the winner's");
+    assert.match(lines.join("\n"), /held by operator agent@ws-2 e2e:stage main \(pid 7\)/);
+  });
+
+  it("stale: reclaims a crashed holder's hold past its bound as its own step and proceeds", async () => {
+    const staleText = JSON.stringify(holdRecord({ holder: OTHER, now: NOW - 3 * 60 * 60 * 1000 }));
+    const reclaimed = [];
+    const { calls, lines, effects } = harness({
+      readSlotHold: async () => staleText,
+      takeSlotHold: async () => assert.fail("a stale hold is reclaimed, not taken over"),
+      reclaimSlotHold: async (text) => (reclaimed.push(text), "taken"),
+    });
+    await runE2eStage(["main"], { env: ENV, effects });
+    assert.deepEqual(reclaimed, [staleText]);
+    await runE2eStage(["main"], { env: ENV, effects });
+    assert.ok(calls.length > 0);
+    assert.match(lines.join("\n"), /reclaims slot main: the hold of operator agent@ws-2 .* went stale/);
+  });
+
+  it("an unreadable box or Actions state refuses rather than guessing", async () => {
+    const box = harness({ readSlotHold: async () => { throw new Error("ssh exited 255"); } });
+    assert.equal(await runE2eStage(["main"], { env: ENV, effects: box.effects }), 3);
+    assert.match(box.lines.join("\n"), /cannot be read on the box \(ssh exited 255\)/);
+    const gh = tracked({ stageMainRuns: () => undefined });
+    assert.equal(await runE2eStage(["main"], { env: ENV, effects: gh.effects }), 3);
+    assert.deepEqual(gh.events.map(([e]) => e), ["write", "clear"]);
+  });
+
+  it("drops the hold even when the run throws", async () => {
+    const events = [];
+    const effects = {
+      ...FREE_SLOT_HOLD,
+      now: () => new Date(NOW),
+      log: () => {},
+      clearSlotHold: async () => events.push("clear"),
+    };
+    await assert.rejects(withSlotHold(effects, async () => { throw new Error("boom"); }), /boom/);
+    assert.deepEqual(events, ["clear"]);
   });
 });

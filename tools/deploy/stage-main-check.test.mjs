@@ -128,6 +128,24 @@ describe("runStageMainCheck", () => {
     });
     assert.equal(result.ok, false);
     assert.match(result.reason, /refused/);
+    assert.match(result.reason, /does not serve the target, or the run was narrowed/);
+    assert.doesNotMatch(result.reason, /held/);
+  });
+
+  it("B1 (#4259): names a held slot apart — e2e:stage exit 3 is «slot main held / hold unreadable»", () => {
+    const { effects } = harness((cmd, args) => (isE2e(args) ? 3 : 0));
+    const result = runStageMainCheck({ sha: SHA, repoRoot: REPO, env: {}, effects });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /slot main is held by another run, or its hold could not be read/);
+    assert.doesNotMatch(result.reason, /does not serve the target/);
+  });
+
+  it("B1 (#4259): names a converge refused by an operator hold apart (slot.mjs exit 3)", () => {
+    const { calls, effects } = harness((cmd, args) => (isSlotUp(args) ? 3 : 0));
+    const result = runStageMainCheck({ sha: SHA, repoRoot: REPO, env: {}, effects });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /slot main is held by an operator `e2e:stage main` run/);
+    assert.equal(calls.some((c) => isE2e(c.args)), false);
   });
 
   it("refuses when the suite fails", () => {

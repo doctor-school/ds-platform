@@ -225,7 +225,14 @@ jobs:
                   if [ "$rc" = "0" ] && [ "$state" = "succeeded" ]; then
                     echo "converge: succeeded"; exit 0
                   fi
-                  echo "::error::converge failed (driver=$active rc=${rc:--} state=${state:--})"
+                  # #4259 (#3439's note): the phase and one-line reason the unit recorded
+                  # — e.g. `slot-hold: slot main is held by <holder> since <when>` —
+                  # bounded by the driver, control characters folded here again.
+                  note=$(jq -j '.driver.failure // empty | "\(.phase // "-"): \(.reason // "-")"' <<<"$json" | tr '\000-\037' ' ')
+                  echo "::error::converge failed (driver=$active rc=${rc:--} state=${state:--})${note:+ — $note}"
+                  if [ -n "$note" ]; then
+                    echo "- converge refused: $note" >> "$GITHUB_STEP_SUMMARY"
+                  fi
                   exit 1 ;;
               esac
             fi

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -191,6 +192,54 @@ describe("stage.yml", () => {
     assert.match(close.if, /needs\.suite\.result != 'failure'/);
     assert.equal(environmentOf(close), undefined);
     assert.match(close.steps[0].run, /state=failure/);
+  });
+
+  // #4259 B2: a converge the box refused (an operator `e2e:stage main` hold) names its
+  // reason in the Actions log and the step summary, from the driver's failure note —
+  // the poll step runs for real against a stand-in `ssh` that answers `status`.
+  const poll = () =>
+    stage.jobs.converge.steps.find((s) => s.name === "Poll the driver until it is terminal");
+  const runPoll = (statusJson) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "stage-poll-"));
+    const bin = path.join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, "ssh"), `#!/usr/bin/env bash\ncat <<'JSON'\n${statusJson}\nJSON\n`, { mode: 0o755 });
+    const summary = path.join(dir, "summary.md");
+    writeFileSync(summary, "");
+    const r = spawnSync("bash", ["-e", "-c", poll().run], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+        OUTCOME: "started",
+        SHA: "0123456789abcdef0123456789abcdef01234567",
+        STAGE_SSH_USER: "deploy",
+        STAGE_SSH_HOST: "stage",
+        RUNNER_TEMP: dir,
+        GITHUB_STEP_SUMMARY: summary,
+      },
+    });
+    return { status: r.status, out: r.stdout + r.stderr, summary: readFileSync(summary, "utf8") };
+  };
+
+  it("4259: a converge refused by a slot hold names the holder in the log and the step summary", () => {
+    const reason = "slot main is held by an operator e2e:stage main run (hold 0a1b2c3d) since 2026-11-25T13:48:00.835Z";
+    const { status, out, summary } = runPoll(JSON.stringify({
+      release: { state: "failed", step: "-" },
+      driver: { active: "failed", rc: 3, failure: { phase: "slot-hold", reason } },
+    }));
+    assert.equal(status, 1);
+    assert.ok(out.includes(`::error::converge failed (driver=failed rc=3 state=failed) — slot-hold: ${reason}`), out);
+    assert.ok(summary.includes(`slot-hold: ${reason}`), summary);
+  });
+
+  it("4259: a converge failure with no note keeps the bare line", () => {
+    const { status, out } = runPoll(JSON.stringify({
+      release: { state: "failed" },
+      driver: { active: "failed", rc: 1, failure: null },
+    }));
+    assert.equal(status, 1);
+    assert.ok(out.includes("::error::converge failed (driver=failed rc=1 state=failed)\n"), out);
   });
 });
 

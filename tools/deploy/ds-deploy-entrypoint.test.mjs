@@ -1694,7 +1694,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "the previous data.env is back");
     assert.ok(!existsSync(previous()));
     assert.ok(existsSync(applied()) && !existsSync(pending()), "spent although the recreate failed");
-    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" check")).length, 2, "checked after the failed recreate too");
+    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes("/usr/local/bin/repo-check.sh")).length, 2, "checked after the failed recreate too");
   });
 
   it("3670: a rolled-back first enable keeps the generated pass, not the keys; the retry supplies the keys only", async () => {

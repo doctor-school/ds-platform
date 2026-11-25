@@ -414,6 +414,41 @@ portal and owning-layer observations. The shared TLS, gate and path checks use
 the normal HTTPS route after main converge. The release run refuses the override
 for `main`.
 
+### Storefront sign-in entry unavailability (#4128)
+
+The Academy default and doctor shell live tiers each open a guest login door on
+the corresponding slot fixture. The fixtures run the slot's recorded portal and
+doctor images. Their transaction destination is an unused port in each
+container's own loopback namespace, with a fixture-only bearer. The containers
+have no stage env files, volumes or published ports. A healthcheck uses document
+navigation headers and requires the real door to return 503.
+
+The stage edge exposes `academy-entry-unavailable-<slot>.<domain>` and
+`doctor-entry-unavailable-<slot>.<domain>` through the stage gate for GET/HEAD
+login, home and assets. The browser checks that the original door URL returns
+503, the retry navigates to that same URL and receives 503 again, and the home
+link takes the visitor back to that storefront. No ordinary slot sign-in is
+modified. Main convergence installs the stage edge config before the release
+suite runs, and both cases are required by the D13 register.
+
+A PR slot does not install the shared edge. Before the fixture routes are
+present there, use the same preview procedure as the partnership fixture:
+inspect the owned slot's `portal-entry-unavailable` and
+`doctor-entry-unavailable` addresses, then tunnel to ports 3001 and 3004
+respectively. The operator's listener must bind to IPv4 loopback. In a shell
+with the existing stage storefront origins exported as `E2E_PORTAL_URL`
+and `E2E_DOCTOR_URL`, run one focused test per config:
+
+```sh
+E2E_PORTAL_ENTRY_UNAVAILABLE_LOOPBACK=http://127.0.0.1:<portal-port> \
+  pnpm --filter @ds/portal exec playwright test --config=playwright.config.ts --project=e2e --workers=1 e2e/storefront-entry-refusal-live.spec.ts
+E2E_DOCTOR_ENTRY_UNAVAILABLE_LOOPBACK=http://127.0.0.1:<doctor-port> \
+  pnpm --filter @ds/doctor exec playwright test --config=playwright.shell.config.ts --project=chromium --workers=1 e2e/storefront-entry-refusal-live.spec.ts
+```
+
+The override accepts a plain IPv4 loopback origin for a PR slot only. A
+main run always uses the normal HTTPS staging route.
+
 ### The release check: `--expect-sha`
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,

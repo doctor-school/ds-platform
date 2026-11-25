@@ -23,17 +23,22 @@ export interface OwnedCredentials {
 export async function inputSecret(
   locator: Locator,
   value: string,
+  options: { timeout?: number } = {},
 ): Promise<void> {
-  await locator.waitFor({ state: "visible" });
+  await locator.waitFor({ state: "visible", ...options });
   // evaluate keeps secret values out of Playwright fill() timeout call logs.
-  await locator.evaluate((element, text) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
-    setter.call(element, text);
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  }, value);
+  await locator.evaluate(
+    (element, text) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(element, text);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    value,
+    options,
+  );
 }
 
 function parsedObject(text: string): Record<string, unknown> {

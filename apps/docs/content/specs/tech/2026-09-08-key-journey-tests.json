@@ -54,8 +54,8 @@
       "gap": null
     },
     "D13": {
-      "status": "NONE",
-      "gap": 4128
+      "status": "FULL",
+      "gap": null
     },
     "D14": {
       "status": "FULL",
@@ -78,8 +78,8 @@
       "gap": null
     },
     "A5": {
-      "status": "PARTIAL",
-      "gap": 4120
+      "status": "FULL",
+      "gap": null
     },
     "A6": {
       "status": "FULL",
@@ -98,8 +98,8 @@
       "gap": null
     },
     "S3": {
-      "status": "NONE",
-      "gap": 4125
+      "status": "FULL",
+      "gap": null
     },
     "S4": {
       "status": "FULL",
@@ -737,6 +737,28 @@
         [
           "doctor routes",
           "doctor /auth/refused → /auth/refused answers 404 on a direct visit (003 EARS-72)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D13"],
+      "leg": "live/academy/default",
+      "file": "e2e/storefront-entry-refusal-live.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "003 EARS-72: the academy door answers an unavailable transaction at the same URL with retry and a way out"
+        ]
+      ]
+    },
+    {
+      "rows": ["D13"],
+      "leg": "live/doctor/shell",
+      "file": "storefront-entry-refusal-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "003 EARS-72: the doctor door answers an unavailable transaction at the same URL with retry and a way out"
         ]
       ]
     },
@@ -1469,6 +1491,17 @@
         [
           "Feature 013 — static public Academy home",
           "048 EARS-14: on a 390 px phone the feed rail shows one row with the next card partly visible, no page scroll and no axe violation"
+        ]
+      ]
+    },
+    {
+      "rows": ["A5"],
+      "leg": "live/academy/default",
+      "file": "e2e/academy-feed-journey.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "048 EARS-14/15: a guest reads Academy and Telegram cards, pages the feed and opens a material"
         ]
       ]
     },
@@ -2292,6 +2325,15 @@
       "project": "chromium",
       "titles": [
         ["Staff publishes an event on both storefronts and ends its open room"]
+      ]
+    },
+    {
+      "rows": ["S3"],
+      "leg": "live/admin/event-lifecycle",
+      "file": "stage-feed-post-visibility.spec.ts",
+      "project": "chromium",
+      "titles": [
+        ["Staff hides and restores a Telegram post on the Academy home feed"]
       ]
     },
     {

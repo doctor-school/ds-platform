@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * 003 EARS-61 (#3172) — the storefront entry's answer as a backend-free tier
@@ -90,3 +90,87 @@ export const REFUSED_ENTRIES = {
   rateLimitedBare: "/login?returnTo=%2Faccount%2Frefuse-429-bare",
   unavailable: "/register?returnTo=%2Faccount%2Frefuse-503",
 } as const;
+
+/** The stage fixture runs the real storefront with an unreachable transaction dependency. */
+export function stageEntryUnavailableOrigin(
+  storefront: "academy" | "doctor",
+  baseUrl: string | undefined,
+  loopback?: string,
+): string | undefined {
+  const base = baseUrl && URL.parse(baseUrl);
+  if (
+    !base ||
+    base.protocol !== "https:" ||
+    base.port ||
+    base.origin !== baseUrl?.replace(/\/$/, "")
+  ) {
+    return undefined;
+  }
+  const stage = new RegExp(
+    `^${storefront}-(main|pr-[1-9]\\d{0,9})\\.[a-z0-9.-]+$`,
+  ).exec(base.hostname);
+  if (!stage) return undefined;
+  if (!loopback) {
+    return base.origin.replace(
+      `https://${storefront}-`,
+      `https://${storefront}-entry-unavailable-`,
+    );
+  }
+  const tunnel = URL.parse(loopback);
+  if (
+    stage[1] === "main" ||
+    !tunnel ||
+    tunnel.protocol !== "http:" ||
+    tunnel.hostname !== "127.0.0.1" ||
+    !tunnel.port ||
+    tunnel.origin !== loopback.replace(/\/$/, "")
+  ) {
+    throw new Error(
+      "The entry refusal fixture tunnel requires a PR slot and a plain IPv4 loopback origin",
+    );
+  }
+  return tunnel.origin;
+}
+
+export async function expectUnavailableStorefrontEntry(
+  page: Page,
+  origin: string,
+  copy: {
+    retry: string;
+    home: string;
+    variants: { unavailable: readonly { title: string }[] };
+  },
+): Promise<void> {
+  const door = new URL("/login?returnTo=%2Faccount", origin).href;
+  const answer = await page.goto(door);
+  expect(answer?.status()).toBe(503);
+  expect(answer?.headers()["retry-after"]).toBeUndefined();
+  expect(answer?.headers()["location"]).toBeUndefined();
+  await expect(page).toHaveURL(door);
+
+  const main = page.getByRole("main");
+  const heading = main.getByRole("heading", { level: 1 });
+  await expect(heading).toBeVisible();
+  expect(copy.variants.unavailable.map(({ title }) => title)).toContain(
+    await heading.textContent(),
+  );
+  await expect(main.locator("form")).toHaveCount(0);
+  await expect(page.getByRole("banner").first()).toBeVisible();
+
+  const retry = main.getByRole("button", { name: copy.retry, exact: true });
+  await expect(retry).toBeEnabled();
+  const [again] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().isNavigationRequest() && response.url() === door,
+    ),
+    retry.click(),
+  ]);
+  expect(again.status()).toBe(503);
+  await expect(page).toHaveURL(door);
+
+  const wayOut = main.getByRole("link", { name: copy.home, exact: true });
+  await expect(wayOut).toHaveAttribute("href", "/");
+  await wayOut.click();
+  await expect(page).toHaveURL(new URL("/", origin).href);
+}

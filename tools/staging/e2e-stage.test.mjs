@@ -1341,7 +1341,7 @@ describe("runE2eStage — the live legs", () => {
     assert.equal(child.status, 0, child.stderr);
   });
 
-  it("selects only the slot lifecycle spec in the admin flows config and scopes the staff credentials to it", async () => {
+  it("selects the slot admin journeys and scopes the staff credentials to them", async () => {
     const env = {
       ...ENV,
       DS_STAGE_AGENT_ADMIN_PASSWORD: "staff-password",
@@ -1358,7 +1358,7 @@ describe("runE2eStage — the live legs", () => {
     assert.ok(selection);
     assert.equal(
       writes.find(({ file }) => selection === `--test-list=${file}`)?.content,
-      "stage-event-lifecycle.spec.ts\nstage-congress-review.spec.ts\nstage-recording-publish.spec.ts\n",
+      "stage-event-lifecycle.spec.ts\nstage-congress-review.spec.ts\nstage-recording-publish.spec.ts\nstage-feed-post-visibility.spec.ts\n",
     );
     assert.ok(!admin.argv.includes("--pass-with-no-tests"));
     assert.equal(

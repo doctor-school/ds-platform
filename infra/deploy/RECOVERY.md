@@ -304,7 +304,7 @@ holds the box's S3 keys): read the bucket with the provider account's own S3 key
 console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
 `PGBACKREST_REPO1_S3_ENDPOINT` of `data.env.example` / the Terraform outputs; that value
 is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
-`host[:port]` alone.
+`host[:port]` alone; `<region>` is `PGBACKREST_REPO1_S3_REGION` (`ru-1`).
 
 **Without Timeweb** (#3670) the same steps read an offsite copy: the bucket is the
 `#repoN: repoN-s3-bucket=` line of `compose/data-prod/pgbackrest/pgbackrest.conf`, the
@@ -319,7 +319,7 @@ bundle, so it cannot be the key that fetches it.
    ```bash
    set -o pipefail
    BOX=data-prod   # or api-prod
-   S3="aws s3 --endpoint-url https://<endpoint> --region ru-1"
+   S3="aws s3 --endpoint-url https://<endpoint> --region <region>"   # repo1: ru-1
    $S3 cp "s3://<bucket>/recovery-bundle/$BOX/latest.json" "latest-$BOX.json"
    grep -E '"(object|bytes|sha256)"' "latest-$BOX.json"   # bundle.object and its size and hash
    sed -n '/"members": \[/,/\]/p' "latest-$BOX.json"     # members: the file names step 3 checks

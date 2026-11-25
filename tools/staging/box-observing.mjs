@@ -32,8 +32,8 @@ export const BOX_OBSERVING = [
   {
     consumer: "apps/portal/e2e/academy-home.e2e.spec.ts",
     titles: [
-      "EARS-6/7: accepted retry after a lost response shall create one exact private JSON record and then show success",
-      "EARS-7: an actual unavailable persistence path shall preserve browser values and create no partial record",
+      "033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success (013 EARS-6/7)",
+      "033 EARS-18: an unavailable intake shall preserve browser values and store no row (013 EARS-7)",
     ],
   },
 ];

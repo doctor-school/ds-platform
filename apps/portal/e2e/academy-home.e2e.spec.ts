@@ -697,7 +697,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     }
   });
 
-  test("EARS-6/7, 033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success", async ({
+  test("033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success (013 EARS-6/7)", async ({
     baseURL,
     page,
   }) => {
@@ -787,7 +787,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     );
   });
 
-  test("EARS-7, 033 EARS-18: an unavailable intake shall preserve browser values and store no row", async ({
+  test("033 EARS-18: an unavailable intake shall preserve browser values and store no row (013 EARS-7)", async ({
     baseURL,
     page,
   }) => {

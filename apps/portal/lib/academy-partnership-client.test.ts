@@ -116,7 +116,7 @@ describe("033 EARS-18 — the interim partnership form posts into the queue", ()
     });
   });
 
-  it("EARS-18 (V-6): the portal writes no file — no source imports the retired file store", () => {
+  it("EARS-18: the portal writes no file (V-6) — no source imports the retired file store", () => {
     const root = resolve(__dirname, "..");
     expect(existsSync(join(root, "lib", "academy-partnership-store.ts"))).toBe(
       false,

@@ -469,6 +469,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ],
       });
       expect(d.teamNotice).toBe("imported");
+      // EARS-14: the consent tick is part of the single submission, so a
+      // partnership row (no consent_records row) shows its submission time.
+      expect(d.consent).toEqual({
+        purpose: PARTNERSHIP_CONSENT_PURPOSE,
+        versionTag: PARTNERSHIP_CONSENT_VERSION_TAG,
+        capturedAt: new Date(clock).toISOString(),
+      });
+    });
+
+    it("EARS-14: a live partnership row's detail shows its submission time as the consent time", async () => {
+      clock += 1000;
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO applications
+           (kind, status, payload, contact, subject_line, consent_purpose,
+            consent_version_tag, submitted_at, team_notice, receipt_notice)
+         VALUES ('partnership', 'new', $1, $2, $3, $4, $5, $6, 'sent',
+                 'not_applicable')
+         RETURNING id`,
+        [
+          JSON.stringify({
+            name: "Олег",
+            companyOrClinic: "Фарма «Вектор»",
+            role: "Менеджер",
+          }),
+          JSON.stringify({ emailOrTelegram: "@oleg_partner" }),
+          "Фарма «Вектор»",
+          PARTNERSHIP_CONSENT_PURPOSE,
+          PARTNERSHIP_CONSENT_VERSION_TAG,
+          new Date(clock),
+        ],
+      );
+      const id = rows[0]!.id;
+      createdApplications.push(id);
+
+      const d = AdminApplicationDetailSchema.parse((await detail(id)).json());
+      expect(d.consent).toEqual({
+        purpose: PARTNERSHIP_CONSENT_PURPOSE,
+        versionTag: PARTNERSHIP_CONSENT_VERSION_TAG,
+        capturedAt: new Date(clock).toISOString(),
+      });
     });
 
     // ------------------------------------------------------------- EARS-15

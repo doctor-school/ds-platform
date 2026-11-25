@@ -481,7 +481,11 @@ export class ApplicationsAdminService {
       consent: {
         purpose: a.consentPurpose,
         versionTag: a.consentVersionTag,
-        capturedAt: iso(r.capturedAt ?? null),
+        // A row without a consent_records row (partnership, live or
+        // imported) gave its consent with the single submission.
+        capturedAt: iso(
+          a.consentRecordId ? (r.capturedAt ?? null) : a.submittedAt,
+        ),
       },
       teamNotice: a.teamNotice as AdminApplicationDetail["teamNotice"],
       receiptNotice: a.receiptNotice as AdminApplicationDetail["receiptNotice"],

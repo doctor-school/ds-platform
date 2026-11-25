@@ -31,6 +31,7 @@ import {
   clampReportedPosition,
   elementType,
   videoDurationSec,
+  videoStepTargetSec,
   watchedPercent,
 } from "../catalog/element-types.js";
 import {
@@ -564,7 +565,7 @@ export class LearningDoctorService {
     if (step.type === "video") {
       // A published video always carries its provider source (EARS-4).
       if (!row.provider || !row.embedRef) throw notFound("step source");
-      const duration = videoDurationSec(step);
+      const duration = videoStepTargetSec(step, e.evaluator);
       return {
         type: "video",
         provider: row.provider,
@@ -673,6 +674,10 @@ export class LearningDoctorService {
           .orderBy(asc(learningFacts.occurredAt))
           .limit(1);
         data["reportedSec"] = fact.data.positionSec;
+        // The provider-reported media length is kept as reported: it only
+        // shortens the target (videoTargetSec), the clamp below is unchanged.
+        if (fact.data.mediaDurationSec !== undefined)
+          data["mediaDurationSec"] = fact.data.mediaDurationSec;
         data["positionSec"] = clampReportedPosition({
           reportedSec: fact.data.positionSec,
           durationSec: videoDurationSec(step),
@@ -708,7 +713,7 @@ export class LearningDoctorService {
         return {
           positionSec: Math.min(
             evaluator.facts.maxPosition(fact.stepId),
-            videoDurationSec(step),
+            videoStepTargetSec(step, evaluator),
           ),
           watchedPercent: Math.min(100, watchedPercent(step, evaluator)),
         };

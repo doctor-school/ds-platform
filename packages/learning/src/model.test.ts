@@ -319,6 +319,22 @@ describe("024 learning model", () => {
     expect(max).toBe(15 * 2 + 30);
   });
 
+  it("EARS-10: the completion target is the provider-reported media length, shortened from the typed length no further than half of it (#4060)", async () => {
+    const { videoTargetSec, VIDEO_PROVIDER_LENGTH_MIN_SHARE } = await import("./catalog/element-types.js");
+    expect(VIDEO_PROVIDER_LENGTH_MIN_SHARE).toBe(0.5);
+    // No provider report: the typed length.
+    expect(videoTargetSec(300, null)).toBe(300);
+    // A media shorter than typed: its real length.
+    expect(videoTargetSec(300, 240)).toBe(240);
+    expect(videoTargetSec(300, 212.9)).toBe(212);
+    // Never longer than typed; never under half the typed length.
+    expect(videoTargetSec(300, 900)).toBe(300);
+    expect(videoTargetSec(300, 5)).toBe(150);
+    expect(videoTargetSec(301, 5)).toBe(151);
+    // A step with no typed length stays at 0 (not watchable to the end).
+    expect(videoTargetSec(0, 240)).toBe(0);
+  });
+
   it("EARS-26: the rule sentences and lock reasons carry no money or «бесплатно» wording", async () => {
     const { LEARNING_COPY_RU } = await import("./copy/learning-copy-ru.js");
     const text = JSON.stringify(LEARNING_COPY_RU, (_k, v) => (typeof v === "function" ? String(v) : v)).toLowerCase();

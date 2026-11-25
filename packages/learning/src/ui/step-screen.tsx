@@ -11,7 +11,7 @@ import type {
 } from "@ds/schemas";
 import { Alert, Badge, Button, Link, Radio, cn } from "@ds/design-system";
 import { PointsPlate, type PointsPlateBalances } from "@ds/design-system/blocks";
-import { RecordingPlayer } from "@ds/event-page/recording-player";
+import { RecordingPlayer, type ProviderMedia } from "@ds/event-page/recording-player";
 
 import {
   LearningClientError,
@@ -348,6 +348,14 @@ function VideoBody({
   // seek that answer stays below the clock, and measuring from it would send on
   // every tick. A refused attempt does not reset it either.
   const sent = useRef(body.positionSec);
+  // #4060 — the media length the provider's own player reported (whole
+  // seconds), or null. The step ends at the shorter of it and the read's
+  // length; the server decides how far it may shorten the target.
+  const media = useRef<number | null>(null);
+  const endSec = useCallback(
+    () => (media.current === null ? body.durationSec : Math.min(media.current, body.durationSec)),
+    [body.durationSec],
+  );
   // The newest position the player reported: what a retry sends.
   const latest = useRef(body.positionSec);
   const sending = useRef(false);
@@ -370,8 +378,8 @@ function VideoBody({
   const due = useCallback(
     (position: number) =>
       Math.abs(position - sent.current) >= VIDEO_REPORT_EVERY_SEC ||
-      (position >= body.durationSec - VIDEO_END_WINDOW_SEC && position > sent.current),
-    [body.durationSec],
+      (position >= endSec() - VIDEO_END_WINDOW_SEC && position > sent.current),
+    [endSec],
   );
 
   const report = useCallback(
@@ -388,7 +396,10 @@ function VideoBody({
             source: "web",
             kind: "position",
             clientOccurredAt: new Date().toISOString(),
-            data: { positionSec },
+            data:
+              media.current === null
+                ? { positionSec }
+                : { positionSec, mediaDurationSec: media.current },
           })
           // The bar shows what the server accepted after its clamp.
           .then((res) => {
@@ -428,13 +439,30 @@ function VideoBody({
 
   const onClock = useCallback(
     (sec: number) => {
-      const position = Math.min(Math.floor(sec), body.durationSec);
-      const atEnd = position >= body.durationSec - VIDEO_END_WINDOW_SEC;
-      latest.current = atEnd ? body.durationSec : position;
+      const end = endSec();
+      const position = Math.min(Math.floor(sec), end);
+      const atEnd = position >= end - VIDEO_END_WINDOW_SEC;
+      latest.current = atEnd ? end : position;
       if (sending.current || !due(position)) return;
       report(latest.current);
     },
-    [body.durationSec, report, due],
+    [endSec, report, due],
+  );
+
+  // #4060 — the provider's media length and «ended». An end with no length
+  // known makes the last clock position the length: the player is at its end.
+  const onMedia = useCallback(
+    (m: ProviderMedia) => {
+      if (m.durationSec !== null && Math.floor(m.durationSec) >= 1)
+        media.current = Math.floor(m.durationSec);
+      if (!m.ended) return;
+      if (media.current === null && latest.current >= 1) media.current = latest.current;
+      const end = endSec();
+      latest.current = end;
+      if (sending.current || !due(end)) return;
+      report(end);
+    },
+    [endSec, report, due],
   );
 
   return (
@@ -449,6 +477,7 @@ function VideoBody({
           unavailableBody={C.videoUnavailable.body}
           retryLabel={C.videoUnavailable.retry}
           onClock={onClock}
+          onMedia={onMedia}
           // EARS-16 — the tap that mounted the player is the doctor's intent to
           // watch: it starts playing, no second tap on the provider's button.
           autoplay

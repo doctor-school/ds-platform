@@ -96,6 +96,41 @@ export const learningSchools = pgTable(
   ],
 );
 
+/** 023 EARS-7 — the doctor's interest in a «скоро» school: active or withdrawn. */
+export const learningSchoolInterestState = pgEnum(
+  "learning_school_interest_state",
+  ["active", "withdrawn"],
+);
+
+/**
+ * 023 EARS-7 (023-design §2) — one doctor ↔ school interest. A register is an
+ * upsert to `active` (idempotent), a withdraw sets `withdrawn`; it never touches
+ * the doctor's specialties or feed. `notified_at` is set once, when the
+ * school-opened notice is claimed for the doctor, so a replay or a later course
+ * publication sends nothing. Ownership `doctor`.
+ */
+export const learningSchoolInterests = pgTable(
+  "learning_school_interests",
+  {
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => users.id),
+    schoolId: uuid("school_id")
+      .notNull()
+      .references(() => learningSchools.id),
+    state: learningSchoolInterestState("state").notNull().default("active"),
+    registeredAt: timestamp("registered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.personId, t.schoolId] }),
+    index("learning_school_interests_school_idx").on(t.schoolId, t.state),
+  ],
+);
+
 /** EARS-1 — a course always lives in a school (`school_id` NOT NULL). Ownership `doctor`. */
 export const learningCourses = pgTable(
   "learning_courses",

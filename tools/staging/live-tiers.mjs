@@ -111,6 +111,13 @@ export const GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS = [
   "golden-school-therapy",
 ];
 
+/**
+ * The golden «скоро» school (023 EARS-6/7, #4019, `learning-soon-volume.ts`):
+ * published with no course. The school-interest journey takes a guest through
+ * the capture and registration back to «Вы в списке».
+ */
+export const GOLDEN_LEARNING_SOON_SCHOOL_SLUG = "golden-school-heart-failure";
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -351,6 +358,8 @@ export const LIVE_TIERS = Object.freeze([
       // #4017: the school-volume journey also registers a FRESH doctor.
       E2E_LEARNING_VOLUME_SCHOOL_SLUGS:
         GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS.join(","),
+      // #4019: the school-interest journey registers FRESH doctors too.
+      E2E_LEARNING_SOON_SCHOOL_SLUG: GOLDEN_LEARNING_SOON_SCHOOL_SLUG,
     },
     gated: [
       {
@@ -373,6 +382,11 @@ export const LIVE_TIERS = Object.freeze([
         // 023 EARS-5 (#4017): the school screen at the golden volume schools 22 / 62 / 200.
         file: "e2e/school-volume-live.spec.ts",
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_VOLUME_SCHOOL_SLUGS"],
+      },
+      {
+        // 023 EARS-6/7 (#4019): the «скоро» school's interest capture (D14).
+        file: "e2e/school-interest-live.spec.ts",
+        requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_SOON_SCHOOL_SLUG"],
       },
       {
         // 024 EARS-24 (#4012): the rule-change reason, authored by a rules

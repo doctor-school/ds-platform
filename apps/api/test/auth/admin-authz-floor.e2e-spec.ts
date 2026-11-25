@@ -1185,6 +1185,7 @@ const FLOOR_ROUTES: {
     [
       ["GET", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
       ["POST", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
+      ["GET", "/v1/admin/learning/schools/:id", `/v1/admin/learning/schools/${ABSENT_ID}`],
       ["GET", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
       ["POST", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
       ["GET", "/v1/admin/learning/courses/:id", `/v1/admin/learning/courses/${ABSENT_ID}`],

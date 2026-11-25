@@ -55,6 +55,7 @@ import {
   GOLDEN_MATERIAL_SLUG,
   GOLDEN_LEARNING_COURSE_SLUG,
   GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS,
+  GOLDEN_LEARNING_SOON_SCHOOL_SLUG,
   GOLDEN_SLUGS,
   HERMETIC_CONFIGS,
   GOLDEN_EVENT_SLUGS,
@@ -2240,6 +2241,20 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     );
     const journey = leg.gated.find(
       (g) => g.file === "e2e/school-volume-live.spec.ts",
+    );
+    assert.equal(journey.slotReason, undefined);
+  });
+
+  it("hands the doctor learning leg the golden «скоро» school (#4019)", () => {
+    const soon = repoFile("packages/db/src/seed/golden/learning-soon-volume.ts");
+    assert.ok(soon.includes(`slug: "${GOLDEN_LEARNING_SOON_SCHOOL_SLUG}"`));
+    const leg = LIVE_TIERS.find((t) => t.name === "live/doctor/learning");
+    assert.equal(
+      leg.seededEnv.E2E_LEARNING_SOON_SCHOOL_SLUG,
+      GOLDEN_LEARNING_SOON_SCHOOL_SLUG,
+    );
+    const journey = leg.gated.find(
+      (g) => g.file === "e2e/school-interest-live.spec.ts",
     );
     assert.equal(journey.slotReason, undefined);
   });

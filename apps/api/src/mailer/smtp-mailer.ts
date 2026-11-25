@@ -10,6 +10,7 @@ import {
   formatClosingLastDay,
   formatCongressEventDate,
   formatRevisionLastDay,
+  schoolOpenedMessage,
 } from "./notice-emails.js";
 import {
   resolveFallbackSmtp,
@@ -30,6 +31,7 @@ import {
   type CongressConfirmationRequest,
   type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
+  type SchoolOpenedNoticeRequest,
   type CongressSubmissionReminderRequest,
   type Mailer,
 } from "./mailer.types.js";
@@ -268,6 +270,18 @@ export class SmtpMailer implements Mailer {
         eventTitle: input.eventTitle,
       }),
       "congress submission receipt",
+    );
+  }
+  async sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      schoolOpenedMessage({
+        schoolTitle: input.schoolTitle,
+        courseTitle: input.courseTitle,
+        schoolUrl: input.schoolUrl,
+      }),
+      "school-opened notice",
     );
   }
   async sendCongressSubmissionDecision(

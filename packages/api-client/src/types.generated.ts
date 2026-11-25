@@ -1460,6 +1460,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/learning/schools/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_school"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/learning/steps": {
         parameters: {
             query?: never;
@@ -2607,6 +2623,22 @@ export interface paths {
         put?: never;
         post: operations["LearningMeController_fact"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/learning/schools/{schoolId}/interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningMeController_registerInterest"];
+        post?: never;
+        delete: operations["LearningMeController_withdrawInterest"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5134,6 +5166,31 @@ export interface components {
             toDone: number;
             toNotDone: number;
         };
+        LearningSchoolAdminDetailDto: {
+            activeInterestCount: number;
+            communityUrl: string | null;
+            description: string;
+            /** Format: uuid */
+            directionId: string;
+            facts: {
+                label: string;
+                text: string;
+            }[];
+            /** Format: uuid */
+            id: string;
+            internshipOffer: string | null;
+            /** Format: uuid */
+            leadExpertId: string;
+            mentoringOffer: string | null;
+            /** Format: uuid */
+            projectId: string;
+            slug: string;
+            soonNote: string | null;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
         LearningSchoolAdminDto: {
             communityUrl: string | null;
             description: string;
@@ -5157,6 +5214,15 @@ export interface components {
             state: "draft" | "published";
             title: string;
             version: number;
+        };
+        LearningSchoolInterestDto: {
+            /** Format: date-time */
+            registeredAt: string;
+            /** Format: uuid */
+            schoolId: string;
+            /** @enum {string} */
+            state: "active" | "withdrawn";
+            withdrawnAt: string | null;
         };
         LearningSchoolListDto: {
             data: {
@@ -5216,6 +5282,7 @@ export interface components {
                 role: string | null;
                 slug: string;
             } | null;
+            interested: boolean | null;
             school: {
                 communityUrl: string | null;
                 courseCount: number;
@@ -8349,6 +8416,27 @@ export interface operations {
             };
         };
     };
+    LearningAdminController_school: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDetailDto"];
+                };
+            };
+        };
+    };
     LearningAdminController_createStep: {
         parameters: {
             query?: never;
@@ -10188,6 +10276,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordLearningFactResponseDto"];
+                };
+            };
+        };
+    };
+    LearningMeController_registerInterest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolInterestDto"];
+                };
+            };
+        };
+    };
+    LearningMeController_withdrawInterest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolInterestDto"];
                 };
             };
         };

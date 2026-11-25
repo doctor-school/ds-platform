@@ -1,11 +1,13 @@
 import {
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
   Inject,
   Param,
   Post,
+  Put,
   Req,
   UseFilters,
 } from "@nestjs/common";
@@ -16,6 +18,7 @@ import {
   CANONICAL_UUID_REGEX,
   type LearningAttempt,
   type LearningAttemptResult,
+  type LearningSchoolInterest,
   type LearningStepRead,
   RecordLearningFactRequestSchema,
   type RecordLearningFactResponse,
@@ -29,6 +32,7 @@ import { ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
 import {
   LearningAttemptDto,
   LearningAttemptResultDto,
+  LearningSchoolInterestDto,
   LearningStepReadDto,
   RecordLearningFactResponseDto,
 } from "./learning.dto.js";
@@ -90,6 +94,39 @@ export class LearningMeController {
     const personId = await callerPersonId(this.db, req);
     requireUuid(testId, "test");
     return this.learning.startAttempt(personId, testId);
+  }
+
+  /**
+   * 023 EARS-7 — the doctor's interest in a «скоро» school: an idempotent
+   * register (a repeat answers the existing interest) and a withdraw. It never
+   * touches the doctor's specialties or feed.
+   */
+  @Put("schools/:schoolId/interest")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  @Authz({ ...ME, audit: "low-stakes", tests: ["EARS-7"] })
+  @ApiOkResponse({ type: LearningSchoolInterestDto })
+  async registerInterest(
+    @Param("schoolId") schoolId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<LearningSchoolInterest> {
+    const personId = await callerPersonId(this.db, req);
+    requireUuid(schoolId, "school");
+    return this.learning.registerSchoolInterest(personId, schoolId);
+  }
+
+  @Delete("schools/:schoolId/interest")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  @Authz({ ...ME, audit: "low-stakes", tests: ["EARS-7"] })
+  @ApiOkResponse({ type: LearningSchoolInterestDto })
+  async withdrawInterest(
+    @Param("schoolId") schoolId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<LearningSchoolInterest> {
+    const personId = await callerPersonId(this.db, req);
+    requireUuid(schoolId, "school");
+    return this.learning.withdrawSchoolInterest(personId, schoolId);
   }
 
   @Post("attempts/:attemptId/submit")

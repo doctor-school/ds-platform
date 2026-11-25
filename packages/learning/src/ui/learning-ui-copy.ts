@@ -366,6 +366,36 @@ export const SCHOOL_UI_COPY = {
       `По запросу «${q}» курсов в этой школе нет. Попробуйте другое слово.`,
     more: (next: number, left: number) => `Показать ещё ${next} · осталось ${left}`,
   },
+  /**
+   * 023 EARS-6, EARS-7 — the «скоро» school (canvas `doctor-school.dc.html`
+   * «школа готовится»: the badge, the courses state and the empty events and
+   * reviews sections). The interest capture has no canvas frame of its own —
+   * its copy is the lead's draft over the canvas block; no date or season is
+   * fixed copy (the school's own `soon_note` carries it).
+   */
+  soon: {
+    badge: "Скоро",
+    title: "Школа готовится",
+    capture: {
+      text: "Сообщим на почту, когда выйдет первый курс школы.",
+      action: "Сообщить об открытии",
+    },
+    listed: {
+      title: "Вы в списке",
+      text: "Напишем один раз — когда выйдет первый курс.",
+      withdraw: "Не сообщать",
+    },
+    error: {
+      register: "Не удалось записать вас в список. Попробуйте ещё раз.",
+      withdraw: "Не удалось убрать вас из списка. Попробуйте ещё раз.",
+    },
+    eventsHeading: "Вебинары-разборы",
+    eventsEmpty:
+      "Событий школы пока нет — они появятся вместе с первыми курсами.",
+    reviewsHeading: "Отзывы выпускников",
+    reviewsEmpty:
+      "Отзывов пока нет — первый поток ещё учится. Отзыв можно оставить после прохождения курса.",
+  },
   gate: {
     title: "Начать урок — нужна регистрация. Вернём вас сюда.",
     text: "Описание школы, курсы и их путь открыты. Достаточно почты с подтверждением — диплом на входе не нужен.",

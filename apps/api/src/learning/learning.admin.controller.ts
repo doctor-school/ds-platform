@@ -69,6 +69,7 @@ import {
   LearningPresetDto,
   LearningPresetListDto,
   LearningRuleChangePreviewDto,
+  LearningSchoolAdminDetailDto,
   LearningSchoolAdminDto,
   LearningSchoolListDto,
   LearningScopeRulesDto,
@@ -153,6 +154,15 @@ export class LearningAdminController {
   @ApiOkResponse({ type: LearningSchoolListDto })
   async schools(): Promise<unknown> {
     return { data: await adminCommand(() => this.admin.listSchools()) };
+  }
+
+  /** 023 EARS-7, EARS-26 — the school with its active-interest count (never names). */
+  @Get("schools/:id")
+  @Authz({ ...READ, tests: ["EARS-7", "EARS-26"] })
+  @ApiOkResponse({ type: LearningSchoolAdminDetailDto })
+  async school(@Param("id") id: string): Promise<unknown> {
+    requireUuid(id);
+    return adminCommand(() => this.admin.school(id));
   }
 
   @Post("schools")

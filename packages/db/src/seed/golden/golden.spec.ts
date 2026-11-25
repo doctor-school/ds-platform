@@ -48,6 +48,10 @@ import {
 } from "./now.js";
 import { GOLDEN_FEED_IMAGES, goldenFeedImageOfKey } from "./feed-volume.js";
 import {
+  GOLDEN_SOON_SCHOOL,
+  GOLDEN_SOON_SCHOOL_INTERESTS,
+} from "./learning-soon-volume.js";
+import {
   applyGoldenStep,
   buildGoldenMediaPlan,
   buildGoldenSeedPlan,
@@ -4181,5 +4185,44 @@ describe("#4172 golden attention-points ledger", () => {
     expect(() =>
       resolveGoldenPointsRows(ledger, { ...ctx, ruleVersionById: new Map() }),
     ).toThrow(/rule book/);
+  });
+});
+
+describe("#4019 golden «скоро» school", () => {
+  // 023 EARS-6 / EARS-7 on a slot: a published school with no course shows
+  // «Скоро» and the capture, and its admin read counts real interests.
+  const dataset = buildGoldenDataset(now, subjects);
+  const interests = dataset.learningSchoolInterests.filter(
+    (i) => i.schoolId === GOLDEN_SOON_SCHOOL.id,
+  );
+
+  it("publishes the school with a note and no course", () => {
+    expect(
+      dataset.learningSchools.find((s) => s.id === GOLDEN_SOON_SCHOOL.id),
+    ).toMatchObject({ state: "published", soonNote: expect.any(String) });
+    expect(
+      dataset.learningCourses.filter(
+        (c) => c.schoolId === GOLDEN_SOON_SCHOOL.id,
+      ),
+    ).toEqual([]);
+    expect(isGoldenVolumeUuid(GOLDEN_SOON_SCHOOL.id)).toBe(true);
+  });
+
+  it("holds the canvas volume of interests, some withdrawn, none notified", () => {
+    expect(interests).toHaveLength(GOLDEN_SOON_SCHOOL_INTERESTS);
+    expect(new Set(interests.map((i) => i.personId)).size).toBe(
+      GOLDEN_SOON_SCHOOL_INTERESTS,
+    );
+    const withdrawn = interests.filter((i) => i.state === "withdrawn");
+    expect(withdrawn.length).toBeGreaterThan(1);
+    expect(withdrawn.every((i) => i.withdrawnAt instanceof Date)).toBe(true);
+    expect(interests.every((i) => i.notifiedAt === null)).toBe(true);
+  });
+
+  it("leaves the login doctors without an interest, so a drive starts from the capture", () => {
+    const pool = new Set(
+      golden.workerPool.verifiedCardiologist.map((d) => d.id),
+    );
+    expect(interests.filter((i) => pool.has(i.personId))).toEqual([]);
   });
 });

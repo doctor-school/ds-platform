@@ -41,8 +41,9 @@ const operations = Object.entries(snapshot.paths)
 describe("024 learning contract", () => {
   it("EARS-25: the learning routes are in the generated contract", () => {
     // 024's 29 + the 023 school read (#4017) + the rule-change preview and
-    // GET/PUT presets/{id} (#4012).
-    expect(operations.length).toBe(33);
+    // GET/PUT presets/{id} (#4012) + the 023 interest PUT/DELETE and the admin
+    // school read (#4019).
+    expect(operations.length).toBe(36);
   });
 
   it("EARS-25: every learning route types its success response body", () => {

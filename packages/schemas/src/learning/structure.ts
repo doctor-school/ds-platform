@@ -371,6 +371,18 @@ export const LearningSchoolAdminSchema = z.strictObject({
 });
 export type LearningSchoolAdmin = z.infer<typeof LearningSchoolAdminSchema>;
 
+/**
+ * 023 EARS-7, EARS-26 — `GET /v1/admin/learning/schools/{id}`: the school with
+ * the number of doctors holding an active interest in it — a count, never a
+ * name.
+ */
+export const LearningSchoolAdminDetailSchema = LearningSchoolAdminSchema.extend(
+  { activeInterestCount: z.number().int().nonnegative() },
+);
+export type LearningSchoolAdminDetail = z.infer<
+  typeof LearningSchoolAdminDetailSchema
+>;
+
 export const LearningCourseAdminSchema = z.strictObject({
   id: z.uuid(),
   schoolId: z.uuid(),

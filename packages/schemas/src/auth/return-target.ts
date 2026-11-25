@@ -56,9 +56,18 @@ export const RETURN_TARGET_MODES = ["offline", "online"] as const;
 export type ReturnTargetMode = (typeof RETURN_TARGET_MODES)[number];
 
 /**
- * The kept query of a return target, canonical: `mode=…` first, the land-only
- * marker last — or `""` when the raw query is not exactly a combination of the
- * two allowlisted params, each at most once. Anything else (an unknown key, a
+ * 023 EARS-7 — the school screen's interest-capture marker, the third closed
+ * query the guard keeps: a guest who uses the «скоро» school's interest capture
+ * registers (021) and lands back on the school with this marker, and the
+ * school screen completes the same capture. A fixed literal like the land-only
+ * marker, so it carries no attacker-authored state.
+ */
+export const SCHOOL_INTEREST_RETURN_QUERY = "capture=interest";
+
+/**
+ * The kept query of a return target, canonical: `mode=…` first, the interest
+ * marker next, the land-only marker last — or `""` when the raw query is not
+ * exactly a combination of the three allowlisted params, each at most once. Anything else (an unknown key, a
  * value outside the allowlist, a repeat, an empty pair) drops the WHOLE query,
  * the marker included, exactly as before the tab was admitted.
  */
@@ -66,9 +75,14 @@ export function canonicalReturnTargetQuery(rawQuery: string): string {
   if (rawQuery.length === 0) return "";
   let mode: ReturnTargetMode | null = null;
   let landOnly = false;
+  let capture = false;
   for (const pair of rawQuery.split("&")) {
     if (pair === LAND_ONLY_RETURN_QUERY && !landOnly) {
       landOnly = true;
+      continue;
+    }
+    if (pair === SCHOOL_INTEREST_RETURN_QUERY && !capture) {
+      capture = true;
       continue;
     }
     const value = pair.startsWith("mode=") ? pair.slice("mode=".length) : null;
@@ -82,7 +96,11 @@ export function canonicalReturnTargetQuery(rawQuery: string): string {
     }
     return "";
   }
-  return [mode === null ? null : `mode=${mode}`, landOnly ? LAND_ONLY_RETURN_QUERY : null]
+  return [
+    mode === null ? null : `mode=${mode}`,
+    capture ? SCHOOL_INTEREST_RETURN_QUERY : null,
+    landOnly ? LAND_ONLY_RETURN_QUERY : null,
+  ]
     .filter((part): part is string => part !== null)
     .join("&");
 }

@@ -44,7 +44,7 @@ describe("033 submission lifecycle", () => {
     expect(s).toEqual({ phase: "sending", idempotencyKey: key });
   });
 
-  it("EARS-5, EARS-8: a field refusal returns to editing with the same unused key", () => {
+  it("EARS-5/8: a field refusal returns to editing with the same unused key", () => {
     const next = keys();
     let s = submissionReducer(startSubmission(next), { type: "submit" }, next);
     const key = s.idempotencyKey;

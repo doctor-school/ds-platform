@@ -30,7 +30,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("033 applications client", () => {
-  it("EARS-7, EARS-8: POST /v1/me/applications/author carries the idempotency key, the bot-protection proof and the body, same-origin with the session", async () => {
+  it("EARS-7/8: POST /v1/me/applications/author carries the idempotency key, the bot-protection proof and the body, same-origin with the session", async () => {
     fetchMock.mockResolvedValue(json(201, RESULT));
     await expect(
       submitAuthorApplication(BODY, {
@@ -63,7 +63,7 @@ describe("033 applications client", () => {
     expect(headers).not.toHaveProperty("x-smartcaptcha-token");
   });
 
-  it("EARS-5, EARS-8: a refusal throws with the status, the named problems and the code; a network failure throws status 0", async () => {
+  it("EARS-5/8: a refusal throws with the status, the named problems and the code; a network failure throws status 0", async () => {
     fetchMock.mockResolvedValueOnce(
       json(400, {
         problems: [{ code: "CONSENT_VERSION_NOT_CURRENT", field: "consent" }],

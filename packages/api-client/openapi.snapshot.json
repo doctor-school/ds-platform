@@ -16831,6 +16831,18 @@
         "tags": ["ExpertProjectsPublic"]
       }
     },
+    "/v1/public/experts/count": {
+      "get": {
+        "operationId": "ExpertCountPublicController_count",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertCountPublic"]
+      }
+    },
     "/v1/public/feed": {
       "get": {
         "operationId": "PublicFeedController_feed",

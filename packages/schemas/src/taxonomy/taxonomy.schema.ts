@@ -859,6 +859,15 @@ export const PublicExpertSummarySchema = z.object({
 export type PublicExpertSummary = z.infer<typeof PublicExpertSummarySchema>;
 
 /**
+ * 029 EARS-4 — `GET /v1/public/experts/count`: the number of `published`
+ * experts of the 012 registry, computed per request.
+ */
+export const PublicExpertCountSchema = z
+  .object({ count: z.number().int().nonnegative() })
+  .strict();
+export type PublicExpertCount = z.infer<typeof PublicExpertCountSchema>;
+
+/**
  * `/events/:key/experts` → `PublicExpertSummary + { role, position }`
  * (012-design §5.2). The resolver behind it is EARS-8's (#1290); this is the
  * item shape it must produce.

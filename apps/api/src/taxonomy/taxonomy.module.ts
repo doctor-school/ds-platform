@@ -46,6 +46,7 @@ import {
   ProjectCuratorAdminController,
   ProjectExpertsAdminController,
 } from "./project-experts.admin.controller.js";
+import { ExpertCountPublicController } from "./experts.public.controller.js";
 import {
   ExpertProjectsPublicController,
   ProjectExpertsPublicController,
@@ -131,6 +132,8 @@ import { EventKindsService } from "./event-kinds.service.js";
     ProjectExpertsAdminController,
     ProjectCuratorAdminController,
     ProjectExpertsPublicController,
+    // 029 EARS-4 (#4242) — `/v1/public/experts/count` over the expert registry.
+    ExpertCountPublicController,
     ExpertProjectsPublicController,
     // #1292 EARS-10 — the partner↔project JOIN surface and its two §5.2 reads.
     ProjectPartnersAdminController,

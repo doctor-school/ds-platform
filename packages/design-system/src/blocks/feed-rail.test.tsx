@@ -329,6 +329,28 @@ describe("FeedRail", () => {
     expect(live(container)).toBe("Загружено материалов: 8");
   });
 
+  it("048 EARS-15.1 (#4230): a scroll that lands after the next page arrives but before the rail re-renders shall request the following cursor, never the same page again", async () => {
+    const next = deferred<PublicFeedPage>();
+    const loadPage = vi
+      .fn()
+      .mockReturnValueOnce(next.promise)
+      .mockReturnValue(new Promise<PublicFeedPage>(() => {}));
+    render(
+      <FeedRail initialPage={page(12, "c1")} loadPage={loadPage} now={NOW} />,
+    );
+    scrollRailTo(1600);
+    expect(loadPage).toHaveBeenCalledTimes(1);
+    // The page lands (its handler runs), the re-render is still queued, and
+    // a smooth scroll's next frame fires the rail's scroll handler.
+    next.resolve(page(8, "c2", 12));
+    await next.promise;
+    await Promise.resolve();
+    scrollRailTo(1700);
+    for (const [args] of loadPage.mock.calls.slice(1))
+      expect(args).toEqual({ cursor: "c2", limit: 8 });
+    await waitFor(() => expect(screen.getAllByRole("link")).toHaveLength(20));
+  });
+
   it("048 EARS-15.2: on a phone the next page shall be 6 cards and the last page shall announce «Это все материалы.»", async () => {
     phone = true;
     const loadPage = vi.fn().mockResolvedValue(page(6, null, 12));

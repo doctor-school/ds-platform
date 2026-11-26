@@ -549,6 +549,31 @@ describe("FeedCard post (VK)", () => {
     );
   });
 
+  it("048 EARS-49: a preview that already failed before the card mounted (a server-rendered page) shall show the no-image layout", () => {
+    const proto = HTMLImageElement.prototype;
+    const complete = Object.getOwnPropertyDescriptor(proto, "complete");
+    const naturalWidth = Object.getOwnPropertyDescriptor(proto, "naturalWidth");
+    Object.defineProperty(proto, "complete", {
+      configurable: true,
+      get: () => true,
+    });
+    Object.defineProperty(proto, "naturalWidth", {
+      configurable: true,
+      get: () => 0,
+    });
+    try {
+      const { container } = render(<FeedCard card={vkVideo()} now={NOW} />);
+      expect(container.querySelector("img")).toBeNull();
+      expect(
+        container.querySelector('[data-feed-card-media="none"]')?.textContent,
+      ).toBe("VK Видео");
+    } finally {
+      if (complete) Object.defineProperty(proto, "complete", complete);
+      if (naturalWidth)
+        Object.defineProperty(proto, "naturalWidth", naturalWidth);
+    }
+  });
+
   it("048 EARS-49: a Telegram post keeps its image as it was — no referrer policy", () => {
     const { container } = render(<FeedCard card={post()} now={NOW} />);
     expect(container.querySelector("img")?.hasAttribute("referrerpolicy")).toBe(

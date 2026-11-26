@@ -398,8 +398,16 @@ function FeedCardImage({
   referenced?: boolean;
   onBroken?: () => void;
 }) {
+  const ref = React.useRef<HTMLImageElement>(null);
+  // An image of a server-rendered page can fail before React attaches
+  // `onError`: a finished load with no pixels is that missed error.
+  React.useEffect(() => {
+    const img = ref.current;
+    if (onBroken && img?.complete && img.naturalWidth === 0) onBroken();
+  }, [url, onBroken]);
   return (
     <img
+      ref={ref}
       src={url}
       alt=""
       referrerPolicy={referenced ? "no-referrer" : undefined}

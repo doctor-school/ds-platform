@@ -86,6 +86,17 @@ const materialJourneysTestDir = defineBddConfig({
   tags: "@material-academy-journeys",
 });
 
+// 007 EARS-14: the list journey (sort, filters, the address across a reload)
+// on the real Admin; only the tagged original is generated.
+const eventListTestDir = defineBddConfig({
+  features:
+    "../docs/content/specs/features/007-event-admin-minimal/007-scenarios.feature",
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/event-list/steps.ts", "e2e/support/fixtures.ts"],
+  outputDir: ".features-gen/event-list",
+  tags: "@event-list-journey",
+});
+
 const registryContractsTestDir = defineBddConfig({
   features: [
     "../docs/content/specs/features/030-projects-catalog-and-page/030-scenarios.feature",
@@ -152,6 +163,11 @@ export default defineConfig({
     {
       name: "material-journeys",
       testDir: materialJourneysTestDir,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "event-list",
+      testDir: eventListTestDir,
       use: { ...devices["Desktop Chrome"] },
     },
   ],

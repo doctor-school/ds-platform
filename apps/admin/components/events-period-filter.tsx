@@ -18,7 +18,7 @@ export interface EventsPeriod {
  * of the bar. The same control and the same refusal as the 044 roster's
  * registration range (`roster-filters-panel.tsx`): a «по» before the «с» stays
  * in its field with an inline error and is NOT applied, so an inverted period
- * never reaches the route's 400 — the list keeps the last valid period.
+ * never reaches the route's 400 — the list stays narrowed by the «с» alone.
  *
  * `onChange` receives an UPDATE of the period as the address holds it at that
  * moment (the page reads `window.location`), never this render's copy: two days

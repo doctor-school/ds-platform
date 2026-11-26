@@ -22,7 +22,8 @@ import { learningAdminTransport } from "@/lib/learning-admin-transport";
  * roles (the one cached admin session read) decide whether the preset choice
  * is offered (024 EARS-30); the server still refuses a write they do not cover.
  * 023 EARS-27 (#4018) — the course's data, publish, module rename and order;
- * the partner is picked from the 032 registry through this host's picker.
+ * the partner is picked from the 032 registry through this host's picker,
+ * a module's club (023 EARS-1, #4282) from the 020 events through the same one.
  */
 export default function LearningCoursePage() {
   const t = useTranslations();
@@ -67,6 +68,21 @@ export default function LearningCoursePage() {
                     </Button>
                   ) : null}
                 </div>
+              </div>
+            )}
+            clubField={({ id: fieldId, value, initialLabel, onChange }) => (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={fieldId}>
+                  {t("learning.schools.fields.club")}
+                </Label>
+                <LearningRelationPicker
+                  id={fieldId}
+                  resource="events"
+                  value={value}
+                  initialLabel={initialLabel}
+                  onChange={onChange}
+                  placeholder={t("learning.schools.pick.club")}
+                />
               </div>
             )}
           />

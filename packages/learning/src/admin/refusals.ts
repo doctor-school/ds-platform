@@ -117,7 +117,8 @@ export function authorityRefusal(
 /**
  * 023 EARS-26…EARS-28 — a refused structure write (school, course, module) in
  * the staff member's words: a stale version, a taken slug, an empty course's
- * publish, an already-made transition; otherwise its field errors.
+ * publish, an already-made transition, a module club's unknown or removed
+ * event; otherwise its field errors.
  */
 export function structureRefusalLines(error: unknown): string[] {
   const r = asRefusal(error);
@@ -127,5 +128,7 @@ export function structureRefusalLines(error: unknown): string[] {
     return [STRUCTURE_COPY.coursePublishRefused];
   if (r.errorCode === "INVALID_TRANSITION")
     return [STRUCTURE_COPY.alreadyInState];
+  if ((r.fieldErrors ?? []).some(({ path }) => path === "clubEventId"))
+    return [STRUCTURE_COPY.clubEventRefused];
   return refusedFieldLines(error);
 }

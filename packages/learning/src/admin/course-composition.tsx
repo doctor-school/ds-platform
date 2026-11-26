@@ -25,6 +25,7 @@ import { FormActions, FormFieldGroup } from "@ds/design-system/blocks";
 import type {
   LearningCourseComposition,
   LearningDocumentKind,
+  LearningModuleClubEvent,
   LearningScopeKind,
   UpdateLearningCourseRequest,
 } from "@ds/schemas";
@@ -47,7 +48,10 @@ import type { LearningAdminTransport } from "./transport";
 // structure editor (023-design §1 `CourseStructureEditor`): the course's
 // EARS-1 data, publish / unpublish (an empty course is refused by the server,
 // `409 PUBLISH_REQUIREMENTS_NOT_MET`), a module's rename and the module order.
-// The module's club and reward are 023's next slice (EARS-1 club, EARS-2, #4282).
+// #4282 — each module's club (EARS-1): its 020 event picked through the host's
+// picker, shown with its start, saved or cleared under the module's version;
+// the module's reward (EARS-2) is a 024 rule setting of the module's and the
+// course's rules editors.
 
 export interface CourseCompositionScreenProps {
   courseId: string;
@@ -68,6 +72,16 @@ export interface CourseCompositionScreenProps {
     value: string | null;
     onChange: (value: string | null) => void;
   }) => ReactNode;
+  /**
+   * 023 EARS-1 / EARS-27 — the host's picker of a 020 event for a module's
+   * club; absent, the club is shown read-only.
+   */
+  clubField?: (props: {
+    id: string;
+    value: string | null;
+    initialLabel: string | null;
+    onChange: (value: string | null) => void;
+  }) => ReactNode;
 }
 
 export function CourseCompositionScreen({
@@ -78,6 +92,7 @@ export function CourseCompositionScreen({
   rulesHref,
   schoolHref,
   partnerField,
+  clubField,
 }: CourseCompositionScreenProps) {
   const [course, setCourse] = useState<LearningCourseComposition | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -312,6 +327,23 @@ export function CourseCompositionScreen({
                     )
                   }
                 />
+                <ModuleClubForm
+                  key={`${module.id}-club-${module.version}`}
+                  moduleId={module.id}
+                  clubEventId={module.clubEventId}
+                  clubEvent={module.clubEvent}
+                  busy={busy}
+                  clubField={clubField}
+                  onSave={(clubEventId) =>
+                    write(() =>
+                      transport.updateModule(
+                        module.id,
+                        { clubEventId },
+                        module.version,
+                      ),
+                    )
+                  }
+                />
                 {module.lessons.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{C.noLessons}</p>
                 ) : (
@@ -486,6 +518,85 @@ function ModuleRenameForm({
         {S.rename}
       </Button>
     </form>
+  );
+}
+
+/** 023 EARS-1 / EARS-27 — a module's club: its 020 event, picked, saved or cleared. */
+function ModuleClubForm({
+  moduleId,
+  clubEventId,
+  clubEvent,
+  busy,
+  clubField,
+  onSave,
+}: {
+  moduleId: string;
+  clubEventId: string | null;
+  clubEvent: LearningModuleClubEvent | null;
+  busy: boolean;
+  clubField: CourseCompositionScreenProps["clubField"];
+  onSave: (clubEventId: string | null) => Promise<boolean>;
+}) {
+  const [picked, setPicked] = useState(clubEventId);
+  const id = `module-${moduleId}-club`;
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      {clubField ? (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onSave(picked);
+          }}
+        >
+          {clubField({
+            id,
+            value: picked,
+            initialLabel: clubEvent?.title ?? null,
+            onChange: setPicked,
+          })}
+          <ClubNow clubEvent={clubEvent} />
+          <FormActions>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={busy || picked === null || picked === clubEventId}
+            >
+              {S.saveClub}
+            </Button>
+            {clubEventId ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void onSave(null)}
+              >
+                {S.clearClub}
+              </Button>
+            ) : null}
+          </FormActions>
+        </form>
+      ) : (
+        <>
+          <p className="text-sm font-bold text-foreground">{S.moduleClub}</p>
+          <ClubNow clubEvent={clubEvent} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ClubNow({
+  clubEvent,
+}: {
+  clubEvent: LearningModuleClubEvent | null;
+}) {
+  return (
+    <p className="text-sm text-muted-foreground" data-testid="module-club-now">
+      {clubEvent
+        ? S.moduleClubEvent(clubEvent.title, clubEvent.startsAt)
+        : S.moduleClubNone}
+    </p>
   );
 }
 

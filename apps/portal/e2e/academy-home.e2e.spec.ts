@@ -854,8 +854,19 @@ test.describe("Feature 013 — static public Academy home", () => {
   });
 
   test("EARS-8: enabled partnership form shall remain keyboard-operable and axe-clean while pending", async ({
+    baseURL,
     page,
   }) => {
+    const stage = stageAcademyAddress(baseURL);
+    if (stage) {
+      // Bot protection is ON on a slot: without the stub the real widget runs
+      // its own network check and the intake POST never leaves (#4308).
+      await prepareCaptchaForJourney(
+        page.context(),
+        stage.origin,
+        process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+      );
+    }
     await page.goto("/#partner-form");
     const form = page.locator("#partner-form form");
     const name = form.getByLabel(/^Имя/);
@@ -892,8 +903,10 @@ test.describe("Feature 013 — static public Academy home", () => {
     const requestGate = new Promise<void>((resolve) => {
       releaseRequest = resolve;
     });
-    await page.route("**/*", async (route) => {
-      if (route.request().method() === "POST") {
+    // Only the intake write is held: a third-party POST (a captcha check) is
+    // not the form's pending state (#4308).
+    await page.route(`**${PARTNERSHIP_INTAKE_PATH}`, async (route) => {
+      if (isIntakePost(route.request())) {
         postCount += 1;
         await requestGate;
         await route.abort("failed");

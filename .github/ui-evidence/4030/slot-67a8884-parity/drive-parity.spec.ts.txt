@@ -1,0 +1,224 @@
+// SLOT DRIVE ONLY (#4030 / PR #4248) — never committed as a spec; kept as
+// `.github/ui-evidence/4030/slot-<shortsha>-parity/drive-parity.spec.ts.txt`.
+// Drives slot pr-4248 (runtime = DRIVE_SHA) as the agent staff admin:
+//   - «Заявки» list with an author row, a live partnership row (pending mark),
+//     an imported partnership row (no mark) and a partnership row whose contact
+//     is a 207-character email with a 64-character unbroken local part —
+//     desktop 1440 + mobile 390, light + dark;
+//   - a partnership detail and an imported detail in the same four profiles;
+//   - the interaction: «Вид: Партнёрство», then open a partnership detail.
+// Every capture asserts no side scroll (documentElement scrollWidth ≤
+// clientWidth), that the long email never runs past the viewport, and that
+// its rendered text (the line boxes of its range) stays inside the box that
+// holds it: the table cell («Заявитель») at 1440, the record card at 390, the
+// field value on the detail.
+// Rows were created by the real intakes (author: golden seed; live partnership:
+// POST /v1/public/applications/partnership with the stage captcha test token;
+// imported: the EARS-19 import from the slot's api image). No hand SQL.
+import { expect, test, type Page } from "@playwright/test";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
+
+const SHOTS = process.env.DRIVE_SHOTS!;
+const LONG_EMAIL = process.env.DRIVE_LONG_EMAIL!;
+const ID = {
+  author: "20630063-0026-4d5b-8b63-0000000003e8",
+  live: process.env.DRIVE_LIVE_ID!,
+  // Resolved after sign-in from the queue API: the import keys the row by
+  // `legacy_record_id`, the row id is the database's.
+  imported: "",
+  longEmail: process.env.DRIVE_LONG_EMAIL_ID!,
+};
+const DESKTOP = { width: 1440, height: 900 };
+const MOBILE = { width: 390, height: 844 };
+
+// Keep the staff password and MFA challenge out of traces and captures.
+test.use({ trace: "off", screenshot: "off", video: "off" });
+test.describe.configure({ mode: "serial" });
+
+/**
+ * The admin ships light only (no toggle, no `prefers-color-scheme`): the dark
+ * render applies the design-system `.dark` token block on the document root
+ * (the #1927 recipe). The token-painted `body` background signals the
+ * recalculation happened.
+ */
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const c = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g);
+    if (!c || c.length < 3) return false;
+    const [r, g, b] = c.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+  // Let colour transitions settle before the capture.
+  await page.waitForTimeout(400);
+}
+
+/** Side scroll + long-email containment, logged and soft-asserted. */
+async function geometry(page: Page, label: string) {
+  const g = await page.evaluate((email) => {
+    const doc = document.documentElement;
+    const vw = doc.clientWidth;
+    const hits: {
+      right: number;
+      overflow: number;
+      textRight: number;
+      boxRight: number;
+      box: string;
+    }[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.textContent?.includes(email)) continue;
+      const el = n.parentElement!;
+      if (!el.getClientRects().length) continue; // hidden copy (other layout)
+      const r = el.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const textRight = Math.max(...[...range.getClientRects()].map((x) => x.right));
+      const box = el.closest('td, dd, [data-clickable="true"]') ?? el.parentElement!;
+      hits.push({
+        right: Math.round(r.right),
+        overflow: el.scrollWidth - el.clientWidth,
+        textRight: Math.round(textRight * 10) / 10,
+        boxRight: Math.round(box.getBoundingClientRect().right * 10) / 10,
+        box: box.tagName.toLowerCase() + (box.getAttribute("data-clickable") ? "[card]" : ""),
+      });
+    }
+    return { scrollWidth: doc.scrollWidth, clientWidth: vw, hits };
+  }, LONG_EMAIL);
+  const over = g.scrollWidth - g.clientWidth;
+  const emailOut = g.hits.filter(
+    (h) => h.right > g.clientWidth || h.overflow > 0 || h.textRight > h.boxRight,
+  );
+  console.log(
+    `GEOM ${label}: scrollWidth ${g.scrollWidth} clientWidth ${g.clientWidth} ` +
+      `(over ${over}); long email visible ×${g.hits.length}` +
+      (g.hits.length
+        ? ` rights [${g.hits.map((h) => h.right).join(",")}] el-overflow [${g.hits.map((h) => h.overflow).join(",")}]` +
+          ` text-right/box-right [${g.hits.map((h) => `${h.textRight}≤${h.boxRight} ${h.box}`).join(",")}]`
+        : "") +
+      ` → ${over <= 0 && emailOut.length === 0 ? "PASS" : "DEFECT"}`,
+  );
+  expect.soft(over, `side scroll on ${label}`).toBeLessThanOrEqual(0);
+  expect.soft(emailOut, `long email overflows on ${label}`).toEqual([]);
+}
+
+/** Light capture, then the dark one, each with its geometry check. */
+async function capture(page: Page, name: string) {
+  await setPalette(page, "light");
+  await geometry(page, `${name} light`);
+  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  await setPalette(page, "dark");
+  await geometry(page, `${name} dark`);
+  await page.screenshot({ path: `${SHOTS}/${name}-dark.png`, fullPage: true });
+  await setPalette(page, "light");
+}
+
+/** The rendered copy of a test id (the list renders a table and cards). */
+function vis(root: Page | ReturnType<Page["getByTestId"]>, testId: string) {
+  return root.locator(`[data-testid="${testId}"]:visible`).first();
+}
+
+async function openList(page: Page) {
+  await page.goto("/applications");
+  const table = page.getByTestId("applications-table");
+  await expect(vis(table, `row-${ID.longEmail}`)).toBeVisible();
+  return table;
+}
+
+test(`«Заявки» parity at ${process.env.DRIVE_SHORT}: list + partnership/imported detail × 4 profiles, then «Вид: Партнёрство» → detail`, async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize(DESKTOP);
+  await signInAsAdmin(page, {
+    email: process.env.DRIVE_ADMIN_EMAIL!,
+    password: process.env.DRIVE_ADMIN_PASSWORD!,
+    totpSecret: process.env.DRIVE_ADMIN_TOTP!,
+  });
+  const served = (await page.evaluate(async () => {
+    const res = await fetch("/v1/admin/applications?kind=partnership&limit=50", {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    return res.json();
+  })) as { items: { id: string; applicant: string | null }[] };
+  ID.imported = served.items.find(
+    (item) => item.applicant === process.env.DRIVE_IMPORTED_CONTACT,
+  )!.id;
+  console.log(`IMPORTED row ${ID.imported} (${process.env.DRIVE_IMPORTED_CONTACT})`);
+
+  await test.step("list — author, live, imported and long-email rows", async () => {
+    for (const [vp, name] of [
+      [DESKTOP, "01-list-1440"],
+      [MOBILE, "02-list-390"],
+    ] as const) {
+      await page.setViewportSize(vp);
+      const table = await openList(page);
+      for (const id of Object.values(ID)) {
+        await expect(vis(table, `row-${id}`)).toBeVisible();
+      }
+      await expect(vis(page, `application-not-notified-${ID.live}`)).toBeVisible();
+      await expect(page.getByTestId(`application-not-notified-${ID.imported}`)).toHaveCount(0);
+      await expect(table.getByText(LONG_EMAIL).locator("visible=true").first()).toBeVisible();
+      await capture(page, name);
+    }
+  });
+
+  await test.step("partnership detail (live)", async () => {
+    for (const [vp, name] of [
+      [DESKTOP, "03-detail-partnership-1440"],
+      [MOBILE, "04-detail-partnership-390"],
+    ] as const) {
+      await page.setViewportSize(vp);
+      await page.goto(`/applications/${ID.live}`);
+      await expect(page.getByTestId("application-heading")).toBeVisible();
+      await expect(vis(page, "application-consent")).toContainText("Дано");
+      await expect(vis(page, "application-notices")).toContainText("Не предусмотрено");
+      await capture(page, name);
+    }
+  });
+
+  await test.step("imported detail", async () => {
+    for (const [vp, name] of [
+      [DESKTOP, "05-detail-imported-1440"],
+      [MOBILE, "06-detail-imported-390"],
+    ] as const) {
+      await page.setViewportSize(vp);
+      await page.goto(`/applications/${ID.imported}`);
+      await expect(page.getByTestId("application-heading")).toBeVisible();
+      await expect(vis(page, "application-notices")).toContainText("Не требовалось");
+      await capture(page, name);
+    }
+  });
+
+  await test.step("long-email partnership detail at 390 (extra geometry)", async () => {
+    await page.setViewportSize(MOBILE);
+    await page.goto(`/applications/${ID.longEmail}`);
+    await expect(vis(page, "application-applicant")).toContainText(LONG_EMAIL);
+    await capture(page, "09-detail-long-email-390");
+  });
+
+  await test.step("interaction: «Вид: Партнёрство», then open a partnership detail", async () => {
+    await page.setViewportSize(DESKTOP);
+    const table = await openList(page);
+    await page.getByTestId("applications-kind").selectOption({ label: "Партнёрство" });
+    await expect(page.getByText("Вид: Партнёрство").first()).toBeVisible();
+    await expect(table.getByTestId(`row-${ID.author}`)).toHaveCount(0);
+    await expect(vis(table, `row-${ID.live}`)).toBeVisible();
+    await expect(vis(table, `row-${ID.longEmail}`)).toBeVisible();
+    const kinds = await table.locator('[data-testid^="row-"]:visible').allInnerTexts();
+    console.log(`FILTER «Вид: Партнёрство»: ${kinds.length} rows, kinds ${[...new Set(kinds)].join("|")}`);
+    expect([...new Set(kinds)]).toEqual(["Партнёрство"]);
+    await geometry(page, "07-filter-partnership");
+    await page.screenshot({ path: `${SHOTS}/07-filter-partnership.png`, fullPage: true });
+    await vis(table, `row-${ID.live}`).click();
+    await expect(page).toHaveURL(new RegExp(`/applications/${ID.live}$`));
+    await expect(vis(page, "application-consent")).toContainText("Дано");
+    console.log(`OPENED ${new URL(page.url()).pathname}`);
+    await geometry(page, "08-filter-partnership-detail");
+    await page.screenshot({ path: `${SHOTS}/08-filter-partnership-detail.png`, fullPage: true });
+  });
+});

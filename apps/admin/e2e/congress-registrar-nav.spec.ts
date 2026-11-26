@@ -56,6 +56,7 @@ const ADMIN_SECTIONS = [
   "nav-experts",
   "nav-organisations",
   "nav-organisation-roles",
+  "nav-applications",
   "nav-event-kinds",
   "nav-directions",
   "nav-direction-specialties",

@@ -1,0 +1,269 @@
+// LOCAL DRIVE ONLY (#4030) — never committed. Drives the «Заявки» screens on
+// the local stand: real author intake → admin list/filters → status/notes →
+// close with each admin outcome → erase (+ the 409 second erase) → stale 412 →
+// non-admin refused → axe + 390px no side scroll.
+import { randomUUID } from "node:crypto";
+import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
+import { signInDoctorOnAdminOrigin } from "./support/storefront-session";
+
+const SHOTS = process.env.DRIVE_SHOTS!;
+const CONSENT = process.env.DRIVE_CONSENT!;
+const RUN = Date.now().toString(36);
+const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+
+test.describe.configure({ mode: "serial" });
+
+/**
+ * The admin ships no theme toggle and does not follow `prefers-color-scheme`:
+ * its dark palette is the design-system `.dark` token block on the document
+ * root (the #1927 recipe, `apps/admin/e2e/congress-roster.spec.ts`). The
+ * token-painted `body` background signals that the recalculation happened.
+ */
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const c = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g);
+    if (!c || c.length < 3) return false;
+    const [r, g, b] = c.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
+async function shot(page: Page, name: string, { dark = false } = {}) {
+  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  if (!dark) return;
+  await setPalette(page, "dark");
+  // Admin ships light only (no toggle, no prefers-color-scheme), so the dark
+  // render is parity evidence, not a shipped mode: axe gates light (as every
+  // admin spec does) and the dark run is logged, not asserted.
+  const dk = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+  console.log(`AXE ${name} dark (logged): ${dk.violations.map((x) => `${x.id}: ${x.nodes.map((n) => n.target).join(",")}`).join("; ") || "clean"}`);
+  await page.screenshot({ path: `${SHOTS}/${name}-dark.png`, fullPage: true });
+  await setPalette(page, "light");
+}
+
+async function axe(page: Page, label: string) {
+  const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+  const v = r.violations.map((x) => `${x.id}: ${x.nodes.map((n) => n.target).join(",")}`);
+  expect(v, `axe on ${label}`).toEqual([]);
+  console.log(`AXE ${label}: clean`);
+}
+
+async function noSideScroll(page: Page, label: string) {
+  const over = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(over, `side scroll on ${label}`).toBeLessThanOrEqual(0);
+  console.log(`390 ${label}: no side scroll`);
+}
+
+async function submitAuthor(page: Page, topic: string): Promise<string> {
+  const out = await page.evaluate(
+    async ({ topic, consent, key }) => {
+      const res = await fetch("/v1/me/applications/author", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({
+          topic,
+          specialtyOther: "Кардиология",
+          format: "course_series",
+          about: "Пробная заявка локального прогона",
+          consentVersion: consent,
+        }),
+      });
+      return { status: res.status, body: await res.text() };
+    },
+    { topic, consent: CONSENT, key: randomUUID() },
+  );
+  expect(out.status, out.body).toBe(201);
+  return (JSON.parse(out.body) as { id: string }).id;
+}
+
+const ids: Record<string, string> = {};
+const topic = (n: number) => `Заявка ${RUN}-${n}`;
+
+test("doctor submits four author applications; a non-admin is refused «Заявки»", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await signInDoctorOnAdminOrigin(page, "applicant");
+  const named = await page.evaluate(async () => {
+    const r = await fetch("/v1/me/display-name", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Анна Прогонова" }),
+    });
+    return r.status;
+  });
+  expect([200, 204]).toContain(named);
+  for (const n of [1, 2, 3, 4]) ids[n] = await submitAuthor(page, topic(n));
+
+  const api = await page.evaluate(async () => {
+    const r = await fetch("/v1/admin/applications", { credentials: "include" });
+    return r.status;
+  });
+  console.log(`NON-ADMIN GET /v1/admin/applications → ${api}`);
+  expect([401, 403]).toContain(api);
+  await page.goto("/applications");
+  await page.waitForTimeout(3000);
+  console.log(`NON-ADMIN /applications landed on ${new URL(page.url()).pathname}`);
+  await expect(page.getByTestId("applications-table")).toHaveCount(0);
+  await shot(page, "01-non-admin-refused");
+});
+
+test("admin: list, filters, take into work, note, close «Принята» / «Отклонена», erase + 409, stale 412, axe + 390", async ({
+  page,
+  browser,
+}) => {
+  await signInAsAdmin(page);
+  await page.getByTestId("nav-applications").click();
+  await expect(page).toHaveURL(/\/applications$/);
+  const table = page.getByTestId("applications-table");
+  await expect(table.getByText(topic(4)).first()).toBeVisible();
+  // newest first: 4 above 1
+  const text = await table.innerText();
+  expect(text.indexOf(topic(4))).toBeLessThan(text.indexOf(topic(1)));
+  await expect(page.getByTestId(`application-not-notified-${ids[4]}`).first()).toBeVisible();
+  await shot(page, "02-list");
+  await axe(page, "list");
+
+  await page.getByTestId("applications-status").selectOption("closed");
+  await expect(table.getByText(topic(4))).toHaveCount(0);
+  await expect(page.getByText("Статус: Закрытые").first()).toBeVisible();
+  await shot(page, "03-filter-closed");
+  await page.getByTestId("applications-status").selectOption("new");
+  await page.getByTestId("applications-kind").selectOption("author");
+  await expect(table.getByText(topic(4)).first()).toBeVisible();
+  await shot(page, "04-filter-new-author-chips");
+
+  // 1 — take into work, note, close «Принята»
+  await page.goto(`/applications/${ids[1]}`);
+  await expect(page.getByTestId("application-heading")).toHaveText(topic(1));
+  await expect(page.getByTestId("application-applicant")).toContainText("Анна Прогонова");
+  await shot(page, "05-detail-new", { dark: true });
+  await axe(page, "detail");
+  await page.getByTestId("application-take").click();
+  await expect(page.getByTestId("application-status")).toHaveText("На рассмотрении");
+  await expect(page.getByTestId("application-take")).toHaveCount(0);
+  await page.getByTestId("application-note-submit").click();
+  await expect(page.getByTestId("application-note-error")).toBeVisible();
+  await page.getByTestId("application-note-input").fill("Созвониться в четверг");
+  await page.getByTestId("application-note-submit").click();
+  await expect(page.getByTestId("application-notes")).toContainText("Созвониться в четверг");
+  // A cancelled choice does not survive: «Закрыть» reopens with no outcome.
+  await page.getByTestId("application-close").click();
+  await page.getByTestId("application-close-dialog").getByText("Отклонена", { exact: true }).click();
+  await expect(page.getByTestId("application-outcome-declined")).toBeChecked();
+  await page.getByTestId("application-close-dialog").getByRole("button", { name: "Отмена" }).click();
+  await expect(page.getByTestId("application-close-dialog")).toHaveCount(0);
+  await page.getByTestId("application-close").click();
+  await expect(page.getByTestId("application-outcome-declined")).not.toBeChecked();
+  await expect(page.getByTestId("application-outcome-accepted")).not.toBeChecked();
+  await expect(page.getByTestId("application-close-submit")).toBeDisabled();
+  console.log("CLOSE DIALOG reopened after «Отмена»: no outcome chosen");
+  await page.getByTestId("application-close-dialog").getByText("Принята", { exact: true }).click();
+  await expect(page.getByTestId("application-outcome-accepted")).toBeChecked();
+  await shot(page, "06-close-dialog");
+  await axe(page, "close dialog");
+  await page.getByTestId("application-close-submit").click();
+  await expect(page.getByTestId("application-status")).toHaveText("Принята");
+  await expect(page.getByTestId("application-close")).toHaveCount(0);
+  await shot(page, "07-detail-accepted");
+
+  // 2 — close straight from new «Отклонена»
+  await page.goto(`/applications/${ids[2]}`);
+  await page.getByTestId("application-close").click();
+  await page.getByTestId("application-close-dialog").getByText("Отклонена", { exact: true }).click();
+  await expect(page.getByTestId("application-outcome-declined")).toBeChecked();
+  await page.getByTestId("application-close-submit").click();
+  await expect(page.getByTestId("application-status")).toHaveText("Отклонена");
+
+  // 3 — erase; a second tab still showing the button gets 409 ALREADY_ERASED
+  const other = await page.context().newPage();
+  await other.goto(`/applications/${ids[3]}`);
+  await expect(other.getByTestId("application-erase")).toBeVisible();
+  await page.goto(`/applications/${ids[3]}`);
+  await page.getByTestId("application-erase").click();
+  await expect(page.getByTestId("application-erase-kept")).toBeVisible();
+  await shot(page, "08-erase-confirm");
+  await axe(page, "erase dialog");
+  await page.getByTestId("application-erase-submit").click();
+  await expect(page.getByTestId("application-erased")).toBeVisible();
+  await expect(page.getByTestId("application-applicant-erased")).toBeVisible();
+  await expect(page.getByTestId("application-erase")).toHaveCount(0);
+  await shot(page, "09-erased");
+  await other.getByTestId("application-erase").click();
+  await other.getByTestId("application-erase-submit").click();
+  await expect(other.getByTestId("application-erase-error")).toContainText(
+    "Персональные данные этой заявки уже стёрты.",
+  );
+  await shot(other, "10-second-erase-409");
+  await other.keyboard.press("Escape");
+
+  // 4 — stale 412: tab B read v1, tab A moves it, tab B closes → reload notice
+  await other.goto(`/applications/${ids[4]}`);
+  await expect(other.getByTestId("application-take")).toBeVisible();
+  await page.goto(`/applications/${ids[4]}`);
+  await page.getByTestId("application-take").click();
+  await expect(page.getByTestId("application-status")).toHaveText("На рассмотрении");
+  await other.getByTestId("application-close").click();
+  await other.getByTestId("application-close-dialog").getByText("Принята", { exact: true }).click();
+  await expect(other.getByTestId("application-outcome-accepted")).toBeChecked();
+  await other.getByTestId("application-close-submit").click();
+  await expect(other.getByTestId("application-stale")).toBeVisible();
+  await expect(other.getByTestId("application-status")).toHaveText("Новая");
+  await shot(other, "11-stale-412");
+  await other.getByTestId("application-reload").click();
+  await expect(other.getByTestId("application-status")).toHaveText("На рассмотрении");
+  await other.close();
+
+  // list shows the outcomes and the erased mark
+  await page.goto("/applications");
+  await expect(page.getByTestId(`application-status-${ids[1]}`).first()).toHaveText("Принята");
+  await expect(page.getByTestId(`application-status-${ids[2]}`).first()).toHaveText("Отклонена");
+  await expect(page.getByTestId(`application-erased-${ids[3]}`).first()).toBeVisible();
+  await shot(page, "12-list-outcomes", { dark: true });
+  // cursor pager: more than one page of rows on the branch DB
+  await expect(page.getByLabel("Поиск")).toHaveCount(0);
+  const readout = page.getByTestId("applications-page").first();
+  // The API counts nothing: the readout names the current page only, never «из N».
+  await expect(readout).toHaveText("Страница 1");
+  console.log(`PAGER page 1: ${await readout.innerText()}`);
+  await page.getByRole("button", { name: "Вперёд" }).first().click();
+  await expect(readout).toHaveText("Страница 2");
+  console.log(`PAGER page 2: ${await readout.innerText()}`);
+  await expect(page.getByTestId("applications-table").getByText(topic(4))).toHaveCount(0);
+  await shot(page, "12b-list-page-2");
+  await page.getByRole("button", { name: "Назад" }).first().click();
+  await expect(readout).toHaveText("Страница 1");
+
+  // 390 px
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.getByTestId("applications-table")).toBeVisible();
+  await noSideScroll(page, "list");
+  await axe(page, "list@390");
+  await shot(page, "13-list-390", { dark: true });
+  await page.goto(`/applications/${ids[1]}`);
+  await expect(page.getByTestId("application-heading")).toBeVisible();
+  await noSideScroll(page, "detail");
+  // The erase button stays inside its applicant card.
+  const fit = await page.getByTestId("application-erase").evaluate((button) => {
+    const card = button.closest("section") ?? button.parentElement!;
+    const b = button.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    return { button: Math.round(b.right), card: Math.round(c.right) };
+  });
+  expect(fit.button).toBeLessThanOrEqual(fit.card);
+  console.log(`390 erase button right ${fit.button} <= card right ${fit.card}`);
+  await axe(page, "detail@390");
+  await shot(page, "14-detail-390", { dark: true });
+  void browser;
+});

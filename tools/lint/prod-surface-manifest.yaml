@@ -492,6 +492,14 @@ routes:
     file: apps/admin/app/organisations/[id]/page.tsx
     status: product-ready
   - app: admin
+    route: /applications
+    file: apps/admin/app/applications/page.tsx
+    status: product-ready
+  - app: admin
+    route: /applications/[id]
+    file: apps/admin/app/applications/[id]/page.tsx
+    status: product-ready
+  - app: admin
     route: /organisation-roles
     file: apps/admin/app/organisation-roles/page.tsx
     status: product-ready

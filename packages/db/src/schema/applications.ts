@@ -156,3 +156,4 @@ export const applicationNotes = pgTable(
 export type Application = typeof applications.$inferSelect;
 export type NewApplication = typeof applications.$inferInsert;
 export type ApplicationNote = typeof applicationNotes.$inferSelect;
+export type NewApplicationNote = typeof applicationNotes.$inferInsert;

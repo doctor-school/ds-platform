@@ -80,7 +80,12 @@ import {
 
 export type DataTableAlign = "start" | "end";
 
-/** How a cell behaves when its value outgrows the declared width. */
+/**
+ * How a cell behaves when its value outgrows the declared width: `ellipsis`
+ * cuts it to one line, `wrap` breaks it onto further lines — at any character
+ * when a token has no break point (an email, a handle), so it never runs into
+ * the next column.
+ */
 export type DataTableOverflow = "ellipsis" | "wrap";
 
 export interface DataTableColumn<Row> {
@@ -535,7 +540,9 @@ export function DataTable<Row>({
               title={column.fullValue?.(row)}
               className={cn(
                 alignClass(column.align),
-                ellipsis && "truncate",
+                // A `wrap` cell breaks an unbroken token (a 64-character email
+                // local part) rather than letting it run into the next column.
+                ellipsis ? "truncate" : "wrap-anywhere",
                 sortedCell(column.sortKey),
               )}
               style={column.width ? { maxWidth: column.width } : undefined}
@@ -614,7 +621,10 @@ export function DataTable<Row>({
                 <dt className="text-caption text-muted-foreground">
                   {headerText(column.header, column.headerDetail)}
                 </dt>
-                <dd className="text-sm text-foreground">
+                {/* `min-w-0` + `wrap-anywhere`: an unbroken value (an email, a
+                    handle) breaks inside the card instead of widening it past
+                    the phone viewport. */}
+                <dd className="min-w-0 wrap-anywhere text-sm text-foreground">
                   {column.render(row)}
                 </dd>
               </div>

@@ -21,6 +21,7 @@ import {
   feedSources,
   materials,
 } from "../../schema/materials.js";
+import { applicationNotes, applications } from "../../schema/applications.js";
 import { consentRecords } from "../../schema/consent-records.js";
 import {
   congressSubmissionKindSettings,
@@ -228,6 +229,10 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "points_posting_keys",
   "points_facts",
   "points_postings",
+  // 033 (#4030) — after the applicants and their consent records; a note
+  // references its application.
+  "applications",
+  "application_notes",
 ]);
 
 /**
@@ -594,6 +599,20 @@ export function buildGoldenSeedPlan(
       pointsPostings,
       points.pointsPostings,
       ["eventId", "leg", "occurredAt"],
+      { appendOnly: true },
+    ),
+    // 033 (#4030) — an application moves through the admin queue (status,
+    // erasure) and a note is erased to the sentinel: a re-run inserts what is
+    // missing and never rewinds a row a slot has since moved — a rewrite would
+    // undo an erasure.
+    step("applications", applications, dataset.applications, ["id"], {
+      appendOnly: true,
+    }),
+    step(
+      "application_notes",
+      applicationNotes,
+      dataset.applicationNotes,
+      ["id"],
       { appendOnly: true },
     ),
   ];

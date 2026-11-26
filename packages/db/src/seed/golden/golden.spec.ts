@@ -9,13 +9,21 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
-import { materialBodySchema, PointsTraceEntrySchema } from "@ds/schemas";
+import {
+  ADMIN_APPLICATION_LIST_LIMIT,
+  APPLICATION_NOTE_ERASED_SENTINEL,
+  AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+  AuthorApplicationPayloadSchema,
+  materialBodySchema,
+  PointsTraceEntrySchema,
+} from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
 import { getTableColumns, getTableName, is, type SQL } from "drizzle-orm";
 import { PgDialect, PgTable } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import { specialtyCodeFromName } from "../specialty-code.js";
 import * as schema from "../../schema/index.js";
 import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import {
@@ -46,6 +54,10 @@ import {
   resolveGoldenNow,
   shiftFromNow,
 } from "./now.js";
+import {
+  GOLDEN_APPLICATION_NOTE_ERASED_SENTINEL,
+  GOLDEN_AUTHOR_APPLICATION_PURPOSE,
+} from "./applications-volume.js";
 import { GOLDEN_FEED_IMAGES, goldenFeedImageOfKey } from "./feed-volume.js";
 import {
   GOLDEN_SOON_SCHOOL,
@@ -398,10 +410,15 @@ describe("#2063 golden dataset", () => {
   });
 
   it("records the pinned legal acceptances for every consenting doctor", () => {
-    expect(
-      [...new Set(dataset.consentRecords.map((c) => c.purpose))].sort(),
-    ).toEqual([...GOLDEN_CONSENT_PURPOSES].sort());
-    for (const record of dataset.consentRecords) {
+    // 033 (#4030): an author application's consent is its own purpose and
+    // version, captured with the application (the queue's describe below).
+    const signUp = dataset.consentRecords.filter(
+      (c) => c.purpose !== AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+    );
+    expect([...new Set(signUp.map((c) => c.purpose))].sort()).toEqual(
+      [...GOLDEN_CONSENT_PURPOSES].sort(),
+    );
+    for (const record of signUp) {
       expect(record.version).toBe(GOLDEN_CONSENT_VERSION);
     }
   });
@@ -3553,12 +3570,6 @@ describe("#4172 golden volume covers the schema", () => {
       "023 EARS-23 rating; nothing reads it yet — seed with its first read",
     learning_feedback:
       "023 EARS-23 feedback; nothing reads it yet — seed with its first read",
-    // 033 queue core (#4028): the intake writes, nothing reads yet — the admin
-    // queue (#4030) and the page banner (#4031) are the first reads.
-    applications:
-      "033 queue core; nothing reads it yet — seed with its first read (the admin queue #4030)",
-    application_notes:
-      "033 notes; the writer and reader are the admin queue (#4030) — seed with it",
   };
 
   const tables: PgTable[] = (Object.values(schema) as unknown[]).filter(
@@ -3810,7 +3821,9 @@ describe("024 EARS-24, EARS-29–31 (#4012) golden long-path results", () => {
     }
     for (const id of ids) {
       expect(
-        dataset.consentRecords.filter((c) => c.userId === id),
+        dataset.consentRecords.filter(
+          (c) => c.userId === id && GOLDEN_CONSENT_PURPOSES.includes(c.purpose),
+        ),
       ).toHaveLength(GOLDEN_CONSENT_PURPOSES.length);
       expect(
         dataset.doctorSpecialties.filter((d) => d.doctorId === id),
@@ -4224,5 +4237,163 @@ describe("#4019 golden «скоро» school", () => {
       golden.workerPool.verifiedCardiologist.map((d) => d.id),
     );
     expect(interests.filter((i) => pool.has(i.personId))).toEqual([]);
+  });
+});
+
+describe("033 (#4030) golden application queue", () => {
+  // The admin «Заявки» queue on a slot: a list that pages, every status,
+  // outcome and mark the list and detail render, notes, and tombstones.
+  const dataset = buildGoldenDataset(now, subjects);
+  const apps = dataset.applications;
+  const notes = dataset.applicationNotes;
+  const usersById = new Map(dataset.users.map((u) => [u.id, u]));
+  const consentById = new Map(dataset.consentRecords.map((c) => [c.id, c]));
+  const DAY = 86_400_000;
+  const YEAR = 365 * DAY;
+
+  it("writes the contract's purpose, sentinel and Минздрав codes", () => {
+    expect(GOLDEN_AUTHOR_APPLICATION_PURPOSE).toBe(
+      AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+    );
+    expect(GOLDEN_APPLICATION_NOTE_ERASED_SENTINEL).toBe(
+      APPLICATION_NOTE_ERASED_SENTINEL,
+    );
+    const codes = new Set(RAZDEL_I_NAMES.map(specialtyCodeFromName));
+    const coded = apps.filter(
+      (a) => (a.payload as { specialtyCode?: string }).specialtyCode,
+    );
+    expect(coded.length).toBeGreaterThan(0);
+    for (const a of coded)
+      expect(
+        codes.has((a.payload as { specialtyCode: string }).specialtyCode),
+      ).toBe(true);
+  });
+
+  it("holds 62 volume applications of the author kind — more than three default pages", () => {
+    expect(apps).toHaveLength(62);
+    expect(apps.length).toBeGreaterThan(
+      ADMIN_APPLICATION_LIST_LIMIT.default * 3,
+    );
+    for (const a of apps) {
+      expect(isGoldenVolumeUuid(a.id as string)).toBe(true);
+      expect(a.kind).toBe("author");
+    }
+    expect(new Set(apps.map((a) => a.id)).size).toBe(apps.length);
+  });
+
+  it("covers every status, outcome, team-notice mark and the erased mark the list shows", () => {
+    const has = (p: (a: (typeof apps)[number]) => boolean) => apps.some(p);
+    expect(has((a) => a.status === "new")).toBe(true);
+    expect(has((a) => a.status === "in_review")).toBe(true);
+    for (const outcome of ["accepted", "declined", "expired"])
+      expect(has((a) => a.status === "closed" && a.outcome === outcome)).toBe(
+        true,
+      );
+    for (const notice of ["sent", "failed", "skipped", "pending"])
+      expect(has((a) => a.teamNotice === notice)).toBe(true);
+    expect(has((a) => a.pdErasedAt != null && a.status === "closed")).toBe(
+      true,
+    );
+    expect(has((a) => a.pdErasedAt != null && a.status !== "closed")).toBe(
+      true,
+    );
+  });
+
+  it("keeps every row inside the table's checks: closed ⇔ outcome ⇔ closed_at, the tombstone form only when erased", () => {
+    for (const a of apps) {
+      const closed = a.status === "closed";
+      expect(a.outcome != null, a.id).toBe(closed);
+      expect(a.closedAt != null, a.id).toBe(closed);
+      if (a.pdErasedAt != null) {
+        expect(a.payload).toEqual({ erased: true });
+        expect(a.applicantUserId ?? null).toBeNull();
+        expect(a.subjectLine ?? null).toBeNull();
+        expect(a.contact ?? null).toBeNull();
+      } else {
+        const payload = AuthorApplicationPayloadSchema.parse(a.payload);
+        expect(a.subjectLine).toBe(payload.topic);
+        expect(a.applicantUserId).toBeTruthy();
+      }
+      if (a.outcome === "expired") expect(a.statusChangedBy ?? null).toBeNull();
+      else if (a.statusChangedAt != null)
+        expect(a.statusChangedBy).toBe(golden.admins.platform.id);
+    }
+  });
+
+  it("files each live application under an active seeded account with its own consent, captured at submission", () => {
+    for (const a of apps) {
+      const consent = consentById.get(a.consentRecordId as string);
+      expect(consent, a.id).toBeDefined();
+      expect(consent!.purpose).toBe(AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE);
+      expect(a.consentPurpose).toBe(AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE);
+      expect(consent!.version).toBe(a.consentVersionTag);
+      expect(consent!.capturedAt).toEqual(a.submittedAt);
+      const applicant = usersById.get(consent!.userId as string)!;
+      expect(applicant, a.id).toBeDefined();
+      expect((applicant.createdAt as Date) < (a.submittedAt as Date)).toBe(
+        true,
+      );
+      if (a.pdErasedAt == null) {
+        expect(a.applicantUserId).toBe(consent!.userId);
+        expect(applicant.recordStatus).toBe("active");
+      }
+    }
+    const applicants = new Set(
+      apps.map((a) => consentById.get(a.consentRecordId as string)!.userId),
+    );
+    // Some authors apply more than once («other applications» on the detail).
+    expect(applicants.size).toBeLessThan(apps.length);
+  });
+
+  it("orders each row's instants and leaves nothing the daily purge would move", () => {
+    for (const a of apps) {
+      const submitted = (a.submittedAt as Date).getTime();
+      expect(submitted).toBeLessThan(now.getTime());
+      if (a.statusChangedAt)
+        expect((a.statusChangedAt as Date).getTime()).toBeGreaterThan(
+          submitted,
+        );
+      if (a.closedAt) expect(a.closedAt).toEqual(a.statusChangedAt);
+      if (a.status !== "closed") {
+        const clock = ((a.statusChangedAt ?? a.submittedAt) as Date).getTime();
+        expect(now.getTime() - clock, a.id).toBeLessThan(YEAR);
+      } else if (a.pdErasedAt == null) {
+        expect(
+          now.getTime() - (a.closedAt as Date).getTime(),
+          a.id,
+        ).toBeLessThan(YEAR);
+      }
+      if (a.outcome === "expired") {
+        const clock = (a.submittedAt as Date).getTime();
+        expect((a.closedAt as Date).getTime() - clock).toBeGreaterThanOrEqual(
+          YEAR,
+        );
+      }
+    }
+  });
+
+  it("writes notes on some applications, by the golden admin, the erased ones as the sentinel", () => {
+    const appById = new Map(apps.map((a) => [a.id, a]));
+    expect(notes.length).toBeGreaterThan(0);
+    const noted = new Set(notes.map((n) => n.applicationId));
+    expect(noted.size).toBeLessThan(apps.length);
+    expect(
+      notes.some((n) => appById.get(n.applicationId)!.pdErasedAt != null),
+    ).toBe(true);
+    for (const n of notes) {
+      expect(isGoldenVolumeUuid(n.id as string)).toBe(true);
+      const a = appById.get(n.applicationId)!;
+      expect(n.authorAdminId).toBe(golden.admins.platform.id);
+      expect((n.createdAt as Date) > (a.submittedAt as Date)).toBe(true);
+      expect((n.createdAt as Date) < now).toBe(true);
+      if (a.closedAt)
+        expect((n.createdAt as Date) <= (a.closedAt as Date)).toBe(true);
+      if (a.pdErasedAt) expect(n.body).toBe(APPLICATION_NOTE_ERASED_SENTINEL);
+      else {
+        expect(n.body).not.toBe(APPLICATION_NOTE_ERASED_SENTINEL);
+        expect(n.body.length).toBeGreaterThan(0);
+        expect(n.body.length).toBeLessThanOrEqual(2000);
+      }
+    }
   });
 });

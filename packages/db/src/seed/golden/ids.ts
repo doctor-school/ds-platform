@@ -106,6 +106,9 @@ export const GOLDEN_GROUP = Object.freeze({
   learningAttempts: 0x0024,
   // 024 EARS-31 (#4012) — the past rule change on the 30-module path.
   learningRuleChanges: 0x0025,
+  // 033 (#4030) — the admin «Заявки» queue and its team notes.
+  applications: 0x0026,
+  applicationNotes: 0x0027,
 });
 
 /**

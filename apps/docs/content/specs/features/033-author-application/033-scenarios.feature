@@ -92,7 +92,7 @@ Feature: 033 — Author application: the «Подать заявку» page and 
   Scenario: An administrator works an application through to an outcome
     Given a platform administrator is signed in to the admin with a second factor
     And the expert "anna@example.test" has sent an application
-    When the administrator opens «Заявки» and filters «Авторы»
+    When the administrator opens «Заявки» and filters «Автор»
     Then the application is first in the list with its topic and status «Новая»
     When the administrator opens it
     Then the detail shows every field sent, the consent version and the account "anna@example.test"

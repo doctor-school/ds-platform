@@ -381,8 +381,8 @@ describe("#3205: requiresStageCheck — the owner-consented Stage-check classes"
   });
 });
 
-describe("#4304: the runtime-app auth rules read deployed code only, never tools/**", () => {
-  it("#4304: non-deployed tooling with an auth segment, a lib auth module or a middleware file is neither Stage-check nor environment-sensitive", () => {
+describe("#4304: the runtime-app auth rules skip workstation / CI tooling under tools/**, not the box-run tools/{staging,deploy}/**", () => {
+  it("#4304: workstation / CI tooling with an auth segment, a lib auth or session module, an auth page or a middleware file is neither Stage-check nor environment-sensitive", () => {
     for (const path of [
       "tools/loadtest/auth-burst.mjs",
       "tools/ops/auth-events.mjs",
@@ -390,11 +390,27 @@ describe("#4304: the runtime-app auth rules read deployed code only, never tools
       "tools/lint/eslint-rules/no-raw-auth-field-input.mjs",
       "tools/lint/guard-tests/fixtures/x/packages/auth-flow/src/host-config.ts",
       "tools/x/lib/auth.ts",
+      "tools/x/lib/session-store.ts",
+      "tools/x/app/login/page.tsx",
       "tools/lint/guard-tests/fixtures/x/apps/portal/middleware.ts",
     ]) {
       expect(requiresStageCheck(path), path).toBe(false);
       expect(isEnvironmentSensitivePath(path), path).toBe(false);
     }
+  });
+  it("#4304: auth / session code under tools/staging/** and tools/deploy/** runs on the stage and prod boxes and stays in its classes", () => {
+    for (const path of [
+      "tools/staging/auth-slot.mjs",
+      "tools/deploy/lib/auth-check.mjs",
+    ]) {
+      expect(requiresStageCheck(path), path).toBe(true);
+      expect(isEnvironmentSensitivePath(path), path).toBe(true);
+    }
+    for (const path of [
+      "tools/staging/lib/session-probe.mjs",
+      "tools/deploy/lib/session-check.mjs",
+    ])
+      expect(requiresStageCheck(path), path).toBe(true);
   });
   it("#4304: deployed auth / session / middleware code and the IdP / captcha tooling stay in both classes", () => {
     for (const path of [

@@ -193,7 +193,12 @@ always refused, and so is any IP literal not listed in `LOADTEST_NON_PROD_IPS`
 same host and port with the exact `/connection/websocket` path. Both initial
 grants and the refreshed reconnect grant must match it after normalization.
 Scheme, host, port, path, credentials, query, or fragment drift is refused
-before any WebSocket connect.
+before any WebSocket connect. Every other origin the verifier requests is
+refused when it is production, whatever confirmation is set: the storefront
+door and the sign-in host (`LOADTEST_STOREFRONT_ORIGIN`,
+`LOADTEST_SIGN_IN_HOST_ORIGIN`) before any request, and the IdP authorize hop
+and the storefront callback a sign-in follows before each is requested
+(«Production tripwires»).
 
 ### Production tripwires (fail-closed)
 
@@ -218,19 +223,33 @@ closed:
   No DNS lookup happens either: a non-`doctor.school` name that resolves to the
   production box is the operator's configuration.
 
-Each scenario that loads or mutates production refuses a production target
-until its own confirmation is set — to `1` exactly:
+`lib.mjs` `productionGate` is the one gate of every guarded scenario, and it
+checks **every origin the run requests**, not the api alone:
+
+- **before any request** (and before the manifest is read): each of
+  `LOADTEST_API_ORIGIN`, `LOADTEST_STOREFRONT_ORIGIN`,
+  `LOADTEST_SIGN_IN_HOST_ORIGIN` and `LOADTEST_CENTRIFUGO_ORIGIN` that is set.
+  A stand api with a production storefront left in the shell is a production
+  run and refuses exactly like a production api;
+- **before each request to a URL no env var names**: the IdP authorize hop and
+  the storefront callback a sign-in follows, the WebSocket a room grant names.
+  A server answer cannot route the run into production either. The refusal
+  names the origin only, never a callback's code.
+
+A production target is refused until the scenario's own confirmation is set —
+to `1` exactly. One scenario's confirmation never unlocks another's gate:
 
 | Scenario               | Confirmation                       | Why it is gated                                                                                                                                                                                                              |
 | ---------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `loadtest:room`        | `LOADTEST_ROOM_PROD_CONFIRMED=1`   | loads the live realtime path real doctors are on; its chat leg posts messages every participant of the room sees — so only in the window, only against the dedicated synthetic event                                         |
 | `loadtest:auth`        | `LOADTEST_SUPPRESSION_CONFIRMED=1` | register traffic dispatches real mail unless the api runs with `LOADTEST_SUPPRESS_SYNTHETIC=true` (the #1068 seam drops `LOADTEST_SYNTHETIC_DOMAIN` recipients before the relay); a single-source burst measures the limiter |
 | `loadtest:room:verify` | none — refuses production always   | a Stage-B artifact generator for the dev stand                                                                                                                                                                               |
-| sign-in (auth, room)   | — (transport rule)                 | the internal transport is refused for a production target: `/v1/internal/*` is `404` there                                                                                                                                   |
+| sign-in (auth, room)   | — (transport rule)                 | the internal transport is refused for a production target: `/v1/internal/*` is `404` there. A sign-in outside a scenario's gate refuses production outright                                                                  |
 
-`loadtest:browse` is read-only and ungated; `loadtest:provision` /
+`loadtest:browse` is read-only and ungated. `loadtest:provision` /
 `loadtest:cleanup` act on the IdP named by `LOADTEST_IDP_ISSUER`, only on
-`LOADTEST_SYNTHETIC_DOMAIN` accounts.
+`LOADTEST_SYNTHETIC_DOMAIN` accounts, and carry no confirmation: the
+production org-owner PAT is their only gate.
 
 ### Rate limits a single-source run meets (003 EARS-13)
 
@@ -287,13 +306,95 @@ Procedure (only inside a recorded owner window):
 
 ## Run protocol (phase 2 — owner-windowed prod run)
 
+### Dev-stand smoke (before the window, on the window's `main`)
+
+Run it once on the commit the window will run, with both sign-in transports, at
+≤ 3 VUs for seconds each.
+
+**Where: the local dev stand, not a stage slot.** A stage slot is a
+`stage.doctor.school` name, which the tripwire treats as production
+(«Production tripwires»), so a slot run would need the window confirmations,
+and those are set only in the window shell. The local stand runs the same
+storefront door and callback (`@ds/auth-flow` `storefront-oidc`) and the same
+api sign-in host the window drives, against the dev IdP, where the doctor
+storefront client is already registered. The stand cannot show the production
+edge: the Caddy vhosts and their `/v1/internal/*` `404`. The window's 1-VU
+sanity (checklist) is therefore the first run through that edge.
+
+**Stand.** Work in a worktree on that `main`, and log every stand command
+(`.claude/rules/dev-stand.md` → Shared-stand discipline):
+
+1. `pnpm dev:status`, then `pnpm dev:ports` for a free api port `<api>`
+   (cross-check with `netstat -ano | findstr ":<api> "`). The doctor storefront
+   gets no choice of port. The dev IdP registers exactly
+   `http://localhost:3004/auth/callback` for its client
+   (`IDP_DOCTOR_REDIRECT_URI`, `infra/dev-stand/idp/provision.sh` step 3.bis),
+   and the api answers the password step with the callback of
+   `SIGN_IN_DOCTOR_LOGIN_URL` (`http://localhost:3004/login`). A listener on
+   `:3004` you did not start blocks rows 6–7: wait for it, never kill it.
+2. `pnpm dev:db:branch 873`, then `pnpm --filter @ds/api seed:events` with the
+   printed `DATABASE_URL` (it writes the live event `seed-005-live`).
+3. **api.** Build it with `pnpm --filter "@ds/api..." build`, then run
+   `node dist/main.js` in `apps/api`. Load `~/.ds-platform/.env.local` into the
+   process env line by line, and add `PORT=<api>`, the branch `DATABASE_URL`,
+   `ROOM_HEARTBEAT_INTERVAL_SECONDS=2`, and bot protection off (`UNLEASH_URL` and
+   `UNLEASH_API_TOKEN` unset, `BOT_PROTECTION_ENABLED=false`). Record its PID.
+4. **Doctor storefront** (rows 6–7 only). Load the same `.env.local`, then run
+   `INTERNAL_API_URL=http://127.0.0.1:<api> API_PROXY_TARGET=http://127.0.0.1:<api> ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 pnpm --filter @ds/doctor exec next dev -p 3004 -H 127.0.0.1`
+   and record its PID. Every hop to the api must go over `127.0.0.1`. The
+   session fingerprint binds the client's IP/24
+   (`apps/api/src/auth/session/session.cookie.ts`), so a password step from
+   `::1` with a redeem from `127.0.0.1` reads as foreign, and the callback then
+   answers `303` with no session.
+
+**Harness env** for every row. Map the values from `.env.local`; never type a
+secret into a command line or a log:
+
+```sh
+LOADTEST_API_ORIGIN=http://127.0.0.1:<api>
+LOADTEST_SIGN_IN_HOST_ORIGIN="$IDP_SIGN_IN_BASE_URI"   # the sign-in host, http://localhost:3005
+LOADTEST_IDP_ISSUER="$IDP_ISSUER"
+LOADTEST_IDP_SERVICE_TOKEN="$IDP_SERVICE_TOKEN"        # the stand's org-owner PAT
+LOADTEST_IDP_PROJECT_ID="$IDP_PROJECT_ID"
+LOADTEST_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN"      # internal-transport rows
+LOADTEST_CENTRIFUGO_ORIGIN="$CENTRIFUGO_URL"           # room:verify; checked by every tripwire
+```
+
+If the host of the stand's `CENTRIFUGO_URL` is an IP literal, also set
+`LOADTEST_NON_PROD_IPS` to that one address. The room grant's WebSocket lives
+on that host, and every tripwire refuses an IP literal that nobody has vouched
+for. No confirmation env is set anywhere in the smoke.
+
+**Rows**, in order. `LOADTEST_STOREFRONT_ORIGIN` stays unset (the internal
+transport) unless the row sets it. The load rows (1 and 3–7) must end with
+`VERDICT: PASS` and `err=0.0%`, and their `status:` line must have exactly the
+shape below. The other rows state their own PASS:
+
+| #   | Command                                                                                                                                                                       | PASS looks like                                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `LOADTEST_VUS=3 LOADTEST_DURATION_SECONDS=5 LOADTEST_EVENT_ID=seed-005-live pnpm loadtest:browse`                                                                             | `200` only                                                                                                                                                                                                                                         |
+| 2   | `LOADTEST_USERS=3 pnpm loadtest:provision`                                                                                                                                    | 3 usable accounts in the manifest                                                                                                                                                                                                                  |
+| 3   | `LOADTEST_USE_PROVISIONED=1 LOADTEST_VUS=2 LOADTEST_DURATION_SECONDS=5 pnpm loadtest:auth`                                                                                    | `200` : `302` = 4 : 1. The transaction, host entry, password step and redeem answer `200`; the authorize hop answers `302`                                                                                                                         |
+| 4   | `LOADTEST_VUS=2 LOADTEST_DURATION_SECONDS=4 pnpm loadtest:auth` (register + sign-in)                                                                                          | `200` : `302` = 5 : 1 (the register adds one `200`)                                                                                                                                                                                                |
+| 5   | `LOADTEST_USE_PROVISIONED=1 LOADTEST_EVENT_ID=seed-005-live LOADTEST_VUS=3 LOADTEST_DURATION_SECONDS=8 LOADTEST_RAMP_SECONDS=1 LOADTEST_CHAT_FRACTION=0.5 pnpm loadtest:room` | `200` only, and no `fixture gap` line                                                                                                                                                                                                              |
+| 6   | `LOADTEST_STOREFRONT_ORIGIN=http://localhost:3004 LOADTEST_USE_PROVISIONED=1 LOADTEST_VUS=1 LOADTEST_DURATION_SECONDS=5 pnpm loadtest:auth`                                   | `200` : `302` : `303` = 2 : 1 : 2. Per sign-in, the door and the callback answer `303`, the authorize hop `302`, and the host entry and the password step `200`. A `200`-only line means the door never opened; a `500` means unset storefront env |
+| 7   | `LOADTEST_STOREFRONT_ORIGIN=http://localhost:3004 LOADTEST_USE_PROVISIONED=1 LOADTEST_EVENT_ID=seed-005-live LOADTEST_VUS=2 LOADTEST_DURATION_SECONDS=8 pnpm loadtest:room`   | `200` only, and no `fixture gap` line: the room gate accepted the sessions the storefront callback minted. A callback that sets no session still answers `303`, so row 6 alone cannot prove the session; this row does                             |
+| 8   | `LOADTEST_EVENT_ID=seed-005-live pnpm loadtest:room:verify`                                                                                                                   | `VERDICT: PASS`, every check passed                                                                                                                                                                                                                |
+| 9   | `LOADTEST_STOREFRONT_ORIGIN=http://192.0.2.1 pnpm loadtest:room`, then the same with `pnpm loadtest:auth`                                                                     | refused before any request (exit `3` / `2`): `REFUSING to run … against production target LOADTEST_STOREFRONT_ORIGIN`. The address is TEST-NET-1, so a broken guard could reach nothing                                                            |
+| 10  | `LOADTEST_CLEANUP_SWEEP=1 pnpm loadtest:cleanup`                                                                                                                              | every synthetic account deleted, 0 left                                                                                                                                                                                                            |
+
+Teardown: stop your api and storefront by their recorded PIDs, then run
+`pnpm dev:db:drop 873`. Paste the ten outcomes into the window's run doc. A row
+that misses its shape blocks the window until it is fixed and re-run.
+
 ### Pre-run checklist
 
 - [ ] **Owner window recorded** — explicit start/end, on a low-traffic window; a
       live medical platform, real doctors mid-webinar are the blast radius.
 - [ ] **Production runs this harness's contract** — the deployed release
       (`gh release list`, GitHub Deployments) carries the api/auth surface the
-      harness drives; re-run the dev-stand smoke (below) on the window's `main`.
+      harness drives, and the «Dev-stand smoke» above passed on the window's
+      `main`, all ten rows including the storefront-transport rows 6–7.
 - [ ] **Window env applied** for any auth traffic: `LOADTEST_SUPPRESS_SYNTHETIC=true`
       plus the per-IP raise on the api, restarted (window recipe above);
       otherwise run room/browse only and skip auth-burst.

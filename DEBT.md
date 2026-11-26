@@ -6,7 +6,7 @@
 
 **Owner triage cadence:** weekly and at each milestone close.
 
-**Promotion:** when a line crosses the threshold, file an Issue via `pnpm issue:create` with exactly one `source:*` label (`source:owner` | `source:spec` | `source:retro` | `source:agent`), exactly one kind label, exactly one `track:*` label (`track:academy` | `track:doctor` | `track:platform`), and a `--milestone` («Platform ops & hardening» when no product theme fits), then check the line off with the Issue # appended.
+**Promotion:** when a line crosses the threshold, file an Issue via `pnpm issue:create` with exactly one `source:*` label (`source:owner` | `source:spec` | `source:retro` | `source:agent`), exactly one kind label, exactly one `track:*` label (`track:academy` | `track:doctor` | `track:platform` | `track:migration`), and a `--milestone` («Platform ops & hardening» when no product theme fits), then check the line off with the Issue # appended.
 
 **Line format:**
 

@@ -10,13 +10,17 @@ import {
   trackLabelsOf,
   planTrackSync,
 } from "./sync-pr-track.mjs";
+import { TRACK_LABELS as TAXONOMY_TRACK_LABELS } from "./lib/roadmap-taxonomy.mjs";
 
 test("TRACK_LABELS is the #1583 taxonomy", () => {
   assert.deepEqual(TRACK_LABELS, [
     "track:academy",
     "track:doctor",
     "track:platform",
+    "track:migration",
   ]);
+  // The PR side reads the same taxonomy the Issue gate reads.
+  assert.deepEqual(TRACK_LABELS, TAXONOMY_TRACK_LABELS);
 });
 
 // ── extractClosedIssues — the auto-close keyword shape shared with
@@ -72,6 +76,15 @@ test("planTrackSync: one track on the Issue, absent on the PR → apply", () => 
   });
   assert.equal(plan.action, "apply");
   assert.equal(plan.label, "track:doctor");
+});
+
+test("planTrackSync: a track:migration Issue gives the PR track:migration (#4289)", () => {
+  const plan = planTrackSync({
+    prLabels: ["tooling"],
+    issues: [issue(1825, "feature", "track:migration")],
+  });
+  assert.equal(plan.action, "apply");
+  assert.equal(plan.label, "track:migration");
 });
 
 test("planTrackSync: several linked Issues agreeing on one track → apply once", () => {

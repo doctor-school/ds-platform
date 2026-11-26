@@ -17,6 +17,7 @@
  *   epic          | `epic: …`                | NONE (spans releases)| none
  *   feature       | `[Академия][NNN] …`      | the track release    | Start+Target
  *                 | `[Витрина][NNN] …`       |                      |
+ *                 | `[Переезд][NNN] …`       |                      |
  *   ears-task     | `[NNN] EARS-k: …`        | INHERITED from parent| none
  *   release-gate  | `gate: <milestone name>` | the gated release    | Start+Target
  *   platform-task | no prefix                | via blocked_by, else | none
@@ -55,12 +56,14 @@ export const RELEASE_GATE_TITLE_PREFIX = "gate:";
 export const FALLBACK_MILESTONE = "Platform ops & hardening";
 
 /**
- * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
- * carries exactly one of. `track:academy` = academy.doctor.school surfaces;
+ * The track-label taxonomy (#1583) — the product axis every new Issue carries
+ * exactly one of. `track:academy` = academy.doctor.school surfaces;
  * `track:doctor` = the doctor showcase site `apps/doctor`; `track:platform` =
- * shared packages, backend, infra, process, or work serving both sites.
+ * shared packages, backend, infra, process, or work serving both sites;
+ * `track:migration` = moving the old Doctor.School platform's doctors onto DS
+ * Platform, a track that closes with the move itself (#4289).
  */
-export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform", "track:migration"];
 
 /**
  * Track label ↔ the Russian milestone-name prefix of that track's releases.
@@ -70,19 +73,21 @@ export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
 export const TRACK_MILESTONE_PREFIXES = Object.freeze({
   "track:academy": "Академия",
   "track:doctor": "Витрина",
+  "track:migration": "Переезд",
 });
 
 /**
  * Track label ↔ the Cyrillic release letter of that track (#3375):
- * «Академия А3 — …», «Витрина В3 — …». The pre-#3375 Latin `R` («Академия R1 —
- * …») is still accepted until every milestone is renamed.
+ * «Академия А3 — …», «Витрина В3 — …», «Переезд П1 — …». The pre-#3375 Latin
+ * `R` («Академия R1 — …») is still accepted until every milestone is renamed.
  */
 export const TRACK_RELEASE_LETTERS = Object.freeze({
   "track:academy": "А",
   "track:doctor": "В",
+  "track:migration": "П",
 });
 
-/** The pre-#3375 release letter, shared by both tracks. */
+/** The pre-#3375 release letter, accepted after any track's prefix. */
 export const LEGACY_RELEASE_LETTER = "R";
 
 /**
@@ -104,7 +109,10 @@ export function releaseMilestoneTrack(milestoneTitle) {
   return null;
 }
 
-/** The Latin twin a hand-typed title can carry in place of each Cyrillic letter. */
+/**
+ * The Latin twin a hand-typed title can carry in place of each Cyrillic letter.
+ * «П» has none, so the migration track has no look-alike to catch.
+ */
 const LATIN_LOOKALIKES = Object.freeze({ "А": "A", "В": "B" });
 
 /**
@@ -120,6 +128,7 @@ export function releaseLetterLookalike(milestoneTitle) {
   for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
     const cyrillic = TRACK_RELEASE_LETTERS[track];
     const latin = LATIN_LOOKALIKES[cyrillic];
+    if (!latin) continue;
     if (new RegExp(`^${prefix}\\s+${latin}\\d+(?:\\.\\d+)*(?=\\s|—|$)`).test(title)) return cyrillic;
   }
   return null;
@@ -127,11 +136,13 @@ export function releaseLetterLookalike(milestoneTitle) {
 
 /**
  * Feature title prefix ↔ the track label that prefix implies.
- * `[Академия][NNN] …` is an academy feature, `[Витрина][NNN] …` a showcase one.
+ * `[Академия][NNN] …` is an academy feature, `[Витрина][NNN] …` a showcase one,
+ * `[Переезд][NNN] …` a migration one.
  */
 export const FEATURE_TITLE_TRACKS = Object.freeze({
   "[Академия]": "track:academy",
   "[Витрина]": "track:doctor",
+  "[Переезд]": "track:migration",
 });
 
 /** Normalise an arbitrary value into a trimmed string (never null/undefined). */
@@ -150,7 +161,7 @@ export function isReleaseGateTitle(title) {
 }
 
 /**
- * The feature title prefix (`[Академия]` / `[Витрина]`) this title carries, or
+ * The feature title prefix (a FEATURE_TITLE_TRACKS key) this title carries, or
  * null when it is not a feature-level title.
  * @param {string} title
  * @returns {string|null}
@@ -339,8 +350,9 @@ export function roadmapFindingsFor(row) {
   //     Platform-task row and `.claude/rules/repo-conventions.md` (Issue
   //     conventions) both say platform work takes the milestone of the release
   //     it `blocked_by`-blocks, so `track:platform` on «Академия R1 …» is the
-  //     documented shape, not a defect. Only academy ↔ Витрина / doctor ↔
-  //     Академия cross-homing is a violation.
+  //     documented shape, not a defect. Only a product track (academy,
+  //     doctor, migration) homed on another product track's milestone is a
+  //     violation.
   const msTrack = milestoneTrack(milestone);
   if (msTrack) {
     const trackLabels = labels.filter((l) => l in TRACK_MILESTONE_PREFIXES);

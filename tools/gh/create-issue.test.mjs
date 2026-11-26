@@ -634,6 +634,29 @@ test("productTrackMilestoneError accepts the track's own release, old R and new 
     assert.equal(productTrackMilestoneError(["--label", "track:academy"], m, neverListed), null);
 });
 
+test("productTrackMilestoneError homes track:migration on «Переезд …» only (#4289)", () => {
+  assert.equal(trackLabelError(["--label", "track:migration"]), null);
+  for (const m of ["Переезд П1 — Врачи старой платформы на новой", "Переезд · Позже"])
+    assert.equal(productTrackMilestoneError(["--label", "track:migration"], m, neverListed), null);
+  const opened = [...OPEN_MILESTONES, "Переезд П1 — Врачи старой платформы на новой"];
+  for (const m of ["Витрина В4 — Новая витрина", "Академия А3 — Каталоги", FALLBACK_MILESTONE]) {
+    const err = productTrackMilestoneError(["--label", "track:migration"], m, () => opened);
+    assert.match(err, /track:migration/);
+    // The hint names the prefix, never a backlog milestone that may not exist.
+    assert.ok(err.includes("starts with «Переезд»"));
+    assert.ok(!err.includes("«Переезд · Позже»"));
+    assert.ok(err.includes("«Переезд П1 — Врачи старой платформы на новой»"));
+    assert.ok(!err.includes("«Витрина R1 — MVP витрины»"));
+  }
+  // The product tracks refuse a migration release in turn.
+  assert.match(
+    productTrackMilestoneError(
+      ["--label", "track:doctor"], "Переезд П1 — Врачи старой платформы на новой", () => [],
+    ),
+    /track:doctor/,
+  );
+});
+
 test("productTrackMilestoneError keeps the fallback for track:platform", () => {
   assert.equal(
     productTrackMilestoneError(["--label", "track:platform"], FALLBACK_MILESTONE, neverListed),

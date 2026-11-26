@@ -104,6 +104,7 @@ import {
   isEpicTitle,
   parseIssueBoardNode,
   roadmapHygiene,
+  TRACK_LABELS,
 } from "./gh/lib/roadmap-taxonomy.mjs";
 import {
   closesRefs,
@@ -476,12 +477,12 @@ export interface Triage {
 
 /**
  * The `track:*` label an Issue carries; null when it carries none. With several,
- * the first in academy/doctor/platform order wins, so the result never depends
- * on label order.
+ * the first in GROOM_TRACKS order wins, so the result never depends on label
+ * order.
  */
 export function trackOf(labels: string[]): string | null {
   const names = new Set(labels.map((l) => l.trim()));
-  for (const track of ["track:academy", "track:doctor", "track:platform"])
+  for (const track of GROOM_TRACKS)
     if (names.has(track)) return track;
   return null;
 }
@@ -888,12 +889,11 @@ export function claimLabel(claim: ClaimSignal): string {
 
 // ── grooming sections (#1873) — pure seams ──────────────────────────────────
 
-/** The track sub-headings every grooming section groups by (#1873). */
-export const GROOM_TRACKS = [
-  "track:academy",
-  "track:doctor",
-  "track:platform",
-] as const;
+/**
+ * The track sub-headings every grooming section groups by (#1873), in the
+ * shared taxonomy's order.
+ */
+export const GROOM_TRACKS: readonly string[] = TRACK_LABELS;
 
 /** One grouped row of a grooming section: a track bucket plus its rendered line. */
 export interface TrackRow {
@@ -1049,7 +1049,7 @@ export interface WaitForReuse {
   via: "registry" | "reuse-field";
 }
 
-/** The two product tracks that must not build the same block twice (#1873). */
+/** The two storefront tracks that must not build the same block twice (#1873). */
 const PAIRED_TRACK: Record<string, string> = {
   "track:academy": "track:doctor",
   "track:doctor": "track:academy",

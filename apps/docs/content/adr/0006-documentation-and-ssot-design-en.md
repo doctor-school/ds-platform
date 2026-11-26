@@ -950,7 +950,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 
 **Setup for each feature:**
 
-1. **Assign the release Milestone.** Put the feature in the milestone of the release it ships in, or open the next one for its track (release name `«<Трек> <буква><n> — <результат>»`, not `NNN-<slug>`); anything beyond the two nearest releases goes to the track backlog milestone («Академия · Позже» / «Витрина · Позже»):
+1. **Assign the release Milestone.** Put the feature in the milestone of the release it ships in, or open the next one for its track (release name `«<Трек> <буква><n> — <результат>»`, not `NNN-<slug>`); anything beyond the two nearest releases goes to the track backlog milestone («<Трек> · Позже», e.g. «Академия · Позже»):
 
    ```
    Академия А3 — Каталоги — the next Academy release; holds 1–4 feature-level Issues, this feature among them.

@@ -6,6 +6,8 @@ import {
   type CongressSubmissionReceiptRequest,
   type CongressSubmissionReminderRequest,
   type SchoolOpenedNoticeRequest,
+  type ApplicationReceiptRequest,
+  type ApplicationTeamNoticeRequest,
   type Mailer,
 } from "./mailer.types.js";
 import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
@@ -51,6 +53,18 @@ export class FakeMailer implements Mailer {
   readonly congressSubmissionReceipts: Array<
     CongressSubmissionReceiptRequest & { to: string }
   > = [];
+  /** Every accepted 033 EARS-11 team notification, in order. */
+  readonly applicationTeamNotices: Array<
+    ApplicationTeamNoticeRequest & { to: string }
+  > = [];
+  /** Every accepted 033 EARS-12 «Заявка получена» receipt, in order. */
+  readonly applicationReceipts: Array<
+    ApplicationReceiptRequest & { to: string }
+  > = [];
+  /** When set, the NEXT team notification rejects with it (033 EARS-11). */
+  private nextApplicationTeamNoticeFailure: Error | undefined;
+  /** When set, the NEXT receipt rejects with it (033 EARS-12). */
+  private nextApplicationReceiptFailure: Error | undefined;
   /** Every accepted 023 EARS-7 school-opened notice, in order. */
   readonly schoolOpenedNotices: Array<SchoolOpenedNoticeRequest & { to: string }> =
     [];
@@ -206,6 +220,46 @@ export class FakeMailer implements Mailer {
       this.schoolOpenedHold = undefined;
       release();
     };
+  }
+
+  /** Test control for 033 EARS-11: the NEXT team notification rejects. */
+  failNextApplicationTeamNotice(error: Error): void {
+    this.nextApplicationTeamNoticeFailure = error;
+  }
+
+  /** Test control for 033 EARS-12: the NEXT receipt rejects. */
+  failNextApplicationReceipt(error: Error): void {
+    this.nextApplicationReceiptFailure = error;
+  }
+
+  async sendApplicationTeamNotice(
+    input: ApplicationTeamNoticeRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextApplicationTeamNoticeFailure) {
+      const failure = this.nextApplicationTeamNoticeFailure;
+      this.nextApplicationTeamNoticeFailure = undefined;
+      throw failure;
+    }
+    this.applicationTeamNotices.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
+    return Promise.resolve();
+  }
+
+  async sendApplicationReceipt(input: ApplicationReceiptRequest): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextApplicationReceiptFailure) {
+      const failure = this.nextApplicationReceiptFailure;
+      this.nextApplicationReceiptFailure = undefined;
+      throw failure;
+    }
+    this.applicationReceipts.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
+    return Promise.resolve();
   }
 
   async sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void> {

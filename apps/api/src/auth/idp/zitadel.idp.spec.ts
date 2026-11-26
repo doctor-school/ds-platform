@@ -484,6 +484,8 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
       sendCongressRegistrationConfirmation: () => Promise.resolve(),
       sendCongressSubmissionReceipt: () => Promise.resolve(),
       sendSchoolOpenedNotice: () => Promise.resolve(),
+      sendApplicationTeamNotice: () => Promise.resolve(),
+      sendApplicationReceipt: () => Promise.resolve(),
       sendCongressSubmissionDecision: () => Promise.resolve(),
       sendCongressSubmissionReminder: () => Promise.resolve(),
     };

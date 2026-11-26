@@ -387,6 +387,8 @@ describe("AuthService.register — re-registration code mail (003 EARS-23)", () 
       sendCongressSubmissionReceipt: () =>
         Promise.reject(new Error("smtp down")),
       sendSchoolOpenedNotice: () => Promise.reject(new Error("smtp down")),
+      sendApplicationTeamNotice: () => Promise.reject(new Error("smtp down")),
+      sendApplicationReceipt: () => Promise.reject(new Error("smtp down")),
       sendCongressSubmissionDecision: () =>
         Promise.reject(new Error("smtp down")),
       sendCongressSubmissionReminder: () =>
@@ -1075,6 +1077,8 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       sendCongressSubmissionReceipt: () =>
         Promise.reject(new Error("smtp down")),
       sendSchoolOpenedNotice: () => Promise.reject(new Error("smtp down")),
+      sendApplicationTeamNotice: () => Promise.reject(new Error("smtp down")),
+      sendApplicationReceipt: () => Promise.reject(new Error("smtp down")),
       sendCongressSubmissionDecision: () =>
         Promise.reject(new Error("smtp down")),
       sendCongressSubmissionReminder: () =>

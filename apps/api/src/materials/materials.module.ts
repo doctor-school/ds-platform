@@ -41,6 +41,7 @@ import { VkCallbackController } from "./vk/vk-callback.controller.js";
 import { VkCallMonthsRepository } from "./vk/vk-call-months.repository.js";
 import { VK_CONFIG, vkConfigFromEnv, type VkConfig } from "./vk/vk-config.js";
 import { VkFeedSource } from "./vk/vk.feed-source.js";
+import { VkHistoryImport } from "./vk/vk-history-import.command.js";
 import { VkSourceCheck } from "./vk/vk-source-check.service.js";
 import { VkWallReconcile } from "./vk/vk-wall-reconcile.service.js";
 
@@ -98,6 +99,7 @@ import { VkWallReconcile } from "./vk/vk-wall-reconcile.service.js";
       ): VkApi => new VkApiClient(config?.serviceKey ?? null, counter),
     },
     VkFeedSource,
+    VkHistoryImport,
     VkSourceCheck,
     VkWallReconcile,
   ],

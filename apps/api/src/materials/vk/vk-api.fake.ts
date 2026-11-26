@@ -1,6 +1,7 @@
 import {
   VkApiError,
   type VkApi,
+  type VkCallCounter,
   type VkCallOutcome,
   type VkGroup,
   type VkGroupRef,
@@ -28,6 +29,11 @@ export class FakeVkApi implements VkApi {
   outage: Extract<VkCallOutcome, "timeout" | "network_error"> | null = null;
   /** While set, every call answers this VK error code (an `api_error`). */
   apiErrorCode: number | null = null;
+  /**
+   * While set, every call is counted here before it is answered, as the real
+   * client counts each call before its request (EARS-44, EARS-46).
+   */
+  counter: VkCallCounter | null = null;
 
   reset(): void {
     this.calls.length = 0;
@@ -35,10 +41,11 @@ export class FakeVkApi implements VkApi {
     this.walls.clear();
     this.outage = null;
     this.apiErrorCode = null;
+    this.counter = null;
   }
 
   async wallGet(params: WallGetParams): Promise<WallPage> {
-    this.record("wall.get", params);
+    await this.record("wall.get", params);
     const wall = this.walls.get(-params.owner_id);
     if (!wall) throw new VkApiError("wall.get", "api_error", 200, 100);
     const offset = params.offset ?? 0;
@@ -49,7 +56,7 @@ export class FakeVkApi implements VkApi {
   }
 
   async groupsGetById(group: VkGroupRef): Promise<VkGroup[]> {
-    this.record("groups.getById", group);
+    await this.record("groups.getById", group);
     const found =
       typeof group === "number"
         ? this.groups.get(group)
@@ -63,8 +70,9 @@ export class FakeVkApi implements VkApi {
     return [found];
   }
 
-  private record(method: string, ...args: unknown[]): void {
+  private async record(method: string, ...args: unknown[]): Promise<void> {
     this.calls.push({ method, args });
+    await this.counter?.count();
     if (this.outage) throw new VkApiError(method, this.outage, null, null);
     if (this.apiErrorCode !== null) {
       throw new VkApiError(method, "api_error", 200, this.apiErrorCode);

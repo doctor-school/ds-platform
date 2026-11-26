@@ -225,6 +225,17 @@ export class FeedSourcesRepository {
     return row;
   }
 
+  /** EARS-46 — the VK source of a normalized address, if listed. */
+  async findVkByAddress(address: string): Promise<FeedSource | undefined> {
+    const [row] = await this.handle
+      .select()
+      .from(feedSources)
+      .where(
+        and(eq(feedSources.platform, "vk"), eq(feedSources.address, address)),
+      );
+    return row;
+  }
+
   /**
    * EARS-40 — the VK source bound to a community id, locked for the event's
    * transaction (so a «Выключить» and the write of an event never

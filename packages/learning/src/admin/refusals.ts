@@ -6,7 +6,12 @@ import {
 } from "@ds/schemas";
 import { z } from "zod";
 
-import { FIELD_LABEL, RULES_COPY, SETTING_LABEL } from "./admin-copy";
+import {
+  FIELD_LABEL,
+  RULES_COPY,
+  SETTING_LABEL,
+  STRUCTURE_COPY,
+} from "./admin-copy";
 import { asRefusal } from "./transport";
 
 // 024 EARS-4 / EARS-28 — a refusal in the staff member's words. The server
@@ -107,4 +112,20 @@ export function authorityRefusal(
       : RULES_COPY.readOnly.published;
   if (code === "PLATFORM_ADMIN_REQUIRED") return RULES_COPY.readOnly.draft;
   return null;
+}
+
+/**
+ * 023 EARS-26…EARS-28 — a refused structure write (school, course, module) in
+ * the staff member's words: a stale version, a taken slug, an empty course's
+ * publish, an already-made transition; otherwise its field errors.
+ */
+export function structureRefusalLines(error: unknown): string[] {
+  const r = asRefusal(error);
+  if (isStale(error)) return [STRUCTURE_COPY.stale];
+  if (r.errorCode === "SLUG_CONFLICT") return [STRUCTURE_COPY.slugTaken];
+  if (r.errorCode === "PUBLISH_REQUIREMENTS_NOT_MET")
+    return [STRUCTURE_COPY.coursePublishRefused];
+  if (r.errorCode === "INVALID_TRANSITION")
+    return [STRUCTURE_COPY.alreadyInState];
+  return refusedFieldLines(error);
 }

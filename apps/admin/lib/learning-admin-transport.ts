@@ -2,6 +2,7 @@
 
 import type { LearningAdminTransport } from "@ds/learning/admin";
 import type {
+  LearningCourseAdmin,
   LearningCourseComposition,
   LearningCourseList,
   LearningLessonAdmin,
@@ -9,6 +10,8 @@ import type {
   LearningPreset,
   LearningPresetList,
   LearningRuleChangePreview,
+  LearningSchoolAdmin,
+  LearningSchoolAdminDetail,
   LearningScopeRules,
   LearningStepAdmin,
 } from "@ds/schemas";
@@ -49,7 +52,73 @@ export async function listLearningCourses() {
   return (await call<LearningCourseList>(learningUrl.courses(), "get")).data;
 }
 
+/** 023 EARS-26 — a new (draft) school through the 024 admin create. */
+export function createLearningSchool(body: {
+  directionId: string;
+  leadExpertId: string;
+  projectId: string;
+  title: string;
+  slug: string;
+}) {
+  return call<LearningSchoolAdmin>(learningUrl.schools(), "post", body);
+}
+
 export const learningAdminTransport: LearningAdminTransport = {
+  // 023 EARS-26, EARS-27 (#4018)
+  school: (id) => call<LearningSchoolAdminDetail>(learningUrl.school(id), "get"),
+  schoolCourses: async (id) =>
+    (await call<LearningCourseList>(learningUrl.schoolCourses(id), "get")).data,
+  updateSchool: (id, body, version) =>
+    call<LearningSchoolAdmin>(learningUrl.school(id), "patch", body, version),
+  publishSchool: (id, version) =>
+    call<LearningSchoolAdmin>(
+      learningUrl.schoolState(id, "publish"),
+      "post",
+      undefined,
+      version,
+    ),
+  unpublishSchool: (id, version) =>
+    call<LearningSchoolAdmin>(
+      learningUrl.schoolState(id, "unpublish"),
+      "post",
+      undefined,
+      version,
+    ),
+  reorderCourses: (id, courseIds, version) =>
+    call<LearningSchoolAdmin>(
+      learningUrl.courseOrder(id),
+      "put",
+      { courseIds },
+      version,
+    ),
+  createCourse: (body) =>
+    call<LearningCourseAdmin>(learningUrl.courses(), "post", body),
+  updateCourse: (id, body, version) =>
+    call<LearningCourseAdmin>(learningUrl.course(id), "patch", body, version),
+  publishCourse: (id, version) =>
+    call<LearningCourseAdmin>(
+      learningUrl.courseState(id, "publish"),
+      "post",
+      undefined,
+      version,
+    ),
+  unpublishCourse: (id, version) =>
+    call<LearningCourseAdmin>(
+      learningUrl.courseState(id, "unpublish"),
+      "post",
+      undefined,
+      version,
+    ),
+  reorderModules: (id, moduleIds, version) =>
+    call<LearningCourseAdmin>(
+      learningUrl.moduleOrder(id),
+      "put",
+      { moduleIds },
+      version,
+    ),
+  updateModule: (id, body, version) =>
+    call<LearningModuleAdmin>(learningUrl.module(id), "patch", body, version),
+  // 024
   course: (id) => call<LearningCourseComposition>(learningUrl.course(id), "get"),
   createModule: (body) =>
     call<LearningModuleAdmin>(learningUrl.modules(), "post", body),

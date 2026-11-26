@@ -1,6 +1,8 @@
 import { vi } from "vitest";
 import type {
+  LearningCourseAdmin,
   LearningCourseComposition,
+  LearningSchoolAdminDetail,
   LearningLessonAdmin,
   LearningPreset,
   LearningScopeRules,
@@ -27,7 +29,43 @@ export const AID = {
   q1: "40000000-0000-4000-8000-000000000001",
   o1: "40000000-0000-4000-8000-000000000002",
   o2: "40000000-0000-4000-8000-000000000003",
+  course2: "10000000-0000-4000-8000-000000000007",
+  module2: "10000000-0000-4000-8000-000000000008",
+  direction: "10000000-0000-4000-8000-000000000009",
+  expert: "10000000-0000-4000-8000-00000000000a",
 } as const;
+
+/** 023 EARS-26 — the school the editor opens. */
+export function school(
+  over: Partial<LearningSchoolAdminDetail> = {},
+): LearningSchoolAdminDetail {
+  return {
+    id: AID.school,
+    directionId: AID.direction,
+    leadExpertId: AID.expert,
+    projectId: AID.project,
+    slug: "cardio",
+    title: "Школа кардиологии",
+    state: "draft",
+    description: "Сердце и сосуды",
+    facts: [{ label: "Формат", text: "Видео и тесты" }],
+    soonNote: null,
+    communityUrl: null,
+    mentoringOffer: null,
+    internshipOffer: null,
+    version: 4,
+    activeInterestCount: 7,
+    ...over,
+  };
+}
+
+/** A course row of the school list (no modules). */
+export function courseRow(
+  over: Partial<LearningCourseAdmin> = {},
+): LearningCourseAdmin {
+  const { modules: _m, ...row } = course();
+  return { ...row, ...over };
+}
 
 export function step(over: Partial<LearningStepAdmin> = {}): LearningStepAdmin {
   return {
@@ -181,6 +219,21 @@ export function fakeTransport(
 ): LearningAdminTransport &
   Record<keyof LearningAdminTransport, ReturnType<typeof vi.fn>> {
   const t = {
+    school: vi.fn(async () => school()),
+    schoolCourses: vi.fn(async () => [
+      courseRow(),
+      courseRow({ id: AID.course2, slug: "echo", title: "ЭхоКГ", position: 2 }),
+    ]),
+    updateSchool: vi.fn(async () => school({ version: 5 })),
+    publishSchool: vi.fn(async () => school({ state: "published", version: 5 })),
+    unpublishSchool: vi.fn(async () => school({ version: 5 })),
+    reorderCourses: vi.fn(async () => school({ version: 5 })),
+    createCourse: vi.fn(async () => courseRow({ id: AID.course2 })),
+    updateCourse: vi.fn(async () => courseRow({ version: 3 })),
+    publishCourse: vi.fn(async () => courseRow({ state: "published", version: 3 })),
+    unpublishCourse: vi.fn(async () => courseRow({ version: 3 })),
+    reorderModules: vi.fn(async () => courseRow({ version: 3 })),
+    updateModule: vi.fn(async () => course().modules[0]),
     course: vi.fn(async () => course()),
     createModule: vi.fn(async () => course().modules[0]),
     createLesson: vi.fn(async () => lesson({ id: AID.lesson2, steps: [] })),

@@ -1,19 +1,26 @@
 import type {
+  CreateLearningCourseRequest,
   CreateLearningLessonRequest,
   CreateLearningModuleRequest,
   CreateLearningStepRequest,
+  LearningCourseAdmin,
   LearningCourseComposition,
   LearningLessonAdmin,
   LearningModuleAdmin,
   LearningEarnedProgress,
   LearningPreset,
   LearningRuleChangePreview,
+  LearningSchoolAdmin,
+  LearningSchoolAdminDetail,
   LearningScopeKind,
   LearningScopeRules,
   LearningStepAdmin,
   LearningSettingValues,
   SetLearningScopeRulesRequest,
   SetLearningStepSourceRequest,
+  UpdateLearningCourseRequest,
+  UpdateLearningModuleRequest,
+  UpdateLearningSchoolRequest,
 } from "@ds/schemas";
 
 // 024 design §1 `./admin` — the port the staff screens call. The admin host
@@ -23,6 +30,56 @@ import type {
 // fake. Every write after a create names the version the screen rendered from.
 
 export interface LearningAdminTransport {
+  // ── 023 EARS-26, EARS-27 — the school and course structure editor ────────
+  /** `GET /v1/admin/learning/schools/{id}` — the school with its interest count. */
+  school(schoolId: string): Promise<LearningSchoolAdminDetail>;
+  /** `GET /v1/admin/learning/courses?schoolId=` — the school's courses in school order. */
+  schoolCourses(schoolId: string): Promise<LearningCourseAdmin[]>;
+  updateSchool(
+    schoolId: string,
+    body: UpdateLearningSchoolRequest,
+    version: number,
+  ): Promise<LearningSchoolAdmin>;
+  publishSchool(schoolId: string, version: number): Promise<LearningSchoolAdmin>;
+  unpublishSchool(
+    schoolId: string,
+    version: number,
+  ): Promise<LearningSchoolAdmin>;
+  /** `PUT …/schools/{id}/course-order` — under the school's version. */
+  reorderCourses(
+    schoolId: string,
+    courseIds: string[],
+    version: number,
+  ): Promise<LearningSchoolAdmin>;
+  /** A new course, placed last in its school; the server defaults its other EARS-1 data. */
+  createCourse(
+    body: Pick<
+      CreateLearningCourseRequest,
+      "schoolId" | "projectId" | "slug" | "title"
+    >,
+  ): Promise<LearningCourseAdmin>;
+  updateCourse(
+    courseId: string,
+    body: UpdateLearningCourseRequest,
+    version: number,
+  ): Promise<LearningCourseAdmin>;
+  publishCourse(courseId: string, version: number): Promise<LearningCourseAdmin>;
+  unpublishCourse(
+    courseId: string,
+    version: number,
+  ): Promise<LearningCourseAdmin>;
+  /** `PUT …/courses/{id}/module-order` — under the course's version. */
+  reorderModules(
+    courseId: string,
+    moduleIds: string[],
+    version: number,
+  ): Promise<LearningCourseAdmin>;
+  updateModule(
+    moduleId: string,
+    body: UpdateLearningModuleRequest,
+    version: number,
+  ): Promise<LearningModuleAdmin>;
+  // ── 024 ──────────────────────────────────────────────────────────────────
   /** `GET /v1/admin/learning/courses/{id}` — modules → lessons (no steps). */
   course(courseId: string): Promise<LearningCourseComposition>;
   createModule(body: CreateLearningModuleRequest): Promise<LearningModuleAdmin>;

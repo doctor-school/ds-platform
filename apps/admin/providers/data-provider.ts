@@ -1223,6 +1223,21 @@ function relationQuery(query: Record<string, unknown>): string {
  */
 const LEARNING_BASE = `${ADMIN_BASE}/learning`;
 export const learningUrl = {
+  // 023 EARS-26, EARS-27 (#4018) — the school and course structure editor.
+  schools: () => `${LEARNING_BASE}/schools`,
+  school: (id: string) => `${LEARNING_BASE}/schools/${encodeURIComponent(id)}`,
+  schoolState: (id: string, verb: "publish" | "unpublish") =>
+    `${LEARNING_BASE}/schools/${encodeURIComponent(id)}/${verb}`,
+  courseOrder: (schoolId: string) =>
+    `${LEARNING_BASE}/schools/${encodeURIComponent(schoolId)}/course-order`,
+  schoolCourses: (schoolId: string) =>
+    `${LEARNING_BASE}/courses?schoolId=${encodeURIComponent(schoolId)}`,
+  courseState: (id: string, verb: "publish" | "unpublish") =>
+    `${LEARNING_BASE}/courses/${encodeURIComponent(id)}/${verb}`,
+  moduleOrder: (courseId: string) =>
+    `${LEARNING_BASE}/courses/${encodeURIComponent(courseId)}/module-order`,
+  module: (id: string) => `${LEARNING_BASE}/modules/${encodeURIComponent(id)}`,
+  // 024
   courses: () => `${LEARNING_BASE}/courses`,
   course: (id: string) => `${LEARNING_BASE}/courses/${encodeURIComponent(id)}`,
   modules: () => `${LEARNING_BASE}/modules`,

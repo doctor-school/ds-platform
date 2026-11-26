@@ -1313,6 +1313,22 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        patch: operations["LearningAdminController_updateCourse"];
+        trace?: never;
+    };
+    "/v1/admin/learning/courses/{id}/module-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningAdminController_reorderModules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1444,6 +1460,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/learning/modules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["LearningAdminController_updateModule"];
+        trace?: never;
+    };
     "/v1/admin/learning/presets": {
         parameters: {
             query?: never;
@@ -1550,6 +1582,54 @@ export interface paths {
         get: operations["LearningAdminController_school"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["LearningAdminController_updateSchool"];
+        trace?: never;
+    };
+    "/v1/admin/learning/schools/{id}/course-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningAdminController_reorderCourses"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/schools/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_publishSchool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/schools/{id}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_unpublishSchool"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8405,6 +8485,48 @@ export interface operations {
             };
         };
     };
+    LearningAdminController_updateCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_reorderModules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
+            };
+        };
+    };
     LearningAdminController_publishCourse: {
         parameters: {
             query?: never;
@@ -8581,6 +8703,27 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningModuleAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_updateModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8794,6 +8937,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningSchoolAdminDetailDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_updateSchool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_reorderCourses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_publishSchool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_unpublishSchool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
                 };
             };
         };

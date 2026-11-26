@@ -14683,6 +14683,60 @@
           }
         },
         "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateCourse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}/module-order": {
+      "put": {
+        "operationId": "LearningAdminController_reorderModules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
       }
     },
     "/v1/admin/learning/courses/{id}/publish": {
@@ -14904,6 +14958,34 @@
         "parameters": [],
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningModuleAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/modules/{id}": {
+      "patch": {
+        "operationId": "LearningAdminController_updateModule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -15187,6 +15269,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LearningSchoolAdminDetailDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateSchool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/schools/{id}/course-order": {
+      "put": {
+        "operationId": "LearningAdminController_reorderCourses",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/schools/{id}/publish": {
+      "post": {
+        "operationId": "LearningAdminController_publishSchool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/schools/{id}/unpublish": {
+      "post": {
+        "operationId": "LearningAdminController_unpublishSchool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDto"
                 }
               }
             },

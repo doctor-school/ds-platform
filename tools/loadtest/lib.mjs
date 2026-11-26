@@ -14,6 +14,7 @@
 // env-overridable) but inverts its default: a load generator must never point at
 // prod by accident.
 
+import { isIP } from "node:net";
 import { resolve as resolvePath } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
@@ -59,25 +60,159 @@ export function floatEnv(name, fallback) {
   return n;
 }
 
-// Prod-host tripwire. A single-source burst against prod measures the rate
-// limiter, not capacity (recon fact 2 — per-IP 20/15min, per-ASN 100/h), and
-// synthetic prod auth traffic can trip real delivery/suppression seams that do
-// not exist yet (Issue #1068). So any scenario that MUTATES prod state gates on
-// this. Match is deliberately broad: the public prod origins all live under the
-// `doctor.school` apex (AGENTS.md §1), so a substring test cannot be dodged by a
-// staging subdomain typo.
-const PROD_HOST_RE = /(^|\.)doctor\.school$/i;
+// Production-target tripwire. The scenarios that load a live room or mutate
+// state through the api (room-fanout, auth-burst, the room-behavior verifier)
+// run through `productionGate` below, each behind its own explicit confirmation
+// env (the verifier behind none), so a production run is never an accident.
+// `isProdTarget` decides what production is; it is name-based and fails closed:
+//
+// • Every name under the `doctor.school` apex is production — the api, the
+//   sign-in host `login.`, both storefronts (`new.`, `academy.`), the IdP `id.`
+//   and the shared `stage.` slots alike (README «Targets»). A fully qualified
+//   name with its trailing root dot (`api.doctor.school.`) is the same host to
+//   DNS and TLS, so trailing dots are stripped before the match.
+// • Every IP literal is production unless `LOADTEST_NON_PROD_IPS` names it
+//   exactly. All production vhosts answer on one box address behind Caddy
+//   (infra/deploy/compose/api-prod/Caddyfile), so a bare address reaches
+//   production with no doctor.school name for the apex rule to see; an address
+//   cannot be told apart by its shape (the dev stand is a private LAN address,
+//   a cloud network is private too), so only the operator can vouch for one.
+//   The WHATWG URL parser canonicalises alternative IPv4 spellings (`0x…`,
+//   a single decimal) and IPv4-mapped IPv6 first, so they cannot dodge it.
+// • Loopback (127.0.0.0/8, ::1) is non-production, exactly like `localhost`,
+//   which the name rule already treats as non-production: a tunnel from a local
+//   port into production is invisible to any host check, which is why the run
+//   protocol, not this function, governs tunnels.
+// No DNS lookup happens here: a non-doctor.school name that resolves to the
+// production box is the operator's configuration, covered by the run protocol.
+const PROD_APEX_RE = /(^|\.)doctor\.school$/;
 
-/** True when a URL/origin resolves to a live prod host. */
-export function isProdTarget(origin) {
-  let host;
+/**
+ * The canonical lower-case hostname of a URL/origin or a bare host string:
+ * no port, no IPv6 brackets, no trailing root dots. Alternative IPv4 spellings
+ * come back as dotted quads (the WHATWG URL host parser).
+ */
+export function targetHostname(origin) {
+  const raw = String(origin ?? "").trim();
+  let url;
   try {
-    host = new URL(origin).host.split(":")[0];
+    url = new URL(raw);
   } catch {
-    // Not a URL — treat a bare "doctor.school" string as prod too.
-    host = String(origin).trim();
+    url = null;
   }
-  return PROD_HOST_RE.test(host);
+  // A bare host ("doctor.school.", "77.233.220.222", "[::1]:3000") is not an
+  // absolute URL; parse it as the host of one so it is canonicalised the same way.
+  if (!url || !url.hostname) {
+    try {
+      url = new URL(`http://${raw}`);
+    } catch {
+      return raw.toLowerCase().replace(/\.+$/, "");
+    }
+  }
+  return url.hostname
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1")
+    .replace(/\.+$/, "");
+}
+
+/** True for a loopback IP literal (127.0.0.0/8, ::1, IPv4-mapped loopback). */
+function isLoopbackIp(ip) {
+  if (isIP(ip) === 4) return ip.startsWith("127.");
+  const v6 = ip.toLowerCase();
+  if (v6 === "::1") return true;
+  // The URL parser renders ::ffff:127.0.0.1 as ::ffff:7f00:1.
+  return /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(v6);
+}
+
+/** The exact IP literals `LOADTEST_NON_PROD_IPS` vouches for, canonicalised. */
+function nonProdIps(env) {
+  const raw = (env.LOADTEST_NON_PROD_IPS ?? "").trim();
+  if (!raw) return new Set();
+  const ips = new Set();
+  for (const entry of raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    // The bare entry itself must be an address: parsing it as a URL first would
+    // quietly turn a range like "192.168.1.0/24" into the one host 192.168.1.0.
+    if (isIP(entry.replace(/^\[(.*)\]$/, "$1")) === 0) {
+      throw new Error(
+        `LOADTEST_NON_PROD_IPS entry ${JSON.stringify(entry)} is not an IP literal — ` +
+          `the allowlist names exact non-production addresses only (no ranges, no hostnames)`,
+      );
+    }
+    ips.add(targetHostname(entry));
+  }
+  return ips;
+}
+
+/** True when a URL/origin is, or may be, a production host (see above). */
+export function isProdTarget(origin, env = process.env) {
+  const host = targetHostname(origin);
+  if (PROD_APEX_RE.test(host)) return true;
+  if (isIP(host) === 0) return false;
+  if (isLoopbackIp(host)) return false;
+  return !nonProdIps(env).has(host);
+}
+
+/**
+ * Every env var naming an origin a gated run requests or presents itself as:
+ * the api, the storefront whose door and callback a sign-in drives, the sign-in
+ * host the password step posts as, and the Centrifugo origin. One list for
+ * every gate, so no scenario can leave one of them unchecked: a production
+ * value in any of them is a production run.
+ */
+export const RUN_ORIGIN_ENV = Object.freeze([
+  "LOADTEST_API_ORIGIN",
+  "LOADTEST_STOREFRONT_ORIGIN",
+  "LOADTEST_SIGN_IN_HOST_ORIGIN",
+  "LOADTEST_CENTRIFUGO_ORIGIN",
+]);
+
+/** The origin of a URL for a refusal message, never its path or query (a callback carries a code). */
+function displayOrigin(url) {
+  try {
+    const { origin } = new URL(String(url).trim());
+    if (origin && origin !== "null") return origin;
+  } catch {
+    // A bare host: fall through to its canonical name.
+  }
+  return targetHostname(url);
+}
+
+/**
+ * The one production gate of a gated scenario. Before any request it checks
+ * every origin the run will request: each `RUN_ORIGIN_ENV` value that is set,
+ * plus `origins` (label → origin) the caller resolved itself. It returns
+ * `allowTarget(url, what)`, which the run calls before each request to a URL
+ * no env var names — the IdP authorize hop and the storefront callback a
+ * sign-in follows, the WebSocket a room grant names — so a server answer
+ * cannot route the run into production either.
+ *
+ * A production target is refused unless `confirmation` names an env var set
+ * to exactly `1`; `confirmation: null` refuses production outright. One
+ * scenario's confirmation never unlocks another's gate.
+ */
+export function productionGate(
+  { scenario, confirmation = null, refusal, origins = {} },
+  env = process.env,
+) {
+  const confirmed = confirmation !== null && env[confirmation] === "1";
+  const allowTarget = (url, what) => {
+    if (confirmed || !isProdTarget(url, env)) return;
+    throw new Error(
+      `REFUSING to run ${scenario} against production target ${what} ` +
+        `${JSON.stringify(displayOrigin(url))}: ${refusal}`,
+    );
+  };
+  for (const name of RUN_ORIGIN_ENV) {
+    const value = (env[name] ?? "").trim();
+    if (value) allowTarget(value, name);
+  }
+  for (const [what, origin] of Object.entries(origins)) {
+    if (origin) allowTarget(origin, what);
+  }
+  return allowTarget;
 }
 
 /**
@@ -234,7 +369,9 @@ export function report(name, samples, { p95Ms, errorRate } = {}) {
     failures.push(`p95 ${p95}ms > threshold ${p95Ms}ms`);
   }
   if (errorRate != null && samples.errorRate > errorRate) {
-    failures.push(`error-rate ${er}% > threshold ${(errorRate * 100).toFixed(1)}%`);
+    failures.push(
+      `error-rate ${er}% > threshold ${(errorRate * 100).toFixed(1)}%`,
+    );
   }
   if (samples.count === 0) failures.push("zero requests issued");
 

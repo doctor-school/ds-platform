@@ -10,6 +10,7 @@ import {
   evaluateBehaviorTrace,
   formatBehaviorReport,
   parseCentrifugoReplyData,
+  runRoomBehaviorVerification,
   selectBehaviorCredentials,
 } from "./room-behavior.mjs";
 import {
@@ -79,10 +80,30 @@ test("#1139 verifier derives one exact websocket target from the explicit Centri
       "wss://truenas.local:8443/connection/websocket",
     ],
     ["http://localhost:8000", "ws://localhost:8000/connection/websocket"],
-    ["http://192.168.1.20:8100", "ws://192.168.1.20:8100/connection/websocket"],
+    ["http://127.0.0.1:8100", "ws://127.0.0.1:8100/connection/websocket"],
     ["http://localhost.:8000/", "ws://localhost:8000/connection/websocket"],
   ]) {
-    assert.equal(deriveExpectedCentrifugoWebSocketUrl(origin), expected);
+    assert.equal(deriveExpectedCentrifugoWebSocketUrl(origin, {}), expected);
+  }
+
+  // A LAN address is accepted only when the operator vouches for it, exactly
+  // as every other production tripwire treats IP literals (lib.mjs isProdTarget).
+  assert.equal(
+    deriveExpectedCentrifugoWebSocketUrl("http://192.168.1.20:8100", {
+      LOADTEST_NON_PROD_IPS: "192.168.1.20",
+    }),
+    "ws://192.168.1.20:8100/connection/websocket",
+  );
+  for (const origin of [
+    "http://192.168.1.20:8100",
+    "http://77.233.220.222:8100",
+    "http://[2a03:6f00::1]:8100",
+  ]) {
+    assert.throws(
+      () => deriveExpectedCentrifugoWebSocketUrl(origin, {}),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*production.*LOADTEST_NON_PROD_IPS/,
+      origin,
+    );
   }
 
   for (const origin of [
@@ -105,8 +126,8 @@ test("#1139 verifier derives one exact websocket target from the explicit Centri
     "https://centrifugo.doctor.school.",
   ]) {
     assert.throws(
-      () => deriveExpectedCentrifugoWebSocketUrl(origin),
-      /LOADTEST_CENTRIFUGO_ORIGIN.*known production doctor\.school/,
+      () => deriveExpectedCentrifugoWebSocketUrl(origin, {}),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*possible production host.*doctor\.school/,
     );
   }
 });
@@ -477,4 +498,117 @@ test("EARS-5: a repeated run fails fast when the participant is still inside the
     () => assertFreshJoinPrecondition(2, 2, 15),
     /already inside the 2×N freshness window.*30s.*fresh synthetic accounts/,
   );
+});
+
+// --- room:verify refuses production on every origin it requests -------------
+// Stubbed fetch only: a broken guard reaches a scripted stand, never a network.
+
+/**
+ * Run `fn` with a scripted `fetch` and exactly the given `LOADTEST_*` env (any
+ * other `LOADTEST_*` value of the shell is cleared); restore both after.
+ */
+async function withScriptedStand(env, route, fn) {
+  const calls = [];
+  const savedFetch = globalThis.fetch;
+  const savedEnv = {};
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("LOADTEST_")) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  }
+  for (const [k, v] of Object.entries(env)) {
+    if (!(k in savedEnv)) savedEnv[k] = undefined;
+    process.env[k] = v;
+  }
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return route(String(url));
+  };
+  try {
+    await fn();
+    return { error: undefined, calls };
+  } catch (error) {
+    return { error, calls };
+  } finally {
+    globalThis.fetch = savedFetch;
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+const VERIFY_RUN = {
+  origin: "http://localhost:3000",
+  centrifugoOrigin: "http://localhost:8100",
+  eventId: "seed-005-live",
+  credentials: [
+    { email: "observer@loadtest.invalid", password: "pw" },
+    { email: "participant@loadtest.invalid", password: "pw" },
+  ],
+  publicationGraceMs: 1_000,
+  commandTimeoutMs: 1_000,
+};
+
+/** Every scenario confirmation set: none of them may unlock room:verify. */
+const EVERY_CONFIRMATION = {
+  LOADTEST_ROOM_PROD_CONFIRMED: "1",
+  LOADTEST_SUPPRESSION_CONFIRMED: "1",
+};
+
+test("room:verify refuses a production storefront or sign-in host origin before any request, whatever is confirmed", async () => {
+  for (const [name, value, rest] of [
+    [
+      "LOADTEST_STOREFRONT_ORIGIN",
+      "https://new.doctor.school",
+      { LOADTEST_SIGN_IN_HOST_ORIGIN: "http://localhost:3005" },
+    ],
+    [
+      "LOADTEST_SIGN_IN_HOST_ORIGIN",
+      "https://login.doctor.school",
+      { LOADTEST_STOREFRONT_ORIGIN: "http://localhost:3004" },
+    ],
+  ]) {
+    const { error, calls } = await withScriptedStand(
+      { ...rest, [name]: value, ...EVERY_CONFIRMATION },
+      () => new globalThis.Response(null, { status: 404 }),
+      () => runRoomBehaviorVerification(VERIFY_RUN),
+    );
+    assert.match(
+      String(error?.message),
+      new RegExp(
+        `REFUSING to run room:verify against production target ${name}`,
+      ),
+      name,
+    );
+    assert.deepEqual(calls, [], name);
+  }
+});
+
+test("room:verify refuses a production IdP its stand storefront redirects to, before requesting it", async () => {
+  const door = "http://localhost:3004/login";
+  const { error, calls } = await withScriptedStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: "http://localhost:3004",
+      LOADTEST_SIGN_IN_HOST_ORIGIN: "http://localhost:3005",
+      ...EVERY_CONFIRMATION,
+    },
+    (url) =>
+      url === door
+        ? new globalThis.Response(null, {
+            status: 303,
+            headers: {
+              location:
+                "https://id.doctor.school/oauth/v2/authorize?client_id=doctor",
+            },
+          })
+        : new globalThis.Response(null, { status: 404 }),
+    () => runRoomBehaviorVerification(VERIFY_RUN),
+  );
+  assert.match(
+    String(error?.message),
+    /REFUSING to run room:verify against production target the IdP authorize hop/,
+  );
+  assert.deepEqual(calls, [door]);
 });

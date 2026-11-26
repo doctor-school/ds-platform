@@ -52,13 +52,16 @@ export function loadManifestCredentials() {
 
 /**
  * A storefront session through the sign-in host and the storefront callback;
- * returns the replayable Cookie header or null on refusal/failure.
+ * returns the replayable Cookie header or null on refusal/failure. Every
+ * sign-in request passes `allowTarget`, the running scenario's production gate
+ * (lib.mjs `productionGate`); omitted, production is refused outright.
  */
-export async function loginCookie(origin, email, password) {
+export async function loginCookie(origin, email, password, allowTarget) {
   const { cookie } = await hostSignIn(origin, {
     email,
     password,
     headers: roomSessionHeaders(undefined),
+    allowTarget,
   });
   return cookie;
 }

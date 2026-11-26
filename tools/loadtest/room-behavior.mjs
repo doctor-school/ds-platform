@@ -13,6 +13,7 @@ import {
   intEnv,
   invokedDirectly,
   isProdTarget,
+  productionGate,
   reqEnv,
   timedFetch,
 } from "./lib.mjs";
@@ -63,6 +64,47 @@ export function assertDevStandOrigin(origin) {
   }
 }
 
+/** `fn` with every error it throws re-thrown as a BehaviorSetupError (exit 3, no behavioral claim). */
+function asSetupError(fn) {
+  return (...args) => {
+    try {
+      return fn(...args);
+    } catch (error) {
+      throw new BehaviorSetupError(error.message);
+    }
+  };
+}
+
+/**
+ * The verifier's production gate (lib.mjs `productionGate`) with no
+ * confirmation: production is refused outright on every origin the run
+ * requests — the api and Centrifugo origins, every `RUN_ORIGIN_ENV` value (the
+ * storefront door, the sign-in host), and each URL a sign-in follows from a
+ * server answer (the IdP authorize hop, the storefront callback). No scenario
+ * confirmation unlocks it. Returns the per-URL `allowTarget` check.
+ */
+export function assertRoomVerifyAllowed(
+  { origin, centrifugoOrigin },
+  env = process.env,
+) {
+  const allowTarget = asSetupError(productionGate)(
+    {
+      scenario: "room:verify",
+      confirmation: null,
+      refusal:
+        "the #1139 verifier is a dev-stand Stage-B artifact generator and never runs " +
+        "against production; no confirmation unlocks it (tools/loadtest/README.md " +
+        "«Production tripwires»).",
+      origins: {
+        LOADTEST_API_ORIGIN: origin,
+        LOADTEST_CENTRIFUGO_ORIGIN: centrifugoOrigin,
+      },
+    },
+    env,
+  );
+  return asSetupError(allowTarget);
+}
+
 function normalizedUrlHost(parsed) {
   const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "");
   return parsed.port ? `${hostname}:${parsed.port}` : hostname;
@@ -71,9 +113,15 @@ function normalizedUrlHost(parsed) {
 /**
  * Derive the verifier's single allowed websocket endpoint from the operator's
  * authoritative dev-stand Centrifugo HTTP(S) origin. The expected value itself
- * must be an origin, never a credential-bearing URL or an endpoint-shaped path.
+ * must be an origin, never a credential-bearing URL or an endpoint-shaped path,
+ * and never a production target by the harness-wide rule (lib.mjs
+ * `isProdTarget`: any doctor.school name, any IP literal the operator has not
+ * listed in LOADTEST_NON_PROD_IPS).
  */
-export function deriveExpectedCentrifugoWebSocketUrl(origin) {
+export function deriveExpectedCentrifugoWebSocketUrl(
+  origin,
+  env = process.env,
+) {
   let parsed;
   try {
     parsed = new URL(origin);
@@ -94,10 +142,10 @@ export function deriveExpectedCentrifugoWebSocketUrl(origin) {
       "LOADTEST_CENTRIFUGO_ORIGIN must be an explicit HTTP(S) origin with no credentials, path, query, or fragment",
     );
   }
-  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "");
-  if (isProdTarget(hostname)) {
+  if (isProdTarget(parsed.origin, env)) {
     throw new BehaviorSetupError(
-      "LOADTEST_CENTRIFUGO_ORIGIN must not target known production doctor.school hosts",
+      "LOADTEST_CENTRIFUGO_ORIGIN must not target a possible production host " +
+        "(any doctor.school name, or an IP literal not listed in LOADTEST_NON_PROD_IPS)",
     );
   }
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
@@ -354,11 +402,13 @@ async function prepareActor(
   credential,
   label,
   expectedWebSocketUrl,
+  allowTarget,
 ) {
   const cookie = await loginCookie(
     origin,
     credential.email,
     credential.password,
+    allowTarget,
   );
   if (!cookie) {
     throw new BehaviorSetupError(
@@ -484,6 +534,8 @@ export async function runRoomBehaviorVerification({
 }) {
   const runStartedAt = new Date().toISOString();
   assertDevStandOrigin(origin);
+  // Before any request: every origin the run requests, production refused.
+  const allowTarget = assertRoomVerifyAllowed({ origin, centrifugoOrigin });
   const expectedWebSocketUrl =
     deriveExpectedCentrifugoWebSocketUrl(centrifugoOrigin);
   const [observerCredential, participantCredential] =
@@ -494,6 +546,7 @@ export async function runRoomBehaviorVerification({
     observerCredential,
     "observer",
     expectedWebSocketUrl,
+    allowTarget,
   );
   const participant = await prepareActor(
     origin,
@@ -501,6 +554,7 @@ export async function runRoomBehaviorVerification({
     participantCredential,
     "participant",
     expectedWebSocketUrl,
+    allowTarget,
   );
 
   if (

@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
@@ -23,6 +25,56 @@ import { selectRelationshipCombobox } from "./support/relationship-combobox";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
  *     e2e/taxonomy-event-experts.spec.ts --config=playwright.flows.config.ts
  */
+
+/**
+ * `E2E_SHOT_DIR` opts into the approved-non-canvas `responsive-web` evidence
+ * of 012 EARS-31 (`feature-012-event-expert-role-admin-v1`). An evidence run
+ * goes on a fresh branch database, so it authors production-shaped names
+ * without the uniqueness stamp an ordinary re-run needs.
+ */
+const SHOT_DIR = process.env.E2E_SHOT_DIR;
+
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(
+      /[\d.]+/g,
+    );
+    if (!channels || channels.length < 3) return false;
+    const [r, g, b] = channels.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
+/** The four renders of one state: desktop/mobile × light/dark. */
+async function shots(page: Page, name: string, both = true): Promise<void> {
+  if (!SHOT_DIR) return;
+  await mkdir(SHOT_DIR, { recursive: true });
+  const viewports = both
+    ? ([
+        ["desktop", { width: 1440, height: 900 }],
+        ["mobile", { width: 390, height: 844 }],
+      ] as const)
+    : ([["desktop", { width: 1440, height: 900 }]] as const);
+  for (const [device, size] of viewports) {
+    await page.setViewportSize(size);
+    for (const palette of ["light", "dark"] as const) {
+      await setPalette(page, palette);
+      await page.screenshot({
+        path: path.join(SHOT_DIR, `${name}-${device}-${palette}.png`),
+        fullPage: true,
+        // A field just cleared of its error is still easing out of the error
+        // tint; the capture records the settled state, not the transition.
+        animations: "disabled",
+      });
+    }
+  }
+  await setPalette(page, "light");
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
 
 /** A real event through the real 007 create form; returns its id. */
 async function createEvent(page: Page, title: string): Promise<string> {
@@ -125,25 +177,31 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     ).toHaveText("Докладчик");
   });
 
-  test("012 EARS-7: an operator links, corrects, retires and restores an expert on a real event", async ({
+  test("012 EARS-7: an operator links (EARS-31 role + caption), corrects, retires and restores an expert on a real event", async ({
     page,
   }) => {
     await signInAsAdmin(page);
 
     const stamp = Date.now();
+    const tag = SHOT_DIR ? "" : `-${stamp}`;
     const firstExpert = await createExpert(
       page,
-      `Петров-${stamp}`,
-      "Иван",
-      "Ильич",
+      `Смирнов${tag}`,
+      "Павел",
+      "Олегович",
     );
     const secondExpert = await createExpert(
       page,
-      `Орлова-${stamp}`,
-      "Мария",
-      "Игоревна",
+      `Волкова${tag}`,
+      "Ольга",
+      "Николаевна",
     );
-    const eventId = await createEvent(page, `Кардиофорум ${stamp}`);
+    const eventId = await createEvent(
+      page,
+      SHOT_DIR
+        ? "Острый коронарный синдром: разбор клинических случаев"
+        : `Кардиофорум ${stamp}`,
+    );
 
     // ── Reach the editor through the chrome, on the event it belongs to ────
     await page.goto(`/events/${eventId}`);
@@ -177,6 +235,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(
       page.getByTestId("event-expert-add-program-role"),
     ).toHaveAttribute("aria-invalid", "true");
+    await shots(page, "admin-link-dialog-refused", false);
     await expect(
       page.getByText("Место — целое число от 0 до 32767."),
     ).toBeVisible();
@@ -221,6 +280,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
       .getByTestId("event-expert-add-role")
       .fill("Заведующий кафедрой кардиологии");
     await page.getByTestId("event-expert-add-position").fill("1");
+    await shots(page, "admin-link-dialog");
     await page.getByTestId("event-expert-add-submit").click();
     await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Эксперт привязан к мероприятию.",
@@ -284,6 +344,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(
       secondRow.locator('[data-testid^="event-expert-role-"]'),
     ).toHaveText("—");
+    await shots(page, "admin-link-list-roles");
 
     // ── Edit: the expert is a FACT; role, caption and slot are authored ────
     await row.locator('[data-testid^="event-expert-edit-"]').click();
@@ -300,6 +361,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     const editCaption = editForm.locator('input[data-testid$="-role"]');
     await expect(editRole).toHaveValue("moderator");
     await expect(editCaption).toHaveValue("Заведующий кафедрой кардиологии");
+    await shots(page, "admin-link-edit", false);
     await editRole.selectOption("speaker");
     await editCaption.fill("Профессор, д.м.н.");
     await editForm.locator('[data-testid$="-submit"]').click();

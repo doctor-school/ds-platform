@@ -50,15 +50,16 @@ const SIGN_IN_HEADERS = {
  * suppression decision via LOADTEST_SUPPRESSION_CONFIRMED=1.
  */
 export function assertAuthBurstAllowed(origin, env = process.env) {
-  if (!isProdTarget(origin)) return;
+  if (!isProdTarget(origin, env)) return;
   if (env.LOADTEST_SUPPRESSION_CONFIRMED === "1") return;
   throw new Error(
-    `REFUSING to run auth-burst against prod host ${JSON.stringify(origin)}: ` +
-      `synthetic register/verify traffic can dispatch REAL emails and a ` +
-      `single-source burst measures the rate limiter, not capacity. No ` +
-      `per-user delivery-suppression seam exists yet — tracked as ${SUPPRESSION_ISSUE}. ` +
-      `Set LOADTEST_SUPPRESSION_CONFIRMED=1 ONLY after the ${SUPPRESSION_ISSUE} owner ` +
-      `decision (suppression seam + rate-limit treatment) is in place for the run window.`,
+    `REFUSING to run auth-burst against production target ${JSON.stringify(origin)}: ` +
+      `synthetic register/code traffic dispatches REAL mail unless the api runs ` +
+      `with LOADTEST_SUPPRESS_SYNTHETIC=true (${SUPPRESSION_ISSUE}), and a ` +
+      `single-source burst measures the rate limiter, not capacity. Set ` +
+      `LOADTEST_SUPPRESSION_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
+      `after the window prerequisites (suppression on, per-IP raise applied) are ` +
+      `in place on the api (tools/loadtest/README.md «Window recipe»).`,
   );
 }
 

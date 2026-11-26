@@ -79,10 +79,30 @@ test("#1139 verifier derives one exact websocket target from the explicit Centri
       "wss://truenas.local:8443/connection/websocket",
     ],
     ["http://localhost:8000", "ws://localhost:8000/connection/websocket"],
-    ["http://192.168.1.20:8100", "ws://192.168.1.20:8100/connection/websocket"],
+    ["http://127.0.0.1:8100", "ws://127.0.0.1:8100/connection/websocket"],
     ["http://localhost.:8000/", "ws://localhost:8000/connection/websocket"],
   ]) {
-    assert.equal(deriveExpectedCentrifugoWebSocketUrl(origin), expected);
+    assert.equal(deriveExpectedCentrifugoWebSocketUrl(origin, {}), expected);
+  }
+
+  // A LAN address is accepted only when the operator vouches for it, exactly
+  // as every other production tripwire treats IP literals (lib.mjs isProdTarget).
+  assert.equal(
+    deriveExpectedCentrifugoWebSocketUrl("http://192.168.1.20:8100", {
+      LOADTEST_NON_PROD_IPS: "192.168.1.20",
+    }),
+    "ws://192.168.1.20:8100/connection/websocket",
+  );
+  for (const origin of [
+    "http://192.168.1.20:8100",
+    "http://77.233.220.222:8100",
+    "http://[2a03:6f00::1]:8100",
+  ]) {
+    assert.throws(
+      () => deriveExpectedCentrifugoWebSocketUrl(origin, {}),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*production.*LOADTEST_NON_PROD_IPS/,
+      origin,
+    );
   }
 
   for (const origin of [
@@ -105,8 +125,8 @@ test("#1139 verifier derives one exact websocket target from the explicit Centri
     "https://centrifugo.doctor.school.",
   ]) {
     assert.throws(
-      () => deriveExpectedCentrifugoWebSocketUrl(origin),
-      /LOADTEST_CENTRIFUGO_ORIGIN.*known production doctor\.school/,
+      () => deriveExpectedCentrifugoWebSocketUrl(origin, {}),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*possible production host.*doctor\.school/,
     );
   }
 });

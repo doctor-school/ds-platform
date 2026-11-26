@@ -19,6 +19,14 @@
 // step). Absent that, GET /room returns the gate's 401/403/409; the scenario
 // records it and reports the fixture gap rather than faking a grant.
 //
+// HARD PROD GUARD (fail-closed): this scenario REFUSES to run against a
+// production target (lib.mjs `isProdTarget`) until
+// `LOADTEST_ROOM_PROD_CONFIRMED=1` is set. A production room run loads the live
+// realtime path real doctors are on, and its chat leg publishes real messages
+// into the event's room chat that every participant sees — so it runs only in
+// the owner-approved window, against the dedicated synthetic event of the run
+// protocol (README «Run protocol»).
+//
 //   LOADTEST_API_ORIGIN=http://localhost:3000 LOADTEST_EVENT_ID=<idOrSlug> \
 //   LOADTEST_USE_PROVISIONED=1 LOADTEST_VUS=20 LOADTEST_DURATION_SECONDS=30 \
 //   pnpm loadtest:room
@@ -28,6 +36,7 @@ import {
   floatEnv,
   intEnv,
   invokedDirectly,
+  isProdTarget,
   optEnv,
   report,
   reqEnv,
@@ -43,8 +52,28 @@ import {
   postRoomHeartbeat,
 } from "./room-seams.mjs";
 
+/**
+ * Fail-closed production tripwire (exported for the guard test). Throws unless
+ * the target is non-production OR the operator has explicitly confirmed the
+ * approved run window via LOADTEST_ROOM_PROD_CONFIRMED=1.
+ */
+export function assertRoomFanoutAllowed(origin, env = process.env) {
+  if (!isProdTarget(origin, env)) return;
+  if (env.LOADTEST_ROOM_PROD_CONFIRMED === "1") return;
+  throw new Error(
+    `REFUSING to run room-fanout against production target ${JSON.stringify(origin)}: ` +
+      `it loads the live webinar realtime path real doctors are on, and its chat ` +
+      `leg publishes messages every participant of the room sees. Set ` +
+      `LOADTEST_ROOM_PROD_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
+      `against the dedicated synthetic event of the run protocol ` +
+      `(tools/loadtest/README.md «Run protocol»).`,
+  );
+}
+
 async function main() {
   const origin = apiOrigin();
+  // Guard FIRST — before the manifest is read or any request is issued.
+  assertRoomFanoutAllowed(origin);
   const eventId = reqEnv("LOADTEST_EVENT_ID");
   const useProvisioned = optEnv("LOADTEST_USE_PROVISIONED", "") === "1";
   const pool = useProvisioned ? loadManifestCredentials() : [];

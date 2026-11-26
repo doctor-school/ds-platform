@@ -71,9 +71,12 @@ function normalizedUrlHost(parsed) {
 /**
  * Derive the verifier's single allowed websocket endpoint from the operator's
  * authoritative dev-stand Centrifugo HTTP(S) origin. The expected value itself
- * must be an origin, never a credential-bearing URL or an endpoint-shaped path.
+ * must be an origin, never a credential-bearing URL or an endpoint-shaped path,
+ * and never a production target by the harness-wide rule (lib.mjs
+ * `isProdTarget`: any doctor.school name, any IP literal the operator has not
+ * listed in LOADTEST_NON_PROD_IPS).
  */
-export function deriveExpectedCentrifugoWebSocketUrl(origin) {
+export function deriveExpectedCentrifugoWebSocketUrl(origin, env = process.env) {
   let parsed;
   try {
     parsed = new URL(origin);
@@ -94,10 +97,10 @@ export function deriveExpectedCentrifugoWebSocketUrl(origin) {
       "LOADTEST_CENTRIFUGO_ORIGIN must be an explicit HTTP(S) origin with no credentials, path, query, or fragment",
     );
   }
-  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "");
-  if (isProdTarget(hostname)) {
+  if (isProdTarget(parsed.origin, env)) {
     throw new BehaviorSetupError(
-      "LOADTEST_CENTRIFUGO_ORIGIN must not target known production doctor.school hosts",
+      "LOADTEST_CENTRIFUGO_ORIGIN must not target a possible production host " +
+        "(any doctor.school name, or an IP literal not listed in LOADTEST_NON_PROD_IPS)",
     );
   }
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";

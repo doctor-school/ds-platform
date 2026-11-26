@@ -10,6 +10,8 @@ Shared rules: AGENTS.md + [portable agent discipline](apps/docs/content/agent-di
 
 Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 250K/400K; at 400K only `ds-reviewer`/`ds-lander` dispatch. The owner creates and removes the owner-only `.claude/lead-budget-override`. Child hooks ROTATE at 250K and deny non-git tools at 350K; rotate before rework once lagging notification usage hits 250K. Claude-only constants; Codex uses observed effective input/window bands in portable discipline.
 
+A Claude foreground command lives at most 600 s, and Claude Code's low-memory reaper kills an idle session's background shells and forbids restarting them unasked. A CI / `stage-suite` wait is therefore `pnpm run:wait <run-id> --timeout 540` or `pnpm merge:gate <N> --timeout 540` in the FOREGROUND, re-run on exit `2` (TIMEOUT); never a background `gh run watch` / `gh pr checks --watch`.
+
 ## Dispatch
 
 Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scout/closeout: `ds-explorer` / `ds-lander` with Sonnet. Review requires shell/gh access; never assume `feature-dev:code-reviewer` has it.

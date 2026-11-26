@@ -418,6 +418,14 @@ export const RULES_COPY = {
   stepRules: (no: number) => `Правила шага ${no}`,
 } as const;
 
+const RU_PLURAL = new Intl.PluralRules("ru-RU");
+const DOCTORS: Partial<Record<Intl.LDMLPluralRule, string>> & { many: string } =
+  {
+    one: "врач",
+    few: "врача",
+    many: "врачей",
+  };
+
 /**
  * 023 EARS-26, EARS-27 — the school and course structure editor in staff
  * words. Never a price, a preset name or «бесплатно» (EARS-23 holds for the
@@ -430,8 +438,11 @@ export const STRUCTURE_COPY = {
   unpublishSchool: "Снять школу с публикации",
   schoolPublishedHint:
     "Школа видна врачам на сайте. Пока в ней нет опубликованного курса, врачи видят её как «скоро».",
+  schoolOpenHint:
+    "Школа видна врачам на сайте и открыта: в ней есть опубликованный курс.",
   schoolDraftHint: "Школа — черновик: врачи её не видят.",
-  interestCount: (n: number) => `Ждут открытия школы: ${n}`,
+  interestCount: (n: number) =>
+    `Интерес к школе: ${n} ${DOCTORS[RU_PLURAL.select(n)] ?? DOCTORS.many}`,
   detailsHeading: "Данные школы",
   schoolTitle: "Название школы",
   schoolDescription: "Описание",
@@ -477,6 +488,7 @@ export const STRUCTURE_COPY = {
   coursePublishRefused:
     "Курс нельзя опубликовать: в нём нет опубликованного урока. Опубликуйте хотя бы один урок.",
   slugTaken: "Этот адрес уже занят — выберите другой.",
-  stale: "Данные изменили в другом окне — показана текущая версия, повторите изменение.",
+  stale:
+    "Данные изменили в другом окне — показана текущая версия, повторите изменение.",
   alreadyInState: "Состояние уже изменено — показана текущая версия.",
 } as const;

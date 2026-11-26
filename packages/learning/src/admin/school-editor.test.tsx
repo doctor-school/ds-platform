@@ -9,11 +9,19 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { SchoolEditorScreen } from "./school-editor";
-import { AID, fakeTransport, refusal, school } from "./__tests__/fixtures";
+import {
+  AID,
+  courseRow,
+  fakeTransport,
+  refusal,
+  school,
+} from "./__tests__/fixtures";
 
 // 023 EARS-26, EARS-27 (#4018) — the school editor: the school's EARS-1 data,
 // publish / unpublish, the interest count, the school's courses in order with
 // «Выше / Ниже», and a new course placed last.
+
+const HREF = (id: string) => `/learning/courses/${id}`;
 
 function mount(transport = fakeTransport()) {
   render(
@@ -30,10 +38,13 @@ describe("SchoolEditorScreen", () => {
   it("EARS-26: shows the school, its draft state, the interest count and its courses in order linking to each course", async () => {
     mount();
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Школа кардиологии" }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Школа кардиологии",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("school-state")).toHaveTextContent("Черновик");
-    expect(screen.getByText("Ждут открытия школы: 7")).toBeInTheDocument();
+    expect(screen.getByText("Интерес к школе: 7 врачей")).toBeInTheDocument();
     const list = screen.getByTestId("school-courses");
     const links = within(list).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual(["ЭКГ с нуля", "ЭхоКГ"]);
@@ -78,6 +89,79 @@ describe("SchoolEditorScreen", () => {
       ),
     );
     expect(await screen.findByText("Сохранено.")).toBeInTheDocument();
+  });
+
+  it("EARS-26: counts the interest in doctors with the Russian plural", async () => {
+    for (const [n, line] of [
+      [1, "Интерес к школе: 1 врач"],
+      [3, "Интерес к школе: 3 врача"],
+      [11, "Интерес к школе: 11 врачей"],
+      [22, "Интерес к школе: 22 врача"],
+      [0, "Интерес к школе: 0 врачей"],
+    ] as const) {
+      const { unmount } = render(
+        <SchoolEditorScreen
+          schoolId={AID.school}
+          courseHref={HREF}
+          transport={fakeTransport({
+            school: async () => school({ activeInterestCount: n }),
+          })}
+        />,
+      );
+      expect(
+        await screen.findByTestId("school-interest-count"),
+      ).toHaveTextContent(line);
+      unmount();
+    }
+  });
+
+  it("EARS-26: the state hint follows the school's state and whether a course in it is published", async () => {
+    const draft = render(
+      <SchoolEditorScreen
+        schoolId={AID.school}
+        transport={fakeTransport()}
+        courseHref={HREF}
+      />,
+    );
+    expect(await screen.findByTestId("school-state-hint")).toHaveTextContent(
+      "Школа — черновик: врачи её не видят.",
+    );
+    draft.unmount();
+    const soon = render(
+      <SchoolEditorScreen
+        schoolId={AID.school}
+        courseHref={HREF}
+        transport={fakeTransport({
+          school: async () => school({ state: "published" }),
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("school-state-hint")).toHaveTextContent(
+      "Пока в ней нет опубликованного курса, врачи видят её как «скоро».",
+    );
+    soon.unmount();
+    render(
+      <SchoolEditorScreen
+        schoolId={AID.school}
+        courseHref={HREF}
+        transport={fakeTransport({
+          school: async () => school({ state: "published" }),
+          schoolCourses: async () => [
+            courseRow(),
+            courseRow({
+              id: AID.course2,
+              slug: "echo",
+              title: "ЭхоКГ",
+              position: 2,
+              state: "published",
+            }),
+          ],
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("school-state-hint")).toHaveTextContent(
+      "Школа видна врачам на сайте и открыта: в ней есть опубликованный курс.",
+    );
   });
 
   it("EARS-26: offers at most four facts", async () => {

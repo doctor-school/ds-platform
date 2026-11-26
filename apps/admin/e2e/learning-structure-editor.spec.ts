@@ -198,6 +198,12 @@ test("023 EARS-26 / EARS-27 / EARS-28 — a staff member builds a school, its co
   await expect(page.getByTestId("write-refusal")).toContainText(
     "Этот эксперт уже ведёт школу в этом направлении.",
   );
+  await expect(page.getByTestId("school-expert-error")).toContainText(
+    "Этот эксперт уже ведёт школу в этом направлении.",
+  );
+  await expect(page.locator("#school-expert")).toHaveAccessibleDescription(
+    "Этот эксперт уже ведёт школу в этом направлении.",
+  );
   await expect(page).toHaveURL(/\/learning\/schools\/new$/u);
   await shots(page, "school-new-expert-taken");
 
@@ -268,6 +274,12 @@ test("023 EARS-26 / EARS-27 / EARS-28 — a staff member builds a school, its co
   await expect(
     page.getByRole("button", { name: "Снять школу с публикации" }),
   ).toBeVisible();
+  await expect(page.getByTestId("school-state-hint")).toHaveText(
+    "Школа видна врачам на сайте. Пока в ней нет опубликованного курса, врачи видят её как «скоро».",
+  );
+  await expect(page.getByTestId("school-interest-count")).toHaveText(
+    "Интерес к школе: 0 врачей",
+  );
   const soon = await publicSchool(page);
   expect(soon.status).toBe(200);
   expect(soon.school?.status).toBe("soon");
@@ -311,6 +323,13 @@ test("023 EARS-26 / EARS-27 / EARS-28 — a staff member builds a school, its co
       .getByRole("heading", { name: "Модуль 2. Диагностика" }),
   ).toBeVisible();
 
+  // The course's EARS-1 data: a save says so.
+  await page.getByLabel("Академических часов").fill("36");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(page.getByTestId("write-saved")).toContainText("Сохранено.");
+  await expect(page.getByLabel("Академических часов")).toHaveValue("36");
+  await shots(page, "course-saved");
+
   // Reject: a course without a published lesson is not published.
   await page.getByRole("button", { name: "Опубликовать курс" }).click();
   await expect(page.getByTestId("write-refusal")).toContainText(
@@ -339,4 +358,8 @@ test("023 EARS-26 / EARS-27 / EARS-28 — a staff member builds a school, its co
   await expect(
     page.getByTestId("school-courses").getByRole("listitem").nth(1),
   ).toContainText("Опубликован");
+  await expect(page.getByTestId("school-state-hint")).toHaveText(
+    "Школа видна врачам на сайте и открыта: в ней есть опубликованный курс.",
+  );
+  await shots(page, "school-open");
 });

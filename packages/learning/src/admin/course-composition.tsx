@@ -83,6 +83,7 @@ export function CourseCompositionScreen({
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string[] | null>(null);
+  const [saved, setSaved] = useState(false);
   const [moduleTitle, setModuleTitle] = useState("");
 
   const load = useCallback(async () => {
@@ -101,6 +102,7 @@ export function CourseCompositionScreen({
   async function write(run: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setRefused(null);
+    setSaved(false);
     try {
       await run();
       await load();
@@ -187,7 +189,10 @@ export function CourseCompositionScreen({
             <Link href={rulesHref("course", course.id)} variant="standalone">
               {R.heading("course")}
             </Link>
-            <Link href={rulesHref("school", course.schoolId)} variant="standalone">
+            <Link
+              href={rulesHref("school", course.schoolId)}
+              variant="standalone"
+            >
               {R.heading("school")}
             </Link>
           </div>
@@ -204,6 +209,11 @@ export function CourseCompositionScreen({
           </ul>
         </Alert>
       ) : null}
+      {saved ? (
+        <Alert variant="success" data-testid="write-saved">
+          {S.saved}
+        </Alert>
+      ) : null}
 
       <CourseDetailsForm
         // Re-seed only when the course's own data change (a save, or a
@@ -214,9 +224,13 @@ export function CourseCompositionScreen({
         course={course}
         busy={busy}
         partnerField={partnerField}
-        onSave={(body) =>
-          write(() => transport.updateCourse(course.id, body, course.version))
-        }
+        onSave={async (body) => {
+          const ok = await write(() =>
+            transport.updateCourse(course.id, body, course.version),
+          );
+          if (ok) setSaved(true);
+          return ok;
+        }}
       />
 
       <PresetPanel
@@ -475,7 +489,10 @@ function ModuleRenameForm({
   );
 }
 
-const DOCUMENT_KINDS: LearningDocumentKind[] = ["certificate", "certificate-nmo"];
+const DOCUMENT_KINDS: LearningDocumentKind[] = [
+  "certificate",
+  "certificate-nmo",
+];
 
 /** The identity of the course's EARS-1 data the form edits. */
 function detailsKey(course: LearningCourseComposition): string {

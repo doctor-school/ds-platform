@@ -237,7 +237,9 @@ describe("CourseCompositionScreen", () => {
     expect(
       within(panel).getByRole("button", { name: "Применить пресет" }),
     ).toBeEnabled();
-    expect(within(panel).queryByTestId("rules-read-only")).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByTestId("rules-read-only"),
+    ).not.toBeInTheDocument();
   });
 
   // ── 023 EARS-27 (#4018) — the course's data, publish, modules ───────────
@@ -252,10 +254,9 @@ describe("CourseCompositionScreen", () => {
         schoolHref={(id) => `/learning/schools/${id}`}
       />,
     );
-    expect(await screen.findByRole("link", { name: "К школе" })).toHaveAttribute(
-      "href",
-      `/learning/schools/${AID.school}`,
-    );
+    expect(
+      await screen.findByRole("link", { name: "К школе" }),
+    ).toHaveAttribute("href", `/learning/schools/${AID.school}`);
   });
 
   it("023 EARS-27: saves the course's EARS-1 data under the course's version", async () => {
@@ -283,6 +284,9 @@ describe("CourseCompositionScreen", () => {
         },
         2,
       ),
+    );
+    expect(await screen.findByTestId("write-saved")).toHaveTextContent(
+      "Сохранено.",
     );
   });
 
@@ -317,10 +321,9 @@ describe("CourseCompositionScreen", () => {
 
   it("023 EARS-27: renames a module under the module's version", async () => {
     const t = mount();
-    fireEvent.change(
-      await screen.findByLabelText("Новое название модуля 1"),
-      { target: { value: "Ритм сердца" } },
-    );
+    fireEvent.change(await screen.findByLabelText("Новое название модуля 1"), {
+      target: { value: "Ритм сердца" },
+    });
     fireEvent.click(
       within(screen.getByTestId("module-1")).getByRole("button", {
         name: "Переименовать",

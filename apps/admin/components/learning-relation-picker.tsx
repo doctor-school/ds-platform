@@ -21,6 +21,7 @@ export function LearningRelationPicker({
   placeholder,
   initialLabel = null,
   invalid = false,
+  describedBy,
 }: {
   id: string;
   resource: "directions" | "experts" | "projects" | "organisations";
@@ -30,6 +31,8 @@ export function LearningRelationPicker({
   /** The saved choice's name, shown before a page that carries it loads. */
   initialLabel?: string | null;
   invalid?: boolean;
+  /** The id of the field error that describes the control, when one shows. */
+  describedBy?: string;
 }) {
   const t = useTranslations();
   const fetchPage = useCallback(
@@ -70,6 +73,7 @@ export function LearningRelationPicker({
       }
       showSearch
       invalid={invalid}
+      {...(describedBy ? { "aria-describedby": describedBy } : {})}
     />
   );
 }

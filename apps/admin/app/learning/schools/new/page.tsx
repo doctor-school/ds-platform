@@ -6,22 +6,24 @@ import { Authenticated } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Button, Input, Label } from "@ds/design-system";
 import { FormActions, FormFieldGroup } from "@ds/design-system/blocks";
-import { LEARNING_SCHOOL_EXPERT_TAKEN, type LearningSchoolAdmin } from "@ds/schemas";
+import { FormError } from "@ds/design-system/form";
+import type { LearningSchoolAdmin } from "@ds/schemas";
 import { FIELD_LABEL } from "@ds/learning/admin";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { LearningRelationPicker } from "@/components/learning-relation-picker";
 import { createLearningSchool } from "@/lib/learning-admin-transport";
-
-interface Refusal {
-  errorCode?: string;
-  fieldErrors?: { path: string; message: string }[];
-}
+import {
+  isSchoolExpertTaken,
+  newSchoolFieldErrorKeys,
+  type LearningSchoolRefusal,
+} from "@/lib/learning-school-refusal";
 
 /**
  * «Новая школа» (023 EARS-26, #4018) — create a school through the 024 admin
  * API: its direction, leading expert, project, title and slug. A second school
- * of the same expert in the same direction is refused with a field error; a
+ * of the same expert in the same direction is refused with an error at the
+ * «Ведущий эксперт» field (the banner keeps the summary); a
  * taken slug is refused too. The new school is a draft and opens in its editor.
  */
 export default function NewLearningSchoolPage() {
@@ -35,15 +37,16 @@ export default function NewLearningSchoolPage() {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string[] | null>(null);
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   function linesOf(error: unknown): string[] {
-    const r = (error ?? {}) as Refusal;
+    const r = (error ?? {}) as LearningSchoolRefusal;
     if (r.errorCode === "SLUG_CONFLICT")
       return [t("learning.schools.slugTaken")];
-    const lines = (r.fieldErrors ?? []).map(({ path, message }) =>
-      path === "leadExpertId" && message === LEARNING_SCHOOL_EXPERT_TAKEN
+    const lines = (r.fieldErrors ?? []).map((entry) =>
+      isSchoolExpertTaken(entry)
         ? t("learning.schools.expertTaken")
-        : `${FIELD_LABEL[path] ?? path}: ${message}`,
+        : `${FIELD_LABEL[entry.path] ?? entry.path}: ${entry.message}`,
     );
     return lines.length > 0 ? lines : [t("learning.schools.failed")];
   }
@@ -55,9 +58,13 @@ export default function NewLearningSchoolPage() {
     if (!leadExpertId) missing.add("leadExpertId");
     if (!projectId) missing.add("projectId");
     setInvalid(missing);
+    setFieldErrors({});
     if (missing.size > 0) {
       setRefused(
-        [...missing].map((p) => `${FIELD_LABEL[p] ?? p}: ${t("learning.schools.pick." + pickKey(p))}`),
+        [...missing].map(
+          (p) =>
+            `${FIELD_LABEL[p] ?? p}: ${t("learning.schools.pick." + pickKey(p))}`,
+        ),
       );
       return;
     }
@@ -73,8 +80,9 @@ export default function NewLearningSchoolPage() {
       });
       router.push(`/learning/schools/${school.id}`);
     } catch (error) {
-      const r = (error ?? {}) as Refusal;
+      const r = (error ?? {}) as LearningSchoolRefusal;
       setInvalid(new Set((r.fieldErrors ?? []).map((e) => e.path)));
+      setFieldErrors(newSchoolFieldErrorKeys(error));
       setRefused(linesOf(error));
     } finally {
       setBusy(false);
@@ -129,10 +137,24 @@ export default function NewLearningSchoolPage() {
                 id="school-expert"
                 resource="experts"
                 value={leadExpertId}
-                onChange={setLeadExpertId}
+                onChange={(next) => {
+                  setLeadExpertId(next);
+                  setFieldErrors(({ leadExpertId: _, ...rest }) => rest);
+                }}
                 placeholder={t("learning.schools.pick.expert")}
                 invalid={invalid.has("leadExpertId")}
+                describedBy={
+                  fieldErrors.leadExpertId ? "school-expert-error" : undefined
+                }
               />
+              {fieldErrors.leadExpertId ? (
+                <FormError
+                  id="school-expert-error"
+                  data-testid="school-expert-error"
+                >
+                  {t(fieldErrors.leadExpertId)}
+                </FormError>
+              ) : null}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="school-project">

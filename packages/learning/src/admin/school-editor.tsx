@@ -177,7 +177,9 @@ export function SchoolEditorScreen({
     const ids = courses.map((c) => c.id);
     const [moved] = ids.splice(index, 1);
     ids.splice(index + by, 0, moved!);
-    void write(() => transport.reorderCourses(school!.id, ids, school!.version));
+    void write(() =>
+      transport.reorderCourses(school!.id, ids, school!.version),
+    );
   }
 
   async function saveDetails(event: FormEvent) {
@@ -241,7 +243,13 @@ export function SchoolEditorScreen({
         </div>
       </header>
       <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-        <p>{published ? S.schoolPublishedHint : S.schoolDraftHint}</p>
+        <p data-testid="school-state-hint">
+          {!published
+            ? S.schoolDraftHint
+            : courses.some((c) => c.state === "published")
+              ? S.schoolOpenHint
+              : S.schoolPublishedHint}
+        </p>
         <p data-testid="school-interest-count">
           {S.interestCount(school.activeInterestCount)}
         </p>

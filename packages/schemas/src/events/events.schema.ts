@@ -646,15 +646,85 @@ export const EventAdminListItemSchema = EventAdminDetailSchema.pick({
 });
 export type EventAdminListItem = z.infer<typeof EventAdminListItemSchema>;
 
-/** Strict offset query for the operator event list and reverse relation picker. */
+/**
+ * 007 EARS-14 — the operator event-list columns the sort applies to: the date,
+ * the title, the school and the lifecycle state.
+ */
+export const EVENT_ADMIN_LIST_SORT_KEYS = [
+  "startsAt",
+  "title",
+  "school",
+  "state",
+] as const;
+export const EventAdminListSortKeySchema = z.enum(EVENT_ADMIN_LIST_SORT_KEYS);
+export type EventAdminListSortKey = z.infer<typeof EventAdminListSortKeySchema>;
+
+export const EventAdminListSortDirSchema = z.enum(["asc", "desc"]);
+export type EventAdminListSortDir = z.infer<typeof EventAdminListSortDirSchema>;
+
+/**
+ * 007 EARS-14 — the order the operator event-list SCREEN opens with: the
+ * newest event first. The endpoint itself does not default to it — a query
+ * without `sort` keeps the alphabetical picker order (see `sort` below) — so the
+ * screen sends this pair, and omits it from its address while it is the order.
+ */
+export const EVENT_ADMIN_LIST_SCREEN_SORT_DEFAULT = {
+  sort: "startsAt",
+  dir: "desc",
+} as const satisfies {
+  sort: EventAdminListSortKey;
+  dir: EventAdminListSortDir;
+};
+
+/**
+ * Strict offset query for the operator event list and the reverse-relation
+ * picker. Strict on purpose (#1643): an unknown parameter is a caller error,
+ * never a silently ignored filter.
+ */
 export const EventAdminListQuerySchema = z
   .object({
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce.number().int().positive().max(100).default(20),
-    /** Case-insensitive substring over the event title or stable slug. */
+    /**
+     * Case-insensitive substring over the event title, the stable slug or
+     * (007 EARS-14) the school.
+     */
     q: z.string().trim().max(160).optional(),
+    /**
+     * 007 EARS-14 — the one active sort column. Absent = title ascending, the
+     * alphabetical order the reverse-relation and staff-access pickers rely
+     * on. The title and the school order under the Russian collation; every
+     * order ends on the id in the same direction, so `desc` is the exact
+     * reverse of `asc` and a page boundary never repeats or skips a row.
+     */
+    sort: EventAdminListSortKeySchema.optional(),
+    /** 007 EARS-14 — the direction of `sort`; absent = ascending. */
+    dir: EventAdminListSortDirSchema.optional(),
+    /** 007 EARS-14 — exactly one lifecycle state, the legacy `in_archive` included. */
+    state: EventLifecycleStateSchema.optional(),
+    /**
+     * 007 EARS-14 — the first Moscow calendar day of the start-date period
+     * (inclusive, from its 00:00 Moscow time). The same ISO calendar-day shape
+     * as `MskCalendarDaySchema`, spelled here because that module imports this
+     * one.
+     */
+    startsFrom: z.iso.date().optional(),
+    /** 007 EARS-14 — the last Moscow calendar day of the period (inclusive, the whole day). */
+    startsTo: z.iso.date().optional(),
   })
-  .strict();
+  .strict()
+  // An inverted period is a caller error, not an empty page. ISO calendar days
+  // compare correctly as strings.
+  .refine(
+    (q) =>
+      q.startsFrom === undefined ||
+      q.startsTo === undefined ||
+      q.startsFrom <= q.startsTo,
+    {
+      message: "startsFrom must not be after startsTo",
+      path: ["startsTo"],
+    },
+  );
 export type EventAdminListQuery = z.infer<typeof EventAdminListQuerySchema>;
 
 export const EventAdminListSchema = z.object({

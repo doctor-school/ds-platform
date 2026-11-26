@@ -13426,6 +13426,58 @@
         "parameters": [
           {
             "in": "query",
+            "name": "startsTo",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startsFrom",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "draft",
+                "published",
+                "live",
+                "ended",
+                "hidden",
+                "in_archive"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": ["startsAt", "title", "school", "state"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "pageSize",
             "required": false,
             "schema": {

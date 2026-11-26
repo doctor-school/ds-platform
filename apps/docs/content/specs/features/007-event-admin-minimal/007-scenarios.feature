@@ -306,3 +306,13 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Given a doctor_guest or a public caller
     When they try to set the «Показывать зрителям число участников» option through UpdateEvent
     Then the command is refused as for any other admin command (EARS-8)
+
+  # --- Amendment 2026-11-26: the admin event list sorts by date and filters (US-2, US-5) ---
+
+  @EARS-14 @rule @proof:api @edge
+  Scenario: The admin event list period reads Moscow days and the picker order stays alphabetical
+    Given events starting just before, on and just after one Moscow calendar day, in more than one school and state
+    When the event list is asked for that one-day period and one school and state, sorted by start date newest first, one event per page
+    Then exactly that school's events in that state starting on that Moscow day are listed, newest first, page by page, and the total counts only them
+    And a list request without a sort still returns the events alphabetically by title, as the event pickers read them
+    And a request with an unknown parameter or an inverted period is refused

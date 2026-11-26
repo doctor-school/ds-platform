@@ -4,6 +4,7 @@ import {
   canTransition,
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
+  EVENT_ADMIN_LIST_SORT_KEYS,
   EVENT_LIFECYCLE_STATES,
   EVENT_ORIGINS,
   EventAdminListQuerySchema,
@@ -58,6 +59,61 @@ describe("007 events schema", () => {
     expect(
       EventAdminListQuerySchema.safeParse({ status: "draft" }).success,
     ).toBe(false);
+  });
+
+  it("007 EARS-14: the admin event list takes one sort column + direction, a state and a Moscow-day period, still strict", () => {
+    expect(
+      EventAdminListQuerySchema.parse({
+        sort: "startsAt",
+        dir: "desc",
+        state: "published",
+        startsFrom: "2026-03-02",
+        startsTo: "2026-03-02",
+      }),
+    ).toEqual({
+      page: 1,
+      pageSize: 20,
+      sort: "startsAt",
+      dir: "desc",
+      state: "published",
+      startsFrom: "2026-03-02",
+      startsTo: "2026-03-02",
+    });
+    for (const sort of EVENT_ADMIN_LIST_SORT_KEYS) {
+      for (const dir of ["asc", "desc"] as const) {
+        expect(EventAdminListQuerySchema.safeParse({ sort, dir }).success).toBe(
+          true,
+        );
+      }
+    }
+    expect(EVENT_ADMIN_LIST_SORT_KEYS).toEqual([
+      "startsAt",
+      "title",
+      "school",
+      "state",
+    ]);
+    // Every lifecycle state, the legacy `in_archive` included, is a filter value.
+    for (const state of EVENT_LIFECYCLE_STATES) {
+      expect(EventAdminListQuerySchema.safeParse({ state }).success).toBe(true);
+    }
+    // No `sort` and no `dir` parse to absent — the repository reads that as the
+    // picker order (title ascending), never as the list screen's date default.
+    const bare = EventAdminListQuerySchema.parse({});
+    expect(bare.sort).toBeUndefined();
+    expect(bare.dir).toBeUndefined();
+    for (const bad of [
+      { sort: "duration" },
+      { dir: "up" },
+      { state: "archived" },
+      { startsFrom: "02.03.2026" },
+      { startsTo: "2026-02-30" },
+      // An inverted period is a caller error, not an empty page.
+      { startsFrom: "2026-03-03", startsTo: "2026-03-02" },
+      // The new params are part of the strict contract, not a loosening of it.
+      { sort: "title", order: "asc" },
+    ]) {
+      expect(EventAdminListQuerySchema.safeParse(bad).success).toBe(false);
+    }
   });
 
   describe("mskLocalToInstant (EARS-1/EARS-10 — one canonical instant)", () => {

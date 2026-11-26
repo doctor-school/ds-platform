@@ -19,6 +19,8 @@ import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CreateEventRequestSchema,
+  EVENT_ADMIN_LIST_SORT_KEYS,
+  EVENT_LIFECYCLE_STATES,
   type EventAdminDetail,
   type EventAdminList,
   EventAdminListQuerySchema,
@@ -296,6 +298,32 @@ export class EventsAdminController {
     type: Number,
     minimum: 1,
     maximum: 100,
+  })
+  // 007 EARS-14 — one sort column + direction; absent = title ascending (the
+  // picker order). The filters compose with the search, the sort and the page
+  // (semantics: `EventAdminListQuerySchema`).
+  @ApiQuery({
+    name: "sort",
+    required: false,
+    enum: [...EVENT_ADMIN_LIST_SORT_KEYS],
+  })
+  @ApiQuery({ name: "dir", required: false, enum: ["asc", "desc"] })
+  @ApiQuery({
+    name: "state",
+    required: false,
+    enum: [...EVENT_LIFECYCLE_STATES],
+  })
+  @ApiQuery({
+    name: "startsFrom",
+    required: false,
+    type: String,
+    format: "date",
+  })
+  @ApiQuery({
+    name: "startsTo",
+    required: false,
+    type: String,
+    format: "date",
   })
   @ApiOkResponse({ type: EventAdminListDto })
   @Authz({

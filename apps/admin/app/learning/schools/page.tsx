@@ -34,7 +34,8 @@ export default function LearningSchoolsPage() {
     url: learningUrl.schools(),
     method: "get",
   });
-  const { directions } = useDirectionOptions();
+  // Labels only: a school of a retired direction still names it.
+  const { directions } = useDirectionOptions({ includeRetired: true });
   const schools = useMemo<SchoolRow[]>(() => {
     const titles = new Map(directions.map((d) => [d.id, d.label]));
     return (result.data?.data ?? [])

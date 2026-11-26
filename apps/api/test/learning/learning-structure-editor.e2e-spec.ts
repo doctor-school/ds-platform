@@ -11,6 +11,7 @@ import {
   type Harness,
   type Problem,
 } from "./harness.js";
+import { LEARNING_SCHOOL_EXPERT_TAKEN } from "@ds/schemas";
 import { seedTaxonomy } from "./fixtures.js";
 
 // 023 EARS-26, EARS-27 (without the module club and reward), EARS-28 (#4018) —
@@ -99,6 +100,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).rows;
 
     // ── School (EARS-26) ──────────────────────────────────────────────────
+
+    it("EARS-26: a second school of the same expert in the same direction is refused 400 naming leadExpertId", async () => {
+      const f = await seedTaxonomy(h.pool);
+      const create = (slug: string) =>
+        admin<School & Problem>(h, "POST", "/schools", {
+          payload: {
+            directionId: f.directionId,
+            leadExpertId: f.expertId,
+            projectId: f.projectId,
+            slug,
+            title: `Школа ${slug}`,
+          },
+        });
+      const one = await create(`editor-pair-${f.suffix}`);
+      expect(one.status, JSON.stringify(one.body)).toBe(201);
+      const two = await create(`editor-pair-two-${f.suffix}`);
+      expect(two.status, JSON.stringify(two.body)).toBe(400);
+      expect(two.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(two.body.errors).toEqual([
+        { path: "leadExpertId", message: LEARNING_SCHOOL_EXPERT_TAKEN },
+      ]);
+    });
 
     it("EARS-26: GET /schools/{id} carries the school's version as its ETag", async () => {
       const s = await draftSchool();
@@ -236,6 +259,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const [method, url] of [
         ["PATCH", `/v1/admin/learning/schools/${s.id}`],
         ["POST", `/v1/admin/learning/schools/${s.id}/publish`],
+        ["POST", `/v1/admin/learning/schools/${s.id}/unpublish`],
         ["PUT", `/v1/admin/learning/schools/${s.id}/course-order`],
         ["PATCH", `/v1/admin/learning/courses/${randomUUID()}`],
         ["PUT", `/v1/admin/learning/courses/${randomUUID()}/module-order`],

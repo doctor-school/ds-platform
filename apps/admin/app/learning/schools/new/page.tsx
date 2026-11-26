@@ -6,7 +6,7 @@ import { Authenticated } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Button, Input, Label } from "@ds/design-system";
 import { FormActions, FormFieldGroup } from "@ds/design-system/blocks";
-import type { LearningSchoolAdmin } from "@ds/schemas";
+import { LEARNING_SCHOOL_EXPERT_TAKEN, type LearningSchoolAdmin } from "@ds/schemas";
 import { FIELD_LABEL } from "@ds/learning/admin";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
@@ -41,8 +41,7 @@ export default function NewLearningSchoolPage() {
     if (r.errorCode === "SLUG_CONFLICT")
       return [t("learning.schools.slugTaken")];
     const lines = (r.fieldErrors ?? []).map(({ path, message }) =>
-      path === "leadExpertId" && r.errorCode === "VALIDATION_FAILED" &&
-      /already leads/.test(message)
+      path === "leadExpertId" && message === LEARNING_SCHOOL_EXPERT_TAKEN
         ? t("learning.schools.expertTaken")
         : `${FIELD_LABEL[path] ?? path}: ${message}`,
     );

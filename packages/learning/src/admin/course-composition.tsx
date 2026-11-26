@@ -41,13 +41,13 @@ import type { LearningAdminTransport } from "./transport";
 
 // 024 EARS-28 — the way to a module's lessons: the course's modules and lessons,
 // a new module and a new lesson (title, description, teaser; the lesson takes
-// the course's project). School and course rows are created through the admin
-// API in this slice; their editor is 023's (#4018). EARS-29 slice 1 — the
-// course's preset choice (`PresetPanel`). 023 EARS-27 (#4018) — the course
+// the course's project). Schools and courses are created and edited in the
+// 023 structure editor (the school editor and this screen). EARS-29 slice 1 —
+// the course's preset choice (`PresetPanel`). 023 EARS-27 (#4018) — the course
 // structure editor (023-design §1 `CourseStructureEditor`): the course's
 // EARS-1 data, publish / unpublish (an empty course is refused by the server,
 // `409 PUBLISH_REQUIREMENTS_NOT_MET`), a module's rename and the module order.
-// The module's club and reward are 023's next slice (EARS-1 club, EARS-2).
+// The module's club and reward are 023's next slice (EARS-1 club, EARS-2, #4282).
 
 export interface CourseCompositionScreenProps {
   courseId: string;
@@ -206,7 +206,11 @@ export function CourseCompositionScreen({
       ) : null}
 
       <CourseDetailsForm
-        key={course.version}
+        // Re-seed only when the course's own data change (a save, or a
+        // colleague's edit read after a 412) — a module reorder or a publish
+        // bumps the version but keeps unsaved edits; the save reads the
+        // current version from here, so it always carries a fresh ETag.
+        key={detailsKey(course)}
         course={course}
         busy={busy}
         partnerField={partnerField}
@@ -472,6 +476,19 @@ function ModuleRenameForm({
 }
 
 const DOCUMENT_KINDS: LearningDocumentKind[] = ["certificate", "certificate-nmo"];
+
+/** The identity of the course's EARS-1 data the form edits. */
+function detailsKey(course: LearningCourseComposition): string {
+  return JSON.stringify([
+    course.id,
+    course.title,
+    course.description,
+    course.academicHours,
+    course.documentKind,
+    course.documentPrerequisites,
+    course.partnerOrganisationId,
+  ]);
+}
 
 /** 023 EARS-27 — the course's EARS-1 data (the partner only through the host's picker). */
 function CourseDetailsForm({

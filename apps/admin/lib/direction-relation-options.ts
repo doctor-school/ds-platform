@@ -38,16 +38,39 @@ export interface DirectionRelationOptions {
   isError: boolean;
 }
 
-/** Direction options alone — the adjacency screens need no specialty book. */
-export function useDirectionOptions(): {
+/**
+ * The direction book read. A picker leaves `includeRetired` off (above); a
+ * screen that only LABELS existing rows (023 EARS-26 — the schools list) turns
+ * it on, so a row of a retired direction still names it.
+ */
+export function directionBookRequest({
+  includeRetired,
+}: {
+  includeRetired: boolean;
+}) {
+  return {
+    resource: "directions",
+    pagination: { currentPage: 1, pageSize: ADMIN_LIST_PAGE_SIZE_MAX },
+    filters: includeRetired
+      ? [{ field: "includeRetired", operator: "eq" as const, value: true }]
+      : [],
+  };
+}
+
+/**
+ * Direction options alone — the adjacency screens need no specialty book.
+ * `includeRetired` only for labels, never for a picker.
+ */
+export function useDirectionOptions({
+  includeRetired = false,
+}: { includeRetired?: boolean } = {}): {
   directions: DirectionSpecialtyOption[];
   isLoading: boolean;
   isError: boolean;
 } {
-  const { result, query } = useList<DirectionAdminListItem>({
-    resource: "directions",
-    pagination: { currentPage: 1, pageSize: ADMIN_LIST_PAGE_SIZE_MAX },
-  });
+  const { result, query } = useList<DirectionAdminListItem>(
+    directionBookRequest({ includeRetired }),
+  );
 
   return {
     directions: (result.data ?? []).map((row) => ({

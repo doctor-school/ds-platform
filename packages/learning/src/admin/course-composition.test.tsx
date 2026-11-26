@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CourseCompositionScreen } from "./course-composition";
 import {
@@ -354,6 +354,58 @@ describe("CourseCompositionScreen", () => {
         AID.course,
         [AID.module2, AID.module],
         2,
+      ),
+    );
+  });
+  it("023 EARS-27: unsaved course data survive a publish, and the save then carries the new version", async () => {
+    let version = 2;
+    const t = mount(
+      fakeTransport({
+        course: vi.fn(async () => ({ ...course(), version })),
+        publishCourse: async () => {
+          version = 3;
+          return { ...course(), version: 3, state: "published" } as never;
+        },
+      }),
+    );
+    fireEvent.change(await screen.findByLabelText("Описание курса"), {
+      target: { value: "Несохранённый текст" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать курс" }));
+    await waitFor(() => expect(t.course).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Описание курса")).toHaveValue(
+      "Несохранённый текст",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(t.updateCourse).toHaveBeenCalledWith(
+        AID.course,
+        expect.objectContaining({ description: "Несохранённый текст" }),
+        3,
+      ),
+    );
+  });
+
+  it("023 EARS-27: course data changed on the server replace the form's copy", async () => {
+    let description = "Старое описание";
+    let version = 2;
+    mount(
+      fakeTransport({
+        course: async () => ({ ...course(), description, version }),
+        publishCourse: async () => {
+          description = "Описание коллеги";
+          version = 4;
+          return course() as never;
+        },
+      }),
+    );
+    expect(await screen.findByLabelText("Описание курса")).toHaveValue(
+      "Старое описание",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать курс" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Описание курса")).toHaveValue(
+        "Описание коллеги",
       ),
     );
   });

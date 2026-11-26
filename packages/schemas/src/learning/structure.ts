@@ -184,6 +184,14 @@ export type LearningDocumentKind = z.infer<typeof LearningDocumentKindSchema>;
 const optionalText = text.min(1).nullable().default(null);
 const httpsUrl = z.url({ protocol: /^https$/ }).max(2000);
 
+/**
+ * 023 EARS-26 — the `leadExpertId` field-error message of a create refused by
+ * the one-school-per-expert-and-direction rule; the admin form keys its RU
+ * line on it, never on free text.
+ */
+export const LEARNING_SCHOOL_EXPERT_TAKEN =
+  "this expert already leads a school in this direction";
+
 export const CreateLearningSchoolRequestSchema = z.strictObject({
   directionId: z.uuid(),
   leadExpertId: z.uuid(),

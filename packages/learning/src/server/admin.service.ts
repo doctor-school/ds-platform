@@ -44,6 +44,7 @@ import {
   type UpdateLearningModuleRequest,
   type UpdateLearningSchoolRequest,
   type UpdateLearningStepRequest,
+  LEARNING_SCHOOL_EXPERT_TAKEN,
   LEARNING_SETTING_KEYS,
   LearningTestPayloadSchema,
   SetLearningStepSourceRequestSchema,
@@ -65,6 +66,7 @@ import { applyPresetValues } from "../rules/resolver.js";
 import {
   activeInterestCount,
   claimSchoolOpenedNotices,
+  claimSchoolRepublishedNotices,
 } from "./school-interest.js";
 import {
   EMPTY_RULE_SCOPE,
@@ -403,10 +405,7 @@ export class LearningAdminService {
     } catch (err) {
       const constraint = uniqueViolation(err);
       if (constraint === "learning_schools_direction_expert_key")
-        throw fieldError(
-          "leadExpertId",
-          "this expert already leads a school in this direction",
-        );
+        throw fieldError("leadExpertId", LEARNING_SCHOOL_EXPERT_TAKEN);
       if (constraint !== null)
         throw new LearningServerError("SLUG_CONFLICT", "the slug is taken");
       throw err;
@@ -599,7 +598,9 @@ export class LearningAdminService {
   /**
    * 023 EARS-26 — publish or unpublish a school. A published school is read by
    * doctors (EARS-3: `soon` while it has no published course); a draft one is
-   * `404` to them. Its courses keep their own states.
+   * `404` to them. Its courses keep their own states. A republish that opens
+   * the school (EARS-7: it has a published course) claims the unsent
+   * school-opened notices, sent once the publication has committed.
    */
   async setSchoolState(
     schoolId: string,
@@ -607,7 +608,8 @@ export class LearningAdminService {
     expectedVersion: number,
     complete: LearningComplete = noComplete,
   ): Promise<LearningCommandResult<LearningSchoolAdmin>> {
-    return this.deps.transaction(async (tx) => {
+    let notices: LearningSchoolOpenedNotice[] = [];
+    const result = await this.deps.transaction(async (tx) => {
       const row = await bumpSchool(
         tx,
         schoolId,
@@ -621,8 +623,13 @@ export class LearningAdminService {
             );
         },
       );
+      if (state === "published")
+        notices = await claimSchoolRepublishedNotices(tx, row, this.now());
       return finish(tx, toSchool(row), row.version, complete);
     });
+    // Off the response path: the port dispatches and returns at once.
+    if (notices.length > 0) this.deps.notices.schoolOpened(notices);
+    return result;
   }
 
   /** 023 EARS-27 — the school's courses in a new order, under the school's `If-Match`. */

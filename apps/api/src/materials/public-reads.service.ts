@@ -3,6 +3,8 @@ import {
   expertDisplayName,
   expertShortName,
   FEED_TELEGRAM_SOURCE_NAME,
+  FEED_VK_POST_SOURCE_NAME,
+  FEED_VK_VIDEO_SOURCE_NAME,
   type FeedCard,
   type MaterialBody,
   type PublicFeedPage,
@@ -29,7 +31,8 @@ import { MaterialsRepository } from "./materials.repository.js";
  * at every read — a signed URL is short-lived, so it is never stored. A
  * Telegram preview not yet copied (`pending`) or given up (`failed`) has no
  * key, so the card takes its no-image layout. A network card that stores its
- * platform's absolute URL (`image_url`) has it passed through unchanged.
+ * platform's absolute URL (`image_url`) — a VK preview, referenced and never
+ * copied (048-design «Preview (slice 3)») — has it passed through unchanged.
  */
 async function feedCardImage(
   row: PublicFeedRow,
@@ -59,14 +62,50 @@ export async function toFeedCard(
       external: true,
     };
   }
+  if (row.sourcePlatform === "vk" && row.kind === "post") {
+    // EARS-48 — a VK wall post: as a Telegram post, with the VK source and
+    // the referenced preview; the read never calls VK (EARS-50).
+    return {
+      id: row.id,
+      kind: "post",
+      text: row.title,
+      publishedAt: row.publishedAt.toISOString(),
+      image: await feedCardImage(row, storage),
+      duration: row.durationSeconds,
+      source: { platform: "vk", name: FEED_VK_POST_SOURCE_NAME },
+      partner: null,
+      href: row.href,
+      external: true,
+    };
+  }
+  if (
+    row.sourcePlatform === "vk" &&
+    row.kind === "video" &&
+    row.durationSeconds !== null
+  ) {
+    // EARS-48 — a VK Видео video: the connector stores its duration with it
+    // (EARS-42), so a video always shows one.
+    return {
+      id: row.id,
+      kind: "video",
+      title: row.title,
+      publishedAt: row.publishedAt.toISOString(),
+      image: await feedCardImage(row, storage),
+      duration: row.durationSeconds,
+      source: { platform: "vk", name: FEED_VK_VIDEO_SOURCE_NAME },
+      partner: null,
+      href: row.href,
+      external: true,
+    };
+  }
   if (
     row.sourcePlatform !== "academy" ||
     row.kind === "post" ||
     row.kind === "video"
   ) {
     // The read serves only `FEED_CARD_PLATFORMS` (048-design §Delivery
-    // slices (slice 2)), and the connector writes a Telegram entry only as a
-    // `post`; this is the last guard should the stored rows and the card
+    // slices (slice 2)), the connector writes a Telegram entry only as a
+    // `post` and a VK video always with its duration; this is the last guard should the stored rows and the card
     // contract ever disagree.
     throw new Error(
       `feed entry ${row.id} is a ${row.sourcePlatform} ${row.kind} entry, which the card contract has no member for`,
@@ -107,7 +146,7 @@ export class MaterialsPublicReadsService {
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
-  /** `GET /v1/public/feed` — EARS-9, EARS-10, EARS-19, EARS-33, EARS-35. */
+  /** `GET /v1/public/feed` — EARS-9, EARS-10, EARS-19, EARS-33, EARS-35, EARS-48, EARS-50. */
   async feedPage(query: PublicFeedQuery): Promise<PublicFeedPage> {
     const before = decodeFeedCursor(query.cursor);
     const rows = await this.entries.publicPage(query.limit + 1, before);

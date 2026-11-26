@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { FeedSource } from "@ds/db";
+import {
+  FEED_VK_POST_SOURCE_NAME,
+  FEED_VK_VIDEO_SOURCE_NAME,
+} from "@ds/schemas";
 import { FeedEntriesRepository } from "../feed-entries.repository.js";
 import type { MaterialsTx } from "../materials.repository.js";
 import { FeedSourcesRepository } from "../feed-sources.repository.js";
@@ -26,9 +30,9 @@ import {
 // again; every write is idempotent on `feed_entry_vk_objects`.
 
 /** The card source line of a VK post (048-design «Data model (slice 3)»). */
-export const VK_POST_SOURCE_NAME = "BBM Academy · VK";
+export const VK_POST_SOURCE_NAME = FEED_VK_POST_SOURCE_NAME;
 /** The card source line of a VK Видео video. */
-export const VK_VIDEO_SOURCE_NAME = "BBM Academy · VK Видео";
+export const VK_VIDEO_SOURCE_NAME = FEED_VK_VIDEO_SOURCE_NAME;
 
 /** The Callback events the connector processes (EARS-40). */
 export const VK_PROCESSED_EVENTS = ["wall_post_new", "video_new"] as const;

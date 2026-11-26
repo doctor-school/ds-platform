@@ -1,5 +1,11 @@
+"use client";
+
 import * as React from "react";
-import type { FeedCard as FeedCardData, FeedPostCard } from "@ds/schemas";
+import type {
+  FeedCard as FeedCardData,
+  FeedPostCard,
+  FeedVideoCard,
+} from "@ds/schemas";
 
 import { cn } from "../lib/utils";
 import { Avatar } from "../primitives/avatar";
@@ -26,12 +32,21 @@ import { Skeleton } from "../primitives/skeleton";
  * no-image layout (not the canvas «Превью видео» placeholder); ▶ and ↗ carry
  * U+FE0E so they render as text glyphs, not colour emoji.
  *
+ * Slice 3 (048 EARS-49, #4006) adds the VK form of `post` (`source` = vk) and
+ * the `video` variant (`source` = «vk-видео»), with the same lead corrections.
+ * A VK preview is referenced on VK's servers (048-design «Preview (slice 3)»):
+ * it is requested with no referrer, and one that fails to load leaves the card
+ * in its no-image layout. Nothing plays inside the card.
+ *
  * The whole card is ONE link — no nested interactive element: own cards open
- * in the same tab, a `post` opens its original in a new tab with
+ * in the same tab, a `post` or `video` opens its original in a new tab with
  * `rel="noopener noreferrer"`. The frame presses its offset shadow
  * `shadow-lg` → `shadow-md` on hover and shows `shadow-focus` on keyboard
  * focus.
  */
+
+/** U+FE0E — keeps ▶ / ↗ in text presentation (Stage A correction 4). */
+const TEXT_GLYPH = "\uFE0E";
 
 export const FEED_CARD_COPY = {
   kinds: { news: "Новость", column: "Колонка эксперта" },
@@ -46,10 +61,19 @@ export const FEED_CARD_COPY = {
     chip: "TG",
     newTab: ", откроется в новой вкладке на площадке Telegram",
   },
+  /** The VK `post` (canvas `SRC.vk`). */
+  vk: {
+    net: "VK",
+    chip: "VK",
+    newTab: ", откроется в новой вкладке на площадке VK",
+  },
+  /** The `video` (canvas `SRC['vk-видео']`). */
+  vkVideo: {
+    net: "VK Видео",
+    chip: `VK▶${TEXT_GLYPH}`,
+    newTab: ", откроется в новой вкладке на площадке VK Видео",
+  },
 } as const;
-
-/** U+FE0E — keeps ▶ / ↗ in text presentation (Stage A correction 4). */
-const TEXT_GLYPH = "\uFE0E";
 
 /**
  * A video duration in whole seconds as `m:ss`, `h:mm:ss` from one hour
@@ -179,8 +203,10 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
     "relative block text-inherit no-underline shadow-lg transition-shadow duration-150 hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none",
     className,
   );
-  if (card.kind === "post") {
-    return <FeedPostCardView card={card} now={now} logo={logo} link={link} />;
+  if (card.kind === "post" || card.kind === "video") {
+    return (
+      <FeedNetworkCardView card={card} now={now} logo={logo} link={link} />
+    );
   }
 
   const isNews = card.kind === "news";
@@ -349,7 +375,10 @@ function FeedContentRow({
       <span className="flex-none text-xs font-bold whitespace-nowrap text-faint tabular-nums">
         {card.meta}
       </span>
-      <span aria-hidden="true" className="flex-none text-sm font-extrabold text-primary-action">
+      <span
+        aria-hidden="true"
+        className="flex-none text-sm font-extrabold text-primary-action"
+      >
         →
       </span>
     </a>
@@ -359,11 +388,22 @@ function FeedContentRow({
 const MEDIA =
   "relative aspect-video overflow-hidden border-b-2 border-border bg-section";
 
-function FeedCardImage({ url }: { url: string }) {
+function FeedCardImage({
+  url,
+  referenced = false,
+  onBroken,
+}: {
+  url: string;
+  /** A preview on the platform's servers (VK): no referrer, a load error reported. */
+  referenced?: boolean;
+  onBroken?: () => void;
+}) {
   return (
     <img
       src={url}
       alt=""
+      referrerPolicy={referenced ? "no-referrer" : undefined}
+      onError={onBroken}
       className="absolute inset-0 block size-full object-cover"
     />
   );
@@ -399,21 +439,31 @@ function FeedCardLogoAvatar({ logo }: { logo: React.ReactNode }) {
 }
 
 /**
- * The `post` variant (canvas `source` = telegram). Canvas clamp math: 148px
- * of text room (no kind mark, never a partner) over a 24px body line → 6.
+ * The network variants: `post` (canvas `source` = telegram / vk) and `video`
+ * (canvas `source` = «vk-видео»). Canvas clamp math: 148px of text room (no
+ * kind mark, never a partner) over a 24px post line or a 23px title line → 6.
  */
-function FeedPostCardView({
+function FeedNetworkCardView({
   card,
   now,
   logo,
   link,
 }: {
-  card: FeedPostCard;
+  card: FeedPostCard | FeedVideoCard;
   now: Date | undefined;
   logo: React.ReactNode;
   link: string;
 }) {
-  const copy = FEED_CARD_COPY.telegram;
+  const copy =
+    card.kind === "video"
+      ? FEED_CARD_COPY.vkVideo
+      : card.source.platform === "vk"
+        ? FEED_CARD_COPY.vk
+        : FEED_CARD_COPY.telegram;
+  // EARS-49 — a referenced VK preview that fails to load: the no-image layout.
+  const referenced = card.source.platform === "vk";
+  const [brokenUrl, setBrokenUrl] = React.useState<string | null>(null);
+  const image = card.image && card.image.url !== brokenUrl ? card.image : null;
   return (
     <a
       href={card.href}
@@ -423,9 +473,15 @@ function FeedPostCardView({
     >
       <FeedCardFrame>
         <div className={MEDIA}>
-          {card.image ? (
+          {image ? (
             <>
-              <FeedCardImage url={card.image.url} />
+              <FeedCardImage
+                url={image.url}
+                referenced={referenced}
+                {...(referenced
+                  ? { onBroken: () => setBrokenUrl(image.url) }
+                  : {})}
+              />
               {card.duration !== null ? (
                 <>
                   <span
@@ -465,7 +521,11 @@ function FeedPostCardView({
             </span>
           </div>
 
-          {card.text ? (
+          {card.kind === "video" ? (
+            <div className="line-clamp-6 text-lg leading-title font-bold tracking-title wrap-break-word text-pretty text-foreground">
+              {card.title}
+            </div>
+          ) : card.text ? (
             <div
               data-feed-card-text=""
               className="line-clamp-6 text-base leading-normal wrap-break-word text-pretty text-foreground"

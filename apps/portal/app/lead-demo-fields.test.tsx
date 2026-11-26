@@ -10,7 +10,30 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as botProtection from "@ds/auth-flow/bot-protection";
+import { SMARTCAPTCHA_NOTICE_URL } from "@ds/auth-flow/bot-protection";
+
 import { LeadDemoFields, type LeadDemoFieldsProps } from "./lead-demo-fields";
+
+const BotProtectionDisclosureSpy = vi.hoisted(() =>
+  vi.fn<
+    (props: Parameters<typeof botProtection.BotProtectionDisclosure>[0]) => void
+  >(),
+);
+
+vi.mock("@ds/auth-flow/bot-protection", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@ds/auth-flow/bot-protection")>();
+  return {
+    ...actual,
+    BotProtectionDisclosure: (
+      props: Parameters<typeof actual.BotProtectionDisclosure>[0],
+    ) => {
+      BotProtectionDisclosureSpy(props);
+      return actual.BotProtectionDisclosure(props);
+    },
+  };
+});
 
 type SubmitAction = NonNullable<LeadDemoFieldsProps["submitAction"]>;
 type SubmitResult = Awaited<ReturnType<SubmitAction>>;
@@ -322,6 +345,23 @@ describe("Feature 013 Academy partnership form", () => {
       expect(screen.getByTestId("smartcaptcha-disclosure")).toHaveTextContent(
         "Форма защищена Yandex SmartCaptcha.",
       );
+    });
+
+    it("EARS-18: the disclosure is the shared @ds/auth-flow notice on the brand surface", () => {
+      render(
+        <LeadDemoFields
+          submitAction={vi.fn<SubmitAction>()}
+          botProtectionSiteKey="site-key"
+        />,
+      );
+
+      expect(BotProtectionDisclosureSpy).toHaveBeenCalled();
+      const props = BotProtectionDisclosureSpy.mock.lastCall![0];
+      expect(props.config.botProtection?.siteKey).toBe("site-key");
+      expect(props.tone).toBe("on-primary");
+      expect(
+        within(screen.getByTestId("smartcaptcha-disclosure")).getByRole("link"),
+      ).toHaveAttribute("href", SMARTCAPTCHA_NOTICE_URL);
     });
   });
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { botProtectionMessages } from "@ds/auth-flow/bot-protection";
-import { resolveAuthFlowCopy } from "@ds/auth-flow/copy";
+import {
+  BotProtectionDisclosure,
+  botProtectionMessages,
+} from "@ds/auth-flow/bot-protection";
 import { ACADEMY_AUTH_FLOW } from "@ds/auth-flow/hosts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -59,15 +61,9 @@ export interface LeadDemoFieldsProps {
   botProtectionSiteKey?: string | undefined;
 }
 
-// The Academy host's challenge and disclosure copy (003 EARS-17): the same
-// sentences its auth doors show, read from the shared auth-flow catalog.
+// The Academy host's challenge copy (003 EARS-17): the same sentences its auth
+// doors show, read from the shared auth-flow catalog.
 const CHALLENGE_MESSAGES = botProtectionMessages(ACADEMY_AUTH_FLOW);
-const DISCLOSURE = resolveAuthFlowCopy(ACADEMY_AUTH_FLOW)
-  .botProtectionDisclosure;
-// Yandex SmartCaptcha's notice: the widget runs with its shield hidden, so the
-// form states the protection itself (as `AuthShell` does; #4031 extracts that
-// notice into a shared `@ds/auth-flow` component — swap to it once it lands).
-const SMARTCAPTCHA_NOTICE_URL = "https://yandex.com/legal/smartcaptcha_notice/";
 
 const SUMMARY_FIELDS: ReadonlyArray<{
   name: Exclude<keyof AcademyPartnershipSubmissionInput, "idempotencyKey">;
@@ -355,24 +351,15 @@ export function LeadDemoFields({
           sitekey={botProtectionSiteKey}
           {...captcha.fieldProps}
         />
-        {botProtectionSiteKey ? (
-          <p
-            className="text-caption text-primary-surface-foreground"
-            data-testid="smartcaptcha-disclosure"
-          >
-            {DISCLOSURE.notice}{" "}
-            <Link
-              href={SMARTCAPTCHA_NOTICE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="inline"
-              tone="on-primary"
-              aria-label={DISCLOSURE.linkLabel}
-            >
-              {DISCLOSURE.link}
-            </Link>
-          </p>
-        ) : null}
+        {/* Yandex SmartCaptcha's notice: the widget runs with its shield
+            hidden, so the form states the protection itself (003 EARS-17). */}
+        <BotProtectionDisclosure
+          config={{
+            ...ACADEMY_AUTH_FLOW,
+            botProtection: { siteKey: botProtectionSiteKey },
+          }}
+          tone="on-primary"
+        />
       </form>
     </Form>
   );

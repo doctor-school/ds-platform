@@ -401,6 +401,13 @@ LIVE = tool("docker") + ["compose", "exec", "-T", "-e", "PGCLIENTENCODING=UTF8",
 # The live pgBackRest sidecar: the recorded pgbackrest image (data-env's
 # .postgres-artifacts.json), as `backup-info` reaches it.
 SIDECAR = tool("docker") + ["compose", "exec", "-T", "pgbackrest", "gosu", "postgres", "pgbackrest", "--stanza=ds"]
+# repo1 alone (#3670). pgBackRest 2.60.0 takes --repo for `check` only in its remote
+# role (build/config.yaml, option `repo`), so the offsite repos are left out by reading
+# no include: an explicit --config-include-path must exist (src/config/parse.c, the
+# include listing's errorOnMissing) and only its *.conf files are read. The
+# pgbackrest_log volume is mounted there in every sidecar image and holds logs only.
+# Their env names without a repoN-type are then dropped (parse.c, cfgSourceConfig).
+REPO1_ONLY = ["--config-include-path=/var/log/pgbackrest"]
 
 
 def copy_prefix(sha):
@@ -659,8 +666,9 @@ def cmd_run(sha):
             images = json.load(f)["images"]
         pg_image, br_image = images["postgres"], images["pgbackrest"]
         # The open WAL segment can hold the last migrate (prod sets no archive_timeout):
-        # check switches it and waits until it is in the repository.
-        done = run(SIDECAR + ["check"],
+        # check switches it and waits until it is in the repository. repo1 only (#3670):
+        # the restore reads repo1, and an offsite outage never holds a rehearsal.
+        done = run(SIDECAR + REPO1_ONLY + ["check"],
                    timeout=180, cwd=COMPOSE)
         text = (done.stdout + done.stderr).decode("utf-8", "replace")
         switch = WAL_SWITCH_RE.search(text)

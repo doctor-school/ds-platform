@@ -865,6 +865,8 @@ SECRET_INTAKE_KEY=$SECRET_INTAKE_DIR/key.pem
 SECRET_INTAKE_CERT=$SECRET_INTAKE_DIR/cert.pem
 SECRET_STAGED=$ROOT/etc/ds-platform/.data.env.next
 SECRET_BACKUP=$ROOT/etc/ds-platform/.data.env.previous
+# The rollback copy of a rotation that generates an offsite pass (#3670; secret-stage).
+SECRET_KEEP=$SECRET_STAGED.keep
 # One use per ciphertext: the {createdAt, nonce} of the last rotation whose verdict
 # stands, and the one a staged rotation will record (root 0600, in the 0700 dir).
 SECRET_APPLIED=$SECRET_INTAKE_DIR/applied.json
@@ -918,9 +920,24 @@ ABS_PATH = re.compile("(/[A-Za-z0-9_.-]+)+")
 REL_PATH = re.compile("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")
 ENV_NAME = re.compile("[A-Za-z_][A-Za-z0-9_]{0,127}")
 ROLES = ("postgres", "pgbackrest")
-# #4068: the data.env names secret-apply may replace, and the shape of their values.
-SECRET_KEYS = ("PGBACKREST_REPO1_S3_KEY", "PGBACKREST_REPO1_S3_KEY_SECRET")
+# #4068: the shape of a supplied S3 key value.
 SECRET_VALUE = re.compile("[A-Za-z0-9+/=_.-]{8,256}")
+# #4068, #3670: the names data-secret-apply may set in data.env — NAME: (file, value
+# shape, generator), pinned equal to tools/deploy/data-secret.mjs BOXES.data. A None
+# shape takes no supplied value: an offsite repo's cipher pass is generated here only,
+# so it never exists at that repo's provider.
+DATA_SECRETS = {
+    "PGBACKREST_REPO1_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO1_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO2_S3_ENDPOINT": ("data", r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[1-9][0-9]{0,4})?", None),
+    "PGBACKREST_REPO2_CIPHER_PASS": ("data", None, "hex32"),
+    "PGBACKREST_REPO3_S3_KEY": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO3_S3_KEY_SECRET": ("data", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "PGBACKREST_REPO3_S3_ENDPOINT": ("data", r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[1-9][0-9]{0,4})?", None),
+    "PGBACKREST_REPO3_CIPHER_PASS": ("data", None, "hex32"),
+}
 SECRET_MAX_AGE = 6 * 3600
 # #4153: the names api-secret-apply may set on ds-api-prod — NAME: (file, value shape,
 # generator) — pinned equal to tools/deploy/data-secret.mjs BOXES.api. `api`: api.env,
@@ -944,7 +961,7 @@ API_SECRETS = {
 }
 # secret-stage's boxes: NAME → (file tag, compiled shape, generator).
 SECRET_BOXES = {
-    "data": {name: ("data", SECRET_VALUE, None) for name in SECRET_KEYS},
+    "data": {name: (tag, shape and re.compile(shape), gen) for name, (tag, shape, gen) in DATA_SECRETS.items()},
     "api": {name: (tag, re.compile(shape), gen) for name, (tag, shape, gen) in API_SECRETS.items()},
 }
 SECRET_FILE_LABELS = {"data": "data.env", "api": "api.env", "compose": "the compose .env"}
@@ -1074,9 +1091,9 @@ if action == "secret-stage":
     # "sha": <live sha>, "nonce": <32 hex>, "values": {NAME: value}} (#4153: plus an
     # optional "generate": [NAME]); argv: the box (SECRET_BOXES), the sha the apply was
     # called with, the applied record, the pending record, then <file tag> <file>
-    # <staged copy> per file. Only the box's names: on data each replaces the one NAME=
-    # line data.env already holds; on api it replaces its one line or is appended, and a
-    # generated name must be absent or empty. Neither a value nor a line of a file is
+    # <staged copy> per file. Only the box's names: each replaces its one NAME= line or
+    # is appended (#3670: an offsite repo's names are new to data.env), and a generated
+    # name must be absent or empty. Neither a value nor a line of a file is
     # ever printed. One use per ciphertext: it names the SHA it is for, and its
     # createdAt must be newer than the one the last rotation unit recorded once its
     # verdict stood. The last applied ciphertext itself exits 4: the apply attaches to
@@ -1096,7 +1113,7 @@ if action == "secret-stage":
     except ValueError:
         stop(2, "the secret is not one JSON object")
     fields = {"schema", "createdAt", "sha", "nonce", "values"}
-    check(isinstance(req, dict) and fields <= set(req) <= fields | ({"generate"} if box == "api" else set()))
+    check(isinstance(req, dict) and fields <= set(req) <= fields | {"generate"})
     check(type(req["schema"]) is int and req["schema"] == 1)
     check(isinstance(req["sha"], str) and SHA40.fullmatch(req["sha"]) is not None)
     check(isinstance(req["nonce"], str) and NONCE.fullmatch(req["nonce"]) is not None)
@@ -1131,9 +1148,12 @@ if action == "secret-stage":
           and all(isinstance(g, str) and g in table and table[g][2] and g not in values for g in generate))
     check(bool(values) or bool(generate))
     for name, value in values.items():
+        if table[name][1] is None:
+            stop(2, name + " is generated on the box only: give it as <generate>")
         if not (isinstance(value, str) and table[name][1].fullmatch(value)):
             stop(2, "the value of " + name + " is not " +
-                 ("8-256 characters of A-Z a-z 0-9 + / = _ . -" if box == "data" else "its allowed shape"))
+                 ("8-256 characters of A-Z a-z 0-9 + / = _ . -"
+                  if table[name][1].pattern == SECRET_VALUE.pattern else "its allowed shape"))
     lines = {}
     for tag in sorted({table[name][0] for name in list(values) + generate}):
         try:
@@ -1144,35 +1164,46 @@ if action == "secret-stage":
     for name in sorted(list(values) + generate):
         tag = table[name][0]
         held = [line for line in lines[tag] if line.startswith(name + "=")]
-        if (box == "data" and len(held) != 1) or len(held) > 1:
+        if len(held) > 1:
             stop(3, "%s holds %d %s= lines, not one" % (SECRET_FILE_LABELS[tag], len(held), name))
         if name in generate:
             if held and held[0] != name + "=":
                 stop(2, name + " already has a value: <generate> fills an absent or empty one only")
             values[name] = (secrets.token_hex(32) if table[name][2] == "hex32"
                             else base64.b64encode(secrets.token_bytes(32)).decode("ascii"))
-    new = {}
-    for tag, old in lines.items():
+    def render(tag, old, vals):
         out, seen = [], set()
         for line in old:
             name = line.split("=", 1)[0]
-            if "=" in line and name in values and table[name][0] == tag:
-                out.append(name + "=" + values[name])
+            if "=" in line and name in vals and table[name][0] == tag:
+                out.append(name + "=" + vals[name])
                 seen.add(name)
             else:
                 out.append(line)
-        added = [n + "=" + values[n] for n in sorted(values) if table[n][0] == tag and n not in seen]
+        added = [n + "=" + vals[n] for n in sorted(vals) if table[n][0] == tag and n not in seen]
         if added:
             # Before the trailing newline's empty last element, so the file keeps ending in one.
             at = len(out) - 1 if out and out[-1] == "" else len(out)
             out[at:at] = added
-        new[tag] = out
+        return out
+    new = {tag: render(tag, old, values) for tag, old in lines.items()}
     # The rotation unit moves it onto the applied record once its verdict stands;
     # written first, so a staged copy never lacks it.
     write(pending, json.dumps({"createdAt": req["createdAt"], "nonce": req["nonce"]}) + "\n")
     for tag, out in new.items():
         write(files[tag][1], "\n".join(out))  # mkstemp: 0600, owned by root (the caller)
-    given = ", ".join(sorted(set(values) - set(generate)))
+    # #3670: the data box's rollback copy (<staged>.keep): the previous data.env plus
+    # the generated names only. stanza-create may already have written a repo's info
+    # files under a generated pass when the verdict fails, and Object Lock keeps them;
+    # the unit restores this copy so that pass survives (its repo stays off without its
+    # keys) and the retry supplies only the keys. A rotation generating nothing has none.
+    if box == "data":
+        keep = files["data"][1] + ".keep"
+        if os.path.exists(keep):
+            os.unlink(keep)
+        if generate:
+            write(keep, "\n".join(render("data", lines["data"], {n: values[n] for n in generate})))
+    given =", ".join(sorted(set(values) - set(generate)))
     changed = any(new[tag] != lines[tag] for tag in new)
     report = []
     if given:
@@ -1354,7 +1385,10 @@ data_storage_driver() {
 # command secret-apply's unit recreates postgres + pgbackrest with (#4068).
 DATA_UP_PERSISTENCE='docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest'
 # The S3 repository check of the running pgbackrest container (the box-key runbook's).
-DATA_PGBACKREST_CHECK='docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check'
+DATA_PGBACKREST_CHECK='docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh'
+# The first full backup to one offsite repo (#3670): the rotation unit runs it for a
+# repo its verdict just turned on.
+DATA_OFFSITE_FULL='docker compose exec -T pgbackrest /usr/local/bin/backup.sh full offsite'
 
 # The durable step units of data-prod: the step script is fixed here; ds-release
 # copies it root-only and runs it in ds-prod-<sha12>-<step>.
@@ -1422,17 +1456,37 @@ cp -p -- '$DATA_ENV' '$SECRET_BACKUP'
 install -m 0600 -o root -g root -- '$SECRET_STAGED' '$DATA_ENV'
 rm -f -- '$SECRET_STAGED'
 echo 'data-secret: data.env changed; recreating postgres + pgbackrest on the recorded images'
-if $DATA_UP_PERSISTENCE && $DATA_PGBACKREST_CHECK; then
-  rm -f -- '$SECRET_BACKUP'
+# #3670: the verdict checks repo1 plus the offsite repos whose names this rotation
+# changes (never an untouched one); a repo it turns on gets its first full right away.
+offsite= fresh=
+for n in 2 3; do
+  [[ "\$(grep "^PGBACKREST_REPO\${n}_" '$SECRET_BACKUP' || true)" == "\$(grep "^PGBACKREST_REPO\${n}_" '$DATA_ENV' || true)" ]] ||
+    offsite="\$offsite \$n"
+  grep -q "^PGBACKREST_REPO\${n}_S3_KEY=." '$SECRET_BACKUP' || ! grep -q "^PGBACKREST_REPO\${n}_S3_KEY=." '$DATA_ENV' ||
+    fresh="\$fresh \$n"
+done
+if $DATA_UP_PERSISTENCE && $DATA_PGBACKREST_CHECK\$offsite; then
+  rm -f -- '$SECRET_BACKUP' '$SECRET_KEEP'
   echo 'data-secret: pgbackrest check passed with the new values'
   mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
+  for n in \$fresh; do
+    echo "data-secret: the first full backup to repo\$n"
+    $DATA_OFFSITE_FULL "\$n" ||
+      echo "data-secret: WARNING: the first full backup to repo\$n failed; the 04:30 offsite job takes one (an incr with no full is a full)"
+  done
   exit 0
 fi
 # The restore runs every step whatever the one before it did (the unit's bash is
 # -e): put the backup back, recreate, check, record the ciphertext spent, exit 1.
+# A rotation that generated a pass restores the backup plus that pass (#3670).
 echo 'data-secret: the new values failed; restoring the previous data.env'
-if install -m 0600 -o root -g root -- '$SECRET_BACKUP' '$DATA_ENV'; then
-  rm -f -- '$SECRET_BACKUP'
+restore_from='$SECRET_BACKUP'
+if test -f '$SECRET_KEEP'; then
+  restore_from='$SECRET_KEEP'
+  echo 'data-secret: keeping the generated offsite cipher pass; its repo stays off until a retry supplies its keys'
+fi
+if install -m 0600 -o root -g root -- "\$restore_from" '$DATA_ENV'; then
+  rm -f -- '$SECRET_BACKUP' '$SECRET_KEEP'
 else
   echo 'data-secret: ERROR: the previous data.env could not be put back; it is kept at $SECRET_BACKUP'
 fi
@@ -1457,9 +1511,9 @@ secret_apply() {
     refuse "the data-prod compose has no recorded image overlay (a release's data-env writes it)"
   # Refused while any ds-prod-* unit runs, before anything is staged.
   sudo "$DS_RELEASE" check prod </dev/null >/dev/null
-  secret_decrypt_stage "$SECRET_STAGED" data "$sha" "$SECRET_APPLIED" "$SECRET_PENDING" \
+  secret_decrypt_stage "$SECRET_STAGED $SECRET_KEEP" data "$sha" "$SECRET_APPLIED" "$SECRET_PENDING" \
     data "$DATA_ENV" "$SECRET_STAGED"
-  secret_start_unit data-secret "$sha" "$SECRET_STAGED" "$(secret_script)"
+  secret_start_unit data-secret "$sha" "$SECRET_STAGED $SECRET_KEEP" "$(secret_script)"
 }
 
 # <staged files> <secret-stage args…>, stdin {"ciphertext": …}: decrypt with this box's
@@ -1778,13 +1832,16 @@ PY
 data_verb() {
   local n=${#words[@]}
   case "$verb" in
-    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema | recovery-bundle | recovery-check | read-host-state)
+    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema | recovery-bundle | read-host-state)
       ((n == 1)) || reject "usage: $verb" ;;
     recovery-put)
       [[ $n == 4 && ${words[1]} == api-prod && ${words[2]} =~ $RECOVERY_STAMP_RE && ${words[3]} =~ ^(bundle|manifest)$ ]] ||
         reject "usage: recovery-put api-prod <yyyymmddthhmmssz> bundle|manifest" ;;
     recovery-latest)
-      [[ $n == 2 && ${words[1]} == api-prod ]] || reject "usage: recovery-latest api-prod" ;;
+      [[ ($n == 2 || ($n == 3 && ${words[2]} =~ ^[23]$)) && ${words[1]} == api-prod ]] ||
+        reject "usage: recovery-latest api-prod [2|3]" ;;
+    recovery-check)
+      ((n == 1)) || [[ $n == 2 && ${words[1]} =~ ^[23]$ ]] || reject "usage: recovery-check [2|3]" ;;
     read-observe)
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
     secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
@@ -1853,9 +1910,9 @@ data_verb() {
     rehearse-restore) rehearse "${words[1]}" --restore-only ;;
     rehearsal-status) rehearsal_status "${words[1]}" </dev/null ;;
     recovery-bundle) recovery_bundle </dev/null ;;
-    recovery-check) recovery_check </dev/null ;;
+    recovery-check) recovery_check "${words[1]-}" </dev/null ;;
     recovery-put) recovery_put "${words[2]}" "${words[3]}" ;;
-    recovery-latest) recovery_latest </dev/null ;;
+    recovery-latest) recovery_latest "${words[2]-}" </dev/null ;;
     # #4144: no release check — the host state answers during a release too.
     read-host-state) exec sudo python3 -I -X utf8 -c "$HOST_STATE_PY" data "$ROOT" "$DATA_COMPOSE" </dev/null ;;
     secret-recipient) secret_recipient ds-data-prod-secret-intake </dev/null ;;
@@ -1879,16 +1936,31 @@ recovery_bundle() {
   recovery_work
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   members=$("$DS_RECOVERY" bundle data-prod "$RECOVERY_CUSTODIANS" "$recovery_dir" "$stamp")
-  "$DS_RECOVERY" upload data-prod "$stamp" bundle "$recovery_dir/bundle.tar.age"
-  "$DS_RECOVERY" upload data-prod "$stamp" manifest "$recovery_dir/manifest.json"
+  recovery_store data-prod "$stamp" "$recovery_dir/bundle.tar.age" "$recovery_dir/manifest.json"
   printf 'data-prod STORED %s members %s
 ' "$stamp" "$members"
+  ((recovery_offsite_failed == 0)) || exit 1
 }
+# #3670: a bundle and its manifest go to repo1's bucket, then to each offsite repo's
+# bucket the box has turned on (RECOVERY.md §2), so the passes survive the loss of
+# Timeweb. repo1 failing stops the verb; an offsite copy failing is ds-recovery's
+# reason on stderr, the other copies are still made, and the verb exits 1.
+recovery_offsite_failed=0
+recovery_store() { # <box> <stamp> <bundle file> <manifest file>
+  local n
+  "$DS_RECOVERY" upload "$1" "$2" bundle "$3"
+  "$DS_RECOVERY" upload "$1" "$2" manifest "$4"
+  for n in $("$DS_RECOVERY" offsite-repos); do
+    { "$DS_RECOVERY" upload "$1" "$2" bundle "$3" "$n" && "$DS_RECOVERY" upload "$1" "$2" manifest "$4" "$n"; } ||
+      recovery_offsite_failed=1
+  done
+}
+# recovery-check [<repo>]: the latest data-prod manifest of repo1, or of offsite repo 2|3.
 recovery_check() {
-  local found
+  local found repo=${1-}
   recovery_work
   "$DS_RECOVERY" custodians "$RECOVERY_CUSTODIANS"
-  found=$("$DS_RECOVERY" latest data-prod "$recovery_dir/latest.json")
+  found=$("$DS_RECOVERY" latest data-prod "$recovery_dir/latest.json" ${repo:+"$repo"})
   if [[ $found != FOUND ]]; then
     echo "data-prod MISSING"
     exit 1
@@ -1900,12 +1972,20 @@ recovery_put() {
   local stamp=${1^^} kind=$2
   recovery_work
   head -c 1048577 >"$recovery_dir/$kind"
+  local n
   "$DS_RECOVERY" upload api-prod "$stamp" "$kind" "$recovery_dir/$kind" </dev/null
+  # #3670: and each offsite copy, as recovery_store. An offsite failure here never
+  # fails the put: ds-api-prod stops at a failed put, which would leave repo1 without
+  # the manifest. data-prod's own copy, made next to the same buckets, fails the verb.
+  for n in $("$DS_RECOVERY" offsite-repos </dev/null); do
+    "$DS_RECOVERY" upload api-prod "$stamp" "$kind" "$recovery_dir/$kind" "$n" </dev/null || true
+  done
 }
+# recovery-latest api-prod [<repo>]
 recovery_latest() {
-  local found
+  local found repo=${1-}
   recovery_work
-  found=$("$DS_RECOVERY" latest api-prod "$recovery_dir/latest.json")
+  found=$("$DS_RECOVERY" latest api-prod "$recovery_dir/latest.json" ${repo:+"$repo"})
   if [[ $found == FOUND ]]; then cat -- "$recovery_dir/latest.json"; else echo MISSING; fi
 }
 

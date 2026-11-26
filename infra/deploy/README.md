@@ -900,7 +900,7 @@ create-access-key` on the operator's workstation, as above. The values never ent
       log prints the certificate and its SHA-256 fingerprint. A rebuilt box generates a
       new pair: dispatch it again and commit the new certificate and its fingerprint.
    2. **Encrypt the new values** on the workstation, from a file that holds exactly the
-      lines to replace (no other `data.env` name is accepted):
+      lines to set (only the `BOXES.data` names of `tools/deploy/data-secret.mjs`):
 
       ```bash
       pnpm prod:data-secret <live sha> < new-key.txt   # PGBACKREST_REPO1_S3_KEY=… / PGBACKREST_REPO1_S3_KEY_SECRET=…
@@ -919,10 +919,10 @@ create-access-key` on the operator's workstation, as above. The values never ent
       release's, whose one pending run it could cancel), refused while any `ds-prod-*`
       unit runs, ds-data-prod decrypts, checks the names and value shapes, and runs the
       durable unit `ds-prod-<sha12>-data-secret`: `data.env` backed up, exactly those
-      lines replaced (root:root 0600), postgres + pgbackrest recreated with data-up's
+      lines replaced or appended (root:root 0600), postgres + pgbackrest recreated with data-up's
       command on the recorded image overlay (`.postgres-artifacts.json`, so the guard
       reads the recorded images and the next release passes `postgres-verify`), then
-      `pgbackrest --stanza=ds check`. A failed check puts the backup back, recreates
+      `repo-check.sh` (`stanza-create` + `check` on every configured repo). A failed check puts the backup back, recreates
       again and fails the run: the old key keeps working. The backup is removed either
       way. A run whose job died is re-dispatched with the same inputs once the unit has
       ended (while it runs, the apply is refused) and within the 6 h:
@@ -945,10 +945,79 @@ create-access-key` on the operator's workstation, as above. The values never ent
    there. Rotating the main key itself is a separate account-level action that affects
    every bucket, and is not part of this procedure.
 
+   **Adding or rotating an offsite pgBackRest repo** (#3670: repo2 IDrive e2 SG2,
+   repo3 Onidel bbm-sydney — the same release path as above). The buckets
+   (`bbm-ds-pgbackrest`, versioning, noncurrent lifecycle 35 d; Object Lock 30 d, its
+   mode per provider: IDrive e2 GOVERNANCE, Onidel COMPLIANCE) and
+   their keys belong to the provider-side owner; this box only writes to them. A repo
+   is on only while `data.env` holds all four of its names: until then the box runs
+   repo1 alone, so a release may ship before the names exist.
+
+   1. The provider-side owner writes the repo's lines to a file, the cipher pass as
+      `<generate>` (a supplied pass is refused, so it never exists at the provider):
+
+      ```text
+      PGBACKREST_REPO2_S3_KEY=…
+      PGBACKREST_REPO2_S3_KEY_SECRET=…
+      PGBACKREST_REPO2_S3_ENDPOINT=<bare host[:port] the provider assigned>
+      PGBACKREST_REPO2_CIPHER_PASS=<generate>
+      ```
+
+      and pipes it into `pnpm prod:data-secret <live sha>` (step 2 above). For a key
+      rotation only the key pair lines go in; `<generate>` over a held pass is refused.
+
+   2. **Apply it on the owner's word** (step 3 above). The box appends the absent names
+      and generates the pass (never printed). Both containers derive
+      `/etc/pgbackrest/conf.d/offsite.conf` from their env at start
+      (`pgbackrest-offsite.sh`, the `#repoN:` lines of `pgbackrest.conf`), and the
+      unit's verdict is `repo-check.sh <N>…`: the include again, then `stanza-create`
+      (a no-op on a valid stanza) and `check` on repo1 plus only the offsite repos
+      whose names this rotation changes, never an untouched one, so a repo1 key
+      rotation never fails on an offsite outage. When the verdict stands for a repo
+      the rotation turned on, the unit takes that repo's first full backup itself
+      (`backup.sh full offsite <N>`, printed as `the first full backup to repo<N>`); if
+      it fails, the unit says so and the 04:30 offsite job takes one (an incremental
+      with no full is a full). A failed verdict puts the previous `data.env` back and
+      the repo is off again.
+   3. Read `docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds info`
+      (ds-read): the new repo is listed with status ok and one full backup.
+   4. Dispatch `recovery-custody.yml` with `recovery-bundle`, then `recovery-check`:
+      the new pass exists only in `data.env` until then. From then on every bundle is
+      also stored in each offsite repo's bucket (RECOVERY.md §2).
+
+   **A failed first enable** keeps the generated pass. `stanza-create` may already have
+   written that repo's info files under the new pass before the verdict failed, and
+   Object Lock keeps them. So the rollback restores the previous `data.env` plus the
+   generated `PGBACKREST_REPO<N>_CIPHER_PASS` line, without the key pair or endpoint:
+   the repo stays off. **Retry** with the key pair and endpoint lines only. A
+   `<generate>` line over the held pass is refused, and the retry's `stanza-create`
+   finds the info files it can read. Bundle again (step 4) once the retry stands.
+   **Last resort**, when the repo's files and the held pass still disagree (for
+   example info files written under a pass lost outside this procedure): give the
+   repo a new path, `repo<N>-path` in its `#repo<N>:` lines of `pgbackrest.conf`,
+   through a normal PR and release, then retry with the key lines. `stanza-create`
+   writes a new stanza there under the held pass, which no object at that path has
+   seen. Never delete the locked objects at the old path: they expire under the
+   bucket's own lock and lifecycle.
+
+   The release gate reads repo1 only (`postgres-artifact-probe.py`: `info --repo=1`),
+   and so does the migration rehearsal's archive check. An offsite repo's state is a
+   stderr line of the probe (`offsite repo<N>: <status>`), never a refusal. WAL goes
+   to every enabled repo asynchronously: while one offsite repo is down, repo1 keeps
+   receiving WAL and `pg_wal` grows by the segments the down repo has not
+   acknowledged. Past `archive-push-queue-max` (16 GiB) pgBackRest drops the queue to
+   keep PostgreSQL up. Only the repos that missed segments then lose PITR past that
+   point (repo1 holds every segment the async push delivered), until their next
+   full. Offsite backups run weekly full / daily incremental (`crontab`), 35-day
+   retention. Each backup takes only its own repo's lock (`--repo=1` / `--repo=<N>`),
+   so an offsite backup still running at 06:00 never blocks repo1's incremental.
+   Alerting on per-repo backup age, archive failures and `pg_wal` growth is #3671.
+
    **Bundle the irreplaceable keys** before you leave this step, and again after any
    later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,
    then `recovery-check`. `PGBACKREST_REPO1_CIPHER_PASS`, `ZITADEL_MASTERKEY`,
-   `SIGN_IN_RECORD_KEY` and `AUDIT_IDENTIFIER_PEPPER` cannot be regenerated without
+   `PGBACKREST_REPO2_CIPHER_PASS`, `PGBACKREST_REPO3_CIPHER_PASS`, `SIGN_IN_RECORD_KEY` and
+   `AUDIT_IDENTIFIER_PEPPER` cannot be regenerated without
    losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2.
 
 7. **Bring up data-prod FIRST** (DB/Redis/backup). `VPC_IP` = data-prod's private

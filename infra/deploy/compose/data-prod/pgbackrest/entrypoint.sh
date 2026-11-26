@@ -2,6 +2,9 @@
 # DS Platform data-prod — pgbackrest sidecar entrypoint (DSO-100 spec §6.3).
 #
 # 1. Persist the PGBACKREST_* env (cron scrubs env — backup.sh re-sources this).
+# 1b. Derive the offsite include from this container's env (#3670, pgbackrest.conf).
+"${BASH_SOURCE[0]%/*}/pgbackrest-offsite.sh"
+
 # 2. Wait for Postgres, then create the stanza (idempotent) — the one-time repo init.
 # 3. Run cron in the foreground (PID 1) so the container stays up and the schedule
 #    (crontab: daily full 02:30 MSK + incr /6h) fires.
@@ -15,7 +18,9 @@ mkdir -p "$(dirname "$DS_PGBACKREST_ENV_FILE")"
 chmod 0600 "$DS_PGBACKREST_ENV_FILE"
 
 # 2. Wait for Postgres to accept connections over the shared socket, then ensure the
-#    stanza exists. `stanza-create` is idempotent (a second run is a no-op); `check`
+#    stanza exists on every configured repo: `stanza-create` works per repo and is a
+#    no-op on one that holds a valid stanza, so a newly enabled offsite repo gets
+#    its stanza on the first start that has it; `check`
 #    confirms archive_command + the repo are wired. Runs as `postgres` (uid 999).
 echo "waiting for postgres socket…"
 for _ in $(seq 1 60); do

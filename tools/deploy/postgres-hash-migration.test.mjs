@@ -429,3 +429,28 @@ test("4089: the post-up checkpoint also echoes ds-data-prod's docker storage dri
     ],
   );
 });
+
+test("3670: the probe gates the release on repo1 alone; an offsite repo is a status line", { skip: !python && "needs python3" }, () => {
+  const source = readFileSync(PROBE, "utf8");
+  assert.match(source, /"pgbackrest", "--stanza=ds", "--repo=1", "--output=json", "info"\)\)\n\s+if len\(info\) != 1/);
+  const info = [{ name: "ds", status: { code: 4, message: "mixed" }, repo: [
+    { key: 1, status: { code: 0, message: "ok" } },
+    { key: 2, status: { code: 2, message: "no valid backups" } },
+    { key: 3, status: { code: 99, message: "other" } },
+  ] }];
+  const r = spawnSync(
+    python,
+    [
+      "-I", "-B", "-c",
+      "import importlib.util, json, sys\n" +
+        "spec = importlib.util.spec_from_file_location('probe', sys.argv[1])\n" +
+        "probe = importlib.util.module_from_spec(spec); spec.loader.exec_module(probe)\n" +
+        "print(json.dumps([probe.offsite_lines(json.loads(sys.argv[2])), probe.offsite_lines([{'name': 'ds'}])]))",
+      PROBE,
+      JSON.stringify(info),
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), [["offsite repo2: no valid backups", "offsite repo3: other"], []]);
+});

@@ -51,12 +51,13 @@ Git, a CI log or a terminal transcript you share. Evidence is posted as fingerpr
 These bind data that already exists. A new value does not restore access; the old
 value must be in custody.
 
-| Key                            | File (host)                 | What breaks without the old value                                                                                                                                                                                                                                                                                                     |
-| ------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PGBACKREST_REPO1_CIPHER_PASS` | `data.env` (ds-data-prod)   | The whole pgBackRest repository (every backup and every archived WAL segment, AES-256-CBC per `compose/data-prod/pgbackrest/pgbackrest.conf`) is unreadable: no restore, no PITR. The passphrase cannot be changed after `stanza-create` ([pgBackRest configuration](https://pgbackrest.org/configuration.html), `repo-cipher-pass`). |
-| `ZITADEL_MASTERKEY`            | `zitadel.env` (ds-api-prod) | Zitadel cannot decrypt the secrets it stores encrypted at rest in its tables of the restored database, so the restored IdP instance does not start usable; rebuilding it means a new instance and every account's sign-in identity lost.                                                                                              |
-| `SIGN_IN_RECORD_KEY`           | `api.env` (ds-api-prod)     | The AES-256-GCM records of the sign-in host (ADR-0015 §4) in the restored database cannot be decrypted.                                                                                                                                                                                                                               |
-| `AUDIT_IDENTIFIER_PEPPER`      | `api.env` (ds-api-prod)     | New audit-ledger identifiers no longer match the HMACs already in the ledger for the same subject; audit continuity across the restore is broken («keep stable»).                                                                                                                                                                     |
+| Key                                | File (host)                 | What breaks without the old value                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PGBACKREST_REPO1_CIPHER_PASS`     | `data.env` (ds-data-prod)   | The whole pgBackRest repository (every backup and every archived WAL segment, AES-256-CBC per `compose/data-prod/pgbackrest/pgbackrest.conf`) is unreadable: no restore, no PITR. The passphrase cannot be changed after `stanza-create` ([pgBackRest configuration](https://pgbackrest.org/configuration.html), `repo-cipher-pass`).                                                                                               |
+| `PGBACKREST_REPO{2,3}_CIPHER_PASS` | `data.env` (ds-data-prod)   | The offsite repo (repo2 IDrive e2, repo3 Onidel; #3670) is unreadable, as above. Each repo has its own pass, generated on the box (`<generate>`, README → «Adding or rotating an offsite pgBackRest repo»): it never exists at that repo's provider or in its account, so its custody is this bundle alone, stored in repo1's bucket and in each offsite bucket (§2 «Automated custody»): a lost Timeweb leaves the offsite copies. |
+| `ZITADEL_MASTERKEY`                | `zitadel.env` (ds-api-prod) | Zitadel cannot decrypt the secrets it stores encrypted at rest in its tables of the restored database, so the restored IdP instance does not start usable; rebuilding it means a new instance and every account's sign-in identity lost.                                                                                                                                                                                            |
+| `SIGN_IN_RECORD_KEY`               | `api.env` (ds-api-prod)     | The AES-256-GCM records of the sign-in host (ADR-0015 §4) in the restored database cannot be decrypted.                                                                                                                                                                                                                                                                                                                             |
+| `AUDIT_IDENTIFIER_PEPPER`          | `api.env` (ds-api-prod)     | New audit-ledger identifiers no longer match the HMACs already in the ledger for the same subject; audit continuity across the restore is broken («keep stable»).                                                                                                                                                                                                                                                                   |
 
 ### 1.3 Replaceable credentials
 
@@ -68,6 +69,7 @@ carries the current values so a restore does not have to reissue them.
 | `ds` DB password: `POSTGRES_PASSWORD` (data.env) = the one in `DATABASE_URL` (api.env) = `ZITADEL_DATABASE_POSTGRES_{USER,ADMIN}_PASSWORD` (zitadel.env) | The restored cluster keeps the old role password, so after a restore either use the bundle value or `ALTER ROLE ds PASSWORD …` inside the cluster and write the same new value into all three files (README → «Apply order» step 6)                                                                                                                           | api and Zitadel restart                                                                                                               |
 | `PGBACKREST_REPO1_S3_{BUCKET,ENDPOINT}` (data.env), uploads S3 keys                                                                                      | `terraform output -raw …` (README → «Apply order» step 6, DD-6; `infra/deploy/terraform/outputs.tf`); `PGBACKREST_REPO1_S3_REGION` is the fixed `ru-1`                                                                                                                                                                                                        | none for data; the bucket name must stay the one holding the repo                                                                     |
 | `PGBACKREST_REPO1_S3_{KEY,KEY_SECRET}` (data.env)                                                                                                        | a new access key of the restricted S3 user `ds-data-prod-pgbackrest` (README → «Apply order» step 6, «The restricted pgBackRest S3 user»; swap: README → «Rotating the box's pgBackRest S3 key»). The `pgbackrest_s3_*_key` Terraform outputs are the account's main S3 key: they recreate that user or change the bucket configuration and never go on a box | the DB restarts for seconds; re-bundle (§2)                                                                                           |
+| `PGBACKREST_REPO{2,3}_S3_{KEY,KEY_SECRET,ENDPOINT}` (data.env)                                                                                           | a new key of the offsite bucket, issued by the provider-side owner in that provider's account and piped into `pnpm prod:data-secret` (README → «Adding or rotating an offsite pgBackRest repo»)                                                                                                                                                               | the DB restarts for seconds; re-bundle (§2)                                                                                           |
 | `IDP_SERVICE_TOKEN`                                                                                                                                      | a new PAT of the `ds-bootstrap` machine user (README → Zitadel init step)                                                                                                                                                                                                                                                                                     | none                                                                                                                                  |
 | `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` / `IDP_PROJECT_ID`                                                                                                 | `idp/provision.sh` (README → init step)                                                                                                                                                                                                                                                                                                                       | in-flight OIDC logins restart                                                                                                         |
 | `IDP_ACADEMY_CLIENT_KEY` / `IDP_DOCTOR_CLIENT_KEY` / `INTERNAL_API_TOKEN` (`api-sign-in.env`, `internal.env`)                                            | tool-written: the release's pre-swap IdP converge (`provision.sh` step 3.bis.2) re-mints them                                                                                                                                                                                                                                                                 | none beyond the release                                                                                                               |
@@ -159,6 +161,16 @@ ds-api-prod, the same key and forced command as `prod-observe.yml`) and runs two
     never a value or a plain hash of one;
   - `recovery-bundle/<box>/latest.json` — a copy of the newest manifest, written only
     after its bundle object is stored at the manifest's size.
+
+  The same three objects also go to each offsite repo's bucket the box has turned on
+  (repo2 IDrive e2, repo3 Onidel, #3670), written with that repo's own S3 key, so a
+  restore without Timeweb starts from an offsite copy (§3.6). The copy is the same
+  age ciphertext: without a custodian's identity it opens nothing, so its storage
+  at a foreign provider keeps the 2026-11-04 condition, which is about the
+  plaintext. repo1's copy failing stops the verb; an offsite copy failing is named
+  (`the upload to the repo<N> bucket failed`), the other copies are still made, and
+  the verb fails.
+
 - **`recovery-check`, daily.** Each box compares its live fingerprints, its member
   list and the custodians file with its latest manifest and answers `MATCH`,
   `MISMATCH <what>`, `STALE <n>d` (older than 8 days) or `MISSING`. Any answer but
@@ -292,7 +304,14 @@ holds the box's S3 keys): read the bucket with the provider account's own S3 key
 console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
 `PGBACKREST_REPO1_S3_ENDPOINT` of `data.env.example` / the Terraform outputs; that value
 is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
-`host[:port]` alone.
+`host[:port]` alone; `<region>` is `PGBACKREST_REPO1_S3_REGION` (`ru-1`).
+
+**Without Timeweb** (#3670) the same steps read an offsite copy: the bucket is the
+`#repoN: repoN-s3-bucket=` line of `compose/data-prod/pgbackrest/pgbackrest.conf`, the
+region its `repoN-s3-region=`, the endpoint that provider's S3 host, and the access a
+key of that provider account, which the provider-side owner issues (README → «Adding
+or rotating an offsite pgBackRest repo»). The bundle's own offsite key is inside the
+bundle, so it cannot be the key that fetches it.
 
 1. **Fetch the latest manifest of the box** (any S3 client; the AWS CLI shown, the keys
    in its environment, never on the command line):
@@ -300,7 +319,7 @@ is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
    ```bash
    set -o pipefail
    BOX=data-prod   # or api-prod
-   S3="aws s3 --endpoint-url https://<endpoint> --region ru-1"
+   S3="aws s3 --endpoint-url https://<endpoint> --region <region>"   # repo1: ru-1
    $S3 cp "s3://<bucket>/recovery-bundle/$BOX/latest.json" "latest-$BOX.json"
    grep -E '"(object|bytes|sha256)"' "latest-$BOX.json"   # bundle.object and its size and hash
    sed -n '/"members": \[/,/\]/p' "latest-$BOX.json"     # members: the file names step 3 checks
@@ -343,7 +362,8 @@ is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
    For ds-api-prod: `ssh breakglass@ds-api-prod` and each of its members in turn.
 
 When done, delete the fetched ciphertext and manifests from the workstation; they open
-nothing without an identity, but they are not kept outside the bucket.
+nothing without an identity, and their kept copies are the buckets' (repo1's and each
+offsite repo's, §2 «Automated custody»).
 
 ## 3. Restore proof (ds-data-prod)
 
@@ -577,6 +597,38 @@ verdict FAIL whatever the drill reported.
 
 No key value, row content or personal data goes into the report.
 
+### 3.6 Restoring from an offsite repo alone (repo2 / repo3, #3670)
+
+**Start from that repo's bundle copy.** With Timeweb gone, repo1's bucket holds no
+bundle a restorer can reach: a custodian fetches `recovery-bundle/data-prod/latest.json`
+and its bundle from repo N's own bucket, with a key of that provider account (§2.3
+«Without Timeweb»), and decrypts it as in §2.3 and §3.1. While the box still runs,
+`recovery-check N` (a data verb) compares the live keys with repo N's copy.
+
+The same procedure as §3.2–§3.4 with one repo named: a repo whose provider is gone
+(Timeweb included) is never read. The one-shot runs override the image entrypoint,
+so they do not derive the offsite include themselves: write it from the committed
+`#repoN:` lines and mount it. The bundle's `data.env` already carries that repo's
+key pair, endpoint and box-generated cipher pass (§1.2).
+
+```bash
+N=2   # or 3
+INC=/run/ds-recovery/offsite.conf
+{ echo '[global]'; sed -n "s/^#repo$N: //p" "$CONF"; } | sudo tee "$INC" >/dev/null
+BR="$BR -v $INC:/etc/pgbackrest/conf.d/offsite.conf:ro"
+$BR "$BR_IMAGE" --stanza=ds --repo=$N --log-level-file=off info
+# §3.2 step 4 and the copy's restore_command, both on repo N only:
+$BR -v "$SCRATCH/pgdata":/var/lib/postgresql/data "$BR_IMAGE" \
+  --stanza=ds --repo=$N --log-level-file=off --type=default --archive-mode=off restore
+```
+
+`--repo=N` picks the backup set from repo N. The copy's `restore_command`
+(`archive-get`) tries every configured repo in order and moves past one it cannot
+reach, so WAL comes from repo N once repo1 fails; to prove repo N alone, mount the
+copy's config with repo N only (unverified against a live outage until drill #3671).
+Skip §3.2 step 3 (`check`) when repo1 is unreachable: it checks every configured
+repo. Report which repo was read.
+
 ## 4. Full host-loss path
 
 Each step is an existing section; this list only orders them.
@@ -585,7 +637,7 @@ Each step is an existing section; this list only orders them.
    owner-local tfstate/tfvars (§1.1), then README → «Apply order» up to step 5
    (cloud-init, SSH access model, Docker Hub login, the tree).
 2. **Secrets.** «Apply order» step 6, each file filled **from the recovery bundle**
-   by a custodian (§2.3: fetch, verify, decrypt into a pipe to the new box). The four keys of §1.2 must be the old values; reissue only what §1.3 allows.
+   by a custodian (§2.3: fetch, verify, decrypt into a pipe to the new box). The keys of §1.2 must be the old values; reissue only what §1.3 allows.
 3. **Data before the first postgres boot** (ds-data-prod lost). Build the data images
    («Apply order» step 7), then restore into the empty `pgdata` volume **before**
    `postgres` first starts: a first boot on an empty volume runs `initdb` and creates

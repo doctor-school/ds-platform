@@ -357,6 +357,11 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.equal(report.headroom.dbSize, 1024 ** 3);
     assert.ok(Number.isInteger(report.headroom.scratchUsed) && report.headroom.scratchUsed > 0);
     assert.ok(calls().some((c) => c.args.includes("check")), "the archive check");
+    // #3670: repo1's archive check only; an offsite provider's outage never holds it.
+    assert.ok(
+      calls().some((c) => c.args.includes("check") && c.args.includes("--config-include-path=/var/log/pgbackrest")),
+      "the archive check is scoped to repo1",
+    );
     assert.equal(dockerRuns().length, 2, "restore and copy");
     assert.ok(calls().some((c) => c.args[0] === "logs"), "the replay-point check");
     assert.ok(calls().some((c) => c.args[0] === "exec" && c.stdin.includes("__drizzle_migrations")), "the copy-behind-prod check");

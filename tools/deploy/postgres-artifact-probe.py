@@ -55,6 +55,24 @@ def run(*args, stdin=None):
     return result.stdout.strip()
 
 
+def offsite_lines(info):
+    """`offsite repoN: <status>` per repo other than repo1 in an all-repo `info`."""
+    repos = info[0].get("repo", []) if isinstance(info, list) and info else []
+    return ["offsite repo%s: %s" % (r.get("key"), (r.get("status") or {}).get("message", "unknown"))
+            for r in repos if isinstance(r, dict) and r.get("key") != 1]
+
+
+def report_offsite(backup_name):
+    # stderr, so the evidence JSON on stdout is unchanged; any failure is a line too.
+    try:
+        info = json.loads(run("sudo", "docker", "exec", backup_name, "gosu", "postgres", "pgbackrest", "--stanza=ds", "--output=json", "info"))
+        lines = offsite_lines(info)
+    except Exception:
+        lines = ["offsite repos: status unavailable"]
+    for line in lines:
+        print(line, file=sys.stderr)
+
+
 def inspect(kind, name):
     return json.loads(run("sudo", "docker", kind, "inspect", name))[0]
 
@@ -132,9 +150,13 @@ def main():
         override = environment(container).get("PGBACKREST_PG1_PATH")
         if override and override != paths[0][0]:
             raise RuntimeError("backup path environment override mismatch")
-    info = json.loads(run("sudo", "docker", "exec", backup_name, "gosu", "postgres", "pgbackrest", "--stanza=ds", "--output=json", "info"))
+    # The release gate is repo1's (#3670): an offsite repo's health is a status line,
+    # never a refusal, so a foreign provider's outage or a repo with no backup yet
+    # never holds a release.
+    info = json.loads(run("sudo", "docker", "exec", backup_name, "gosu", "postgres", "pgbackrest", "--stanza=ds", "--repo=1", "--output=json", "info"))
     if len(info) != 1 or info[0]["name"] != "ds" or info[0]["status"]["code"] != 0:
         raise RuntimeError("backup stanza is not healthy")
+    report_offsite(backup_name)
     db = max(info[0]["db"], key=lambda item: item["id"])
     root = pathlib.Path.home() / "ds-platform/infra/deploy/compose/data-prod"
     state_path = pathlib.Path.home() / "ds-platform-postgres-state.json"

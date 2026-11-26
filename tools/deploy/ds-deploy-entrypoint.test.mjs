@@ -220,9 +220,22 @@ test("4068: the secret relay takes the read path's hop and the release driver's 
 
 test("4068: the box accepts exactly the names and value shape `pnpm prod:data-secret` encrypts", () => {
   const text = readFileSync(ENTRYPOINT, "utf8");
-  const keys = text.match(/^SECRET_KEYS = \((.*)\)$/m);
-  assert.ok(keys, "DATA_PY defines SECRET_KEYS");
-  assert.deepEqual(JSON.parse(`[${keys[1]}]`), [...SECRET_KEYS]);
+  // #3670: NAME → (file, shape, generator), as API_SECRETS; shape None = <generate> only.
+  const start = text.indexOf("\nDATA_SECRETS = {\n");
+  assert.ok(start > 0, "DATA_PY defines DATA_SECRETS");
+  const body = text.slice(start + "\nDATA_SECRETS = {\n".length, text.indexOf("\n}\n", start));
+  const table = {};
+  for (const line of body.split("\n")) {
+    if (line.trim().startsWith("#")) continue;
+    const m = line.match(/^ {4}"([A-Z0-9_]+)": \("data", (?:r"(.*)"|(None)), (None|"hex32")\),$/);
+    assert.ok(m, `one entry per line: ${line}`);
+    table[m[1]] = { file: "data", shape: m[3] ? null : m[2], ...(m[4] === "None" ? {} : { generate: JSON.parse(m[4]) }) };
+  }
+  const tool = Object.fromEntries(
+    Object.entries(BOXES.data.names).map(([n, { file, shape, generate }]) => [n, { file, shape, ...(generate ? { generate } : {}) }]),
+  );
+  assert.deepEqual(table, tool);
+  assert.deepEqual(Object.keys(table), [...SECRET_KEYS]);
   const value = text.match(/^SECRET_VALUE = re\.compile\("(.*)"\)$/m);
   assert.ok(value, "DATA_PY defines SECRET_VALUE");
   assert.equal(`^${value[1]}$`, SECRET_VALUE.source);
@@ -1523,7 +1536,48 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       script,
       /\ndocker compose -f compose\.yml -f \.postgres-artifacts\.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest/,
     );
-    assert.match(script, /docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check/);
+    assert.match(script, /docker compose exec -T -u postgres pgbackrest \/usr\/local\/bin\/repo-check\.sh/);
+  });
+
+  it("3670: an offsite repo's names are appended to data.env, its cipher pass generated on the box and never printed", async () => {
+    secretBox();
+    const { GENERATE } = await import("./data-secret.mjs");
+    const r = run(`secret-apply ${SHA}`, {
+      input: await cipher({
+        PGBACKREST_REPO2_S3_KEY: "OFFSITEKEY02",
+        PGBACKREST_REPO2_S3_KEY_SECRET: "offsite/secret+2=",
+        PGBACKREST_REPO2_S3_ENDPOINT: "s3.ap-southeast-2.idrivee2.com",
+        PGBACKREST_REPO2_CIPHER_PASS: GENERATE,
+      }),
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /generated: PGBACKREST_REPO2_CIPHER_PASS/);
+    const text = readFileSync(staged(), "utf8");
+    assert.ok(text.startsWith(OLD_ENV), "the held lines stay as they were");
+    const pass = text.match(/^PGBACKREST_REPO2_CIPHER_PASS=([0-9a-f]{64})$/m);
+    assert.ok(pass, "a 64-hex pass appended");
+    assert.match(text, /^PGBACKREST_REPO2_S3_ENDPOINT=s3\.ap-southeast-2\.idrivee2\.com$/m);
+    assert.match(text, /^PGBACKREST_REPO2_S3_KEY=OFFSITEKEY02$/m);
+    assert.ok(text.endsWith("\n"));
+    for (const v of [pass[1], "OFFSITEKEY02", "offsite/secret+2="]) {
+      assert.ok(!(r.stdout + r.stderr).includes(v), "no value in the output");
+    }
+  });
+
+  it("3670: the box refuses a supplied offsite cipher pass, and a <generate> over a held pass", async () => {
+    secretBox();
+    const { GENERATE } = await import("./data-secret.mjs");
+    const supplied = run(`secret-apply ${SHA}`, { input: await cipher({ PGBACKREST_REPO3_CIPHER_PASS: "a".repeat(64) }) });
+    assert.equal(supplied.status, 2, supplied.stderr);
+    assert.match(supplied.stderr, /PGBACKREST_REPO3_CIPHER_PASS is generated on the box only/);
+    assert.ok(!supplied.stderr.includes("aaaa") && !existsSync(staged()) && !existsSync(pending()));
+    writeFileSync(dataEnv(), OLD_ENV + `PGBACKREST_REPO3_CIPHER_PASS=${"b".repeat(64)}\n`, { mode: 0o600 });
+    const held = run(`secret-apply ${SHA}`, {
+      input: await cipher({ PGBACKREST_REPO3_CIPHER_PASS: GENERATE }, new Date(Date.now() + 1000)),
+    });
+    assert.equal(held.status, 2, held.stderr);
+    assert.match(held.stderr, /PGBACKREST_REPO3_CIPHER_PASS already has a value/);
+    assert.ok(!existsSync(staged()) && !existsSync(pending()), "nothing staged");
   });
 
   it("4068: secret-apply refuses a stale, foreign, off-list or malformed secret and stages nothing", async () => {
@@ -1583,16 +1637,16 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   // The unit's script, run for real: docker answers `check` with a failure while
   // data.env holds `failKey`, so both the success and the restore branch run.
   let unitInput;
-  const runUnit = async (failKey, now = new Date(), upFailKey = "NO-SUCH-KEY") => {
+  const runUnit = async (failKey, now = new Date(), upFailKey = "NO-SUCH-KEY", values = NEW) => {
     secretBox();
-    unitInput = await cipher(NEW, now);
+    unitInput = await cipher(values, now);
     assert.equal(run(`secret-apply ${SHA}`, { input: unitInput }).status, 0);
     writeFileSync(
       join(stubs, "docker"),
       [
         "#!/usr/bin/env bash",
         'echo "docker $*" >> "$STUB_DIR/docker.log"',
-        `[[ " $* " == *" check "* ]] && grep -q '${failKey}' '${dataEnv()}' && exit 1`,
+        `[[ " $* " == *" /usr/local/bin/repo-check.sh "* ]] && grep -q '${failKey}' '${dataEnv()}' && exit 1`,
         `[[ " $* " == *" up "* ]] && grep -q '${upFailKey}' '${dataEnv()}' && exit 1`,
         "exit 0",
       ].join("\n") + "\n",
@@ -1618,7 +1672,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(!existsSync(staged()) && !existsSync(previous()), "no copy left");
     assert.deepEqual(log("docker").trim().split("\n"), [
       "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest",
-      "docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check",
+      "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh",
     ]);
   });
 
@@ -1640,7 +1694,65 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "the previous data.env is back");
     assert.ok(!existsSync(previous()));
     assert.ok(existsSync(applied()) && !existsSync(pending()), "spent although the recreate failed");
-    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" check")).length, 2, "checked after the failed recreate too");
+    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes("/usr/local/bin/repo-check.sh")).length, 2, "checked after the failed recreate too");
+  });
+
+  it("3670: a rolled-back first enable keeps the generated pass, not the keys; the retry supplies the keys only", async () => {
+    const { GENERATE } = await import("./data-secret.mjs");
+    const keys = {
+      PGBACKREST_REPO2_S3_KEY: "OFFSITEKEY02",
+      PGBACKREST_REPO2_S3_KEY_SECRET: "offsite/secret+2=",
+      PGBACKREST_REPO2_S3_ENDPOINT: "s3.ap-southeast-2.idrivee2.com",
+    };
+    const r = await runUnit("OFFSITEKEY02", new Date(), "NO-SUCH-KEY", { ...keys, PGBACKREST_REPO2_CIPHER_PASS: GENERATE });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /keeping the generated offsite cipher pass/);
+    assert.deepEqual(
+      log("docker").trim().split("\n").filter((l) => l.includes("repo-check.sh")),
+      [
+        "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh 2",
+        "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh",
+      ],
+      "the enable checks repo1 + repo2; the restore repo1 alone",
+    );
+    assert.doesNotMatch(log("docker"), /backup\.sh/, "no first full after a refused enable");
+    const text = readFileSync(dataEnv(), "utf8");
+    const pass = text.match(/^PGBACKREST_REPO2_CIPHER_PASS=([0-9a-f]{64})$/m);
+    assert.ok(pass, "the pass stanza-create may have used survives the rollback");
+    assert.ok(text.startsWith(OLD_ENV) && text.endsWith("\n"));
+    assert.doesNotMatch(text, /^PGBACKREST_REPO2_S3_/m, "the keys stay out, so the repo stays off");
+    assert.equal(statSync(dataEnv()).mode & 0o777, 0o600);
+    assert.ok(!existsSync(`${staged()}.keep`) && !existsSync(previous()), "no copy left");
+    assert.ok(!(r.stdout + r.stderr).includes(pass[1]), "the pass is never printed");
+    const regenerate = run(`secret-apply ${SHA}`, {
+      input: await cipher({ ...keys, PGBACKREST_REPO2_CIPHER_PASS: GENERATE }, new Date(Date.now() + 1000)),
+    });
+    assert.equal(regenerate.status, 2, regenerate.stderr);
+    assert.match(regenerate.stderr, /PGBACKREST_REPO2_CIPHER_PASS already has a value/);
+    const retry = run(`secret-apply ${SHA}`, { input: await cipher(keys, new Date(Date.now() + 2000)) });
+    assert.equal(retry.status, 0, retry.stderr);
+    const next = readFileSync(staged(), "utf8");
+    assert.match(next, new RegExp(`^PGBACKREST_REPO2_CIPHER_PASS=${pass[1]}$`, "m"));
+    assert.match(next, /^PGBACKREST_REPO2_S3_KEY=OFFSITEKEY02$/m);
+    assert.ok(!existsSync(`${staged()}.keep`), "a rotation that generates nothing leaves no keep copy");
+  });
+
+  it("3670: an enable that passes checks repo1 + the new repo, keeps no copy and takes the repo's first full", async () => {
+    const { GENERATE } = await import("./data-secret.mjs");
+    const r = await runUnit("NO-SUCH-KEY", new Date(), "NO-SUCH-KEY", {
+      PGBACKREST_REPO3_S3_KEY: "OFFSITEKEY03",
+      PGBACKREST_REPO3_S3_KEY_SECRET: "offsite/secret+3=",
+      PGBACKREST_REPO3_S3_ENDPOINT: "s3.bbm-sydney.example.test",
+      PGBACKREST_REPO3_CIPHER_PASS: GENERATE,
+    });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(readFileSync(dataEnv(), "utf8"), /^PGBACKREST_REPO3_S3_KEY=OFFSITEKEY03$/m);
+    assert.ok(!existsSync(`${staged()}.keep`) && !existsSync(previous()), "no copy left");
+    assert.deepEqual(log("docker").trim().split("\n").slice(1), [
+      "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh 3",
+      "docker compose exec -T pgbackrest /usr/local/bin/backup.sh full offsite 3",
+    ]);
+    assert.ok(existsSync(applied()) && !existsSync(pending()));
   });
 
   it("4068: a stage refused after it wrote leaves no staged copy and no pending record", async () => {

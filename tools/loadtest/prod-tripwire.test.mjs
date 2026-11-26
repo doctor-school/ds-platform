@@ -146,3 +146,121 @@ test("auth-burst refuses a trailing-dot or IP-literal production target without 
     assertAuthBurstAllowed("http://localhost:3000", {}),
   );
 });
+
+// A stand api with a production value left in the shell for another origin the
+// run requests (README «Targets»): the storefront door and callback, the sign-in
+// host the password step posts as, the Centrifugo origin. Each one alone is a
+// production run, so each must trip every guard.
+const STAND_API = "http://localhost:3100";
+const PROD_RUN_ORIGINS = [
+  ["LOADTEST_STOREFRONT_ORIGIN", "https://new.doctor.school"],
+  ["LOADTEST_STOREFRONT_ORIGIN", "https://new.doctor.school."],
+  ["LOADTEST_STOREFRONT_ORIGIN", `http://${PROD_BOX_IP}:3004`],
+  ["LOADTEST_SIGN_IN_HOST_ORIGIN", "https://login.doctor.school"],
+  ["LOADTEST_CENTRIFUGO_ORIGIN", "https://api.doctor.school"],
+];
+
+test("room-fanout refuses a stand api when any other origin the run requests is production", () => {
+  for (const [name, value] of PROD_RUN_ORIGINS) {
+    assert.throws(
+      () => assertRoomFanoutAllowed(STAND_API, { [name]: value }),
+      new RegExp(
+        `REFUSING to run room-fanout against production target ${name}.*LOADTEST_ROOM_PROD_CONFIRMED=1`,
+        "s",
+      ),
+      `${name}=${value}`,
+    );
+    assert.doesNotThrow(
+      () =>
+        assertRoomFanoutAllowed(STAND_API, {
+          [name]: value,
+          LOADTEST_ROOM_PROD_CONFIRMED: "1",
+        }),
+      `${name}=${value}`,
+    );
+  }
+});
+
+test("auth-burst refuses a stand api when any other origin the run requests is production", () => {
+  for (const [name, value] of PROD_RUN_ORIGINS) {
+    assert.throws(
+      () => assertAuthBurstAllowed(STAND_API, { [name]: value }),
+      new RegExp(
+        `REFUSING to run auth-burst against production target ${name}.*LOADTEST_SUPPRESSION_CONFIRMED=1`,
+        "s",
+      ),
+      `${name}=${value}`,
+    );
+    assert.doesNotThrow(
+      () =>
+        assertAuthBurstAllowed(STAND_API, {
+          [name]: value,
+          LOADTEST_SUPPRESSION_CONFIRMED: "1",
+        }),
+      `${name}=${value}`,
+    );
+  }
+});
+
+test("a scenario's confirmation unlocks that scenario only", () => {
+  const env = { LOADTEST_STOREFRONT_ORIGIN: "https://new.doctor.school" };
+  assert.throws(
+    () =>
+      assertRoomFanoutAllowed(STAND_API, {
+        ...env,
+        LOADTEST_SUPPRESSION_CONFIRMED: "1",
+      }),
+    /REFUSING to run room-fanout/,
+  );
+  assert.throws(
+    () =>
+      assertAuthBurstAllowed(STAND_API, {
+        ...env,
+        LOADTEST_ROOM_PROD_CONFIRMED: "1",
+      }),
+    /REFUSING to run auth-burst/,
+  );
+});
+
+test("a guard's per-URL check refuses a production URL the run follows from a server answer", () => {
+  // The URLs no env var names: the IdP authorize hop and the storefront callback
+  // a sign-in follows, the WebSocket a room grant names.
+  const followed = [
+    "https://id.doctor.school/oauth/v2/authorize?client_id=doctor&state=s",
+    "https://new.doctor.school./auth/callback?code=one-time-code&state=s",
+    "wss://api.doctor.school/connection/websocket",
+    `ws://${PROD_BOX_IP}/connection/websocket`,
+  ];
+  for (const [scenario, allowTarget] of [
+    ["room-fanout", assertRoomFanoutAllowed(STAND_API, {})],
+    ["auth-burst", assertAuthBurstAllowed(STAND_API, {})],
+  ]) {
+    assert.doesNotThrow(() =>
+      allowTarget("ws://localhost:8100/connection/websocket", "a followed URL"),
+    );
+    for (const url of followed) {
+      assert.throws(
+        () => allowTarget(url, "a followed URL"),
+        (err) => {
+          assert.match(
+            err.message,
+            new RegExp(
+              `REFUSING to run ${scenario} against production target a followed URL`,
+            ),
+          );
+          // The refusal names the origin only: a callback URL carries the
+          // one-time authorization code.
+          assert.doesNotMatch(err.message, /one-time-code|state=/);
+          return true;
+        },
+        `${scenario}: ${url}`,
+      );
+    }
+  }
+  const confirmed = assertRoomFanoutAllowed(STAND_API, {
+    LOADTEST_ROOM_PROD_CONFIRMED: "1",
+  });
+  for (const url of followed) {
+    assert.doesNotThrow(() => confirmed(url, "a followed URL"), url);
+  }
+});

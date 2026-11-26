@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostSignIn, signInTransport } from "./host-sign-in.mjs";
+import { assertRoomFanoutAllowed } from "./room-fanout.mjs";
 
 const API = "http://api.stand.test";
 const STOREFRONT = "http://doctor.stand.test";
@@ -17,13 +18,22 @@ function reply(status, { json, location, cookies = [] } = {}) {
   });
 }
 
-/** Run `fn` with a scripted `fetch` and the given env; restore both after. */
+/**
+ * Run `fn` with a scripted `fetch` and exactly the given `LOADTEST_*` env (any
+ * other `LOADTEST_*` value of the shell is cleared); restore both after.
+ */
 async function withStand(env, route, fn) {
   const calls = [];
   const savedFetch = globalThis.fetch;
   const savedEnv = {};
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("LOADTEST_")) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  }
   for (const k of Object.keys(env)) {
-    savedEnv[k] = process.env[k];
+    if (!(k in savedEnv)) savedEnv[k] = process.env[k];
     if (env[k] === undefined) delete process.env[k];
     else process.env[k] = env[k];
   }
@@ -38,6 +48,8 @@ async function withStand(env, route, fn) {
   };
   try {
     return { result: await fn(), calls };
+  } catch (error) {
+    return { error, calls };
   } finally {
     globalThis.fetch = savedFetch;
     for (const [k, v] of Object.entries(savedEnv)) {
@@ -180,6 +192,161 @@ test("hostSignIn (storefront transport): a callback that mints no session yields
   );
   assert.equal(result.cookie, null);
   assert.equal(result.steps.length, 5);
+});
+
+const SIGN_IN = {
+  email: "a@loadtest.invalid",
+  password: "pw",
+  headers: { "user-agent": "ua/1", "accept-language": "en-US" },
+};
+
+/** A stand journey whose door and password step answer the given URLs. */
+function standJourney({ authorize = AUTHORIZE, callbackUrl }) {
+  return (call) => {
+    if (call.url === `${STOREFRONT}/login`) {
+      return reply(303, {
+        location: authorize,
+        cookies: ["__Host-ds_oidc_tx=tx-1; Path=/; Secure; HttpOnly"],
+      });
+    }
+    if (call.url === callbackUrl) {
+      return reply(303, {
+        location: `${STOREFRONT}/#`,
+        cookies: ["__Host-ds_session=sess-1; Path=/; Secure; HttpOnly"],
+      });
+    }
+    return sharedLegs(call, callbackUrl) ?? reply(404);
+  };
+}
+
+test("hostSignIn refuses a production storefront origin with a stand api before any request", async () => {
+  const { error, calls } = await withStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: "https://new.doctor.school",
+      LOADTEST_SIGN_IN_HOST_ORIGIN: SIGN_IN_HOST,
+    },
+    () => reply(404),
+    () => hostSignIn(API, SIGN_IN),
+  );
+  assert.match(
+    String(error?.message),
+    /REFUSING to run sign-in against production target LOADTEST_STOREFRONT_ORIGIN/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("hostSignIn refuses a production sign-in host origin before any request", async () => {
+  const { error, calls } = await withStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: STOREFRONT,
+      LOADTEST_SIGN_IN_HOST_ORIGIN: "https://login.doctor.school",
+    },
+    () => reply(404),
+    () => hostSignIn(API, SIGN_IN),
+  );
+  assert.match(
+    String(error?.message),
+    /REFUSING to run sign-in against production target LOADTEST_SIGN_IN_HOST_ORIGIN/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("hostSignIn refuses a production IdP authorize URL a stand storefront redirects to", async () => {
+  const callbackUrl = `${STOREFRONT}/auth/callback?code=C1&state=S1`;
+  const { error, calls } = await withStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: STOREFRONT,
+      LOADTEST_SIGN_IN_HOST_ORIGIN: SIGN_IN_HOST,
+    },
+    standJourney({
+      authorize: "https://id.doctor.school/oauth/v2/authorize?client_id=doctor",
+      callbackUrl,
+    }),
+    () => hostSignIn(API, SIGN_IN),
+  );
+  assert.match(
+    String(error?.message),
+    /REFUSING to run sign-in against production target the IdP authorize hop "https:\/\/id\.doctor\.school"/,
+  );
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    [`${STOREFRONT}/login`],
+  );
+});
+
+test("hostSignIn refuses a production callback URL the password step answers", async () => {
+  const callbackUrl =
+    "https://new.doctor.school/auth/callback?code=one-time-code&state=S1";
+  const { error, calls } = await withStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: STOREFRONT,
+      LOADTEST_SIGN_IN_HOST_ORIGIN: SIGN_IN_HOST,
+    },
+    standJourney({ callbackUrl }),
+    () => hostSignIn(API, SIGN_IN),
+  );
+  assert.match(
+    String(error?.message),
+    /REFUSING to run sign-in against production target the storefront callback/,
+  );
+  assert.doesNotMatch(String(error?.message), /one-time-code/);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((c) => c.url !== callbackUrl));
+});
+
+test("hostSignIn passes every request through the run's gate before issuing it", async () => {
+  const callbackUrl = `${STOREFRONT}/auth/callback?code=C1&state=S1`;
+  const log = [];
+  const { result } = await withStand(
+    {
+      LOADTEST_STOREFRONT_ORIGIN: STOREFRONT,
+      LOADTEST_SIGN_IN_HOST_ORIGIN: SIGN_IN_HOST,
+    },
+    (call) => {
+      log.push(`fetch ${call.url}`);
+      return standJourney({ callbackUrl })(call);
+    },
+    () =>
+      hostSignIn(API, {
+        ...SIGN_IN,
+        allowTarget: (url) => log.push(`allow ${url}`),
+      }),
+  );
+  assert.equal(result.cookie, "__Host-ds_session=sess-1");
+  const urls = [
+    `${STOREFRONT}/login`,
+    AUTHORIZE,
+    `${API}/v1/sign-in-host/entry?authRequest=AR1`,
+    `${API}/v1/sign-in-host/login`,
+    callbackUrl,
+  ];
+  assert.deepEqual(
+    log,
+    urls.flatMap((url) => [`allow ${url}`, `fetch ${url}`]),
+  );
+});
+
+test("hostSignIn runs a production storefront under a confirmed scenario's gate (stubbed fetch)", async () => {
+  const env = {
+    LOADTEST_API_ORIGIN: "https://api.doctor.school",
+    LOADTEST_STOREFRONT_ORIGIN: "https://new.doctor.school",
+    LOADTEST_SIGN_IN_HOST_ORIGIN: "https://login.doctor.school",
+    LOADTEST_ROOM_PROD_CONFIRMED: "1",
+  };
+  const { error, calls } = await withStand(
+    env,
+    () => reply(404),
+    () =>
+      hostSignIn("https://api.doctor.school", {
+        ...SIGN_IN,
+        allowTarget: assertRoomFanoutAllowed("https://api.doctor.school", env),
+      }),
+  );
+  assert.equal(error, undefined);
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    ["https://new.doctor.school/login"],
+  );
 });
 
 test("hostSignIn (internal transport): transaction and redeem on the internal credential", async () => {

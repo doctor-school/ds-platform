@@ -273,7 +273,7 @@ restored=$(docker run --rm --add-host minio:host-gateway \
       [ "$(gosu postgres psql -h /tmp -U ds -d ds_prod -Atc "select pg_is_in_recovery()")" = f ] && break
       sleep 1
     done
-    gosu postgres psql -h /tmp -U ds -d ds_prod -Atc "select coalesce(string_agg(v, \",\" order by v), \"\") from proof_marker"
+    gosu postgres psql -h /tmp -U ds -d ds_prod -Atc "select coalesce(string_agg(v, \$\$,\$\$ order by v), \$\$\$\$) from proof_marker"
   ') || fail "the PITR restore from repo2 failed"
 [[ $restored == before-target ]] || fail "restored proof_marker is '$restored', expected 'before-target'"
 log "4. PITR from repo2 alone: proof_marker = $restored"

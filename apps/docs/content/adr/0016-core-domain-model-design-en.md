@@ -22,9 +22,9 @@ One account per person; roles and organisation memberships are separate, revocab
 
 **In scope.** The entities and relationships of the core model, their fields at name-and-kind level, the storefront-ownership assignment, and the mapping of the existing schema onto them.
 
-**Out of scope.** Column types, indexes and constraints (the implementing slice decides them per ADR-0003); the accrual-rule engine (REQ-36/48/49, two-way doors); payment integration (CON-16); the GetCourse/congress migration (REQ-105); UI and API surface; deployment topology (ADR-0015).
+**Out of scope.** Column types, indexes and constraints (the implementing slice decides them per ADR-0003); the accrual-rule engine (REQ-36/48/49, two-way doors); payment integration (CON-16); the old-platform/congress migration (REQ-105); UI and API surface; deployment topology (ADR-0015).
 
-**Two one-way doors are routed, not modelled here.** **OWD-5** — the Academy is a separate public domain with its own audience but part of one Doctor.School ecosystem, with no monetisation of its own — is a positioning/topology door owned by ADR-0015; its only trace in this design is the storefront-ownership table of §4. **OWD-7** — the exit from GetCourse, with no integration with GetCourse now or ever — constrains the REQ-105 migration named in §5 (a one-off import, never a sync), not the entity model.
+**Two one-way doors are routed, not modelled here.** **OWD-5** — the Academy is a separate public domain with its own audience but part of one Doctor.School ecosystem, with no monetisation of its own — is a positioning/topology door owned by ADR-0015; its only trace in this design is the storefront-ownership table of §4. **OWD-7** — the exit from GetCourse, with no integration with GetCourse now or ever — constrains the OrthoBioSchool content migration (REQ-52), not the entity model. The REQ-105 people migration named in §5 comes from the old Doctor.School platform, not from GetCourse, and follows ADR-0016 §9's own rule: a one-off import, never a sync.
 
 ---
 
@@ -273,7 +273,7 @@ One schema and one database serve every storefront. The `Shown on` column says w
 
 **Feature 012 and feature 014 are absorbed, not rewritten.** The only shipped-surface change is the `topics` → `directions` and `partners` → `organisations` rename, which is its own migration slice preserving the retained-row lifecycle (#1278).
 
-**REQ-105 (GetCourse people + congress registration base) is an open follow-up**, not designed here: it needs a legal basis, consent re-confirmation and a field map before the first investor report.
+**REQ-105 (people of the old Doctor.School platform + congress registration base) is an open follow-up**, not designed here: it needs a legal basis, consent re-confirmation and a field map before the first investor report.
 
 ---
 

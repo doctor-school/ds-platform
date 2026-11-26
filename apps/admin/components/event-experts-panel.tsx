@@ -25,6 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
   Input,
+  NativeSelect,
   Switch,
 } from "@ds/design-system";
 import {
@@ -38,6 +39,9 @@ import {
 import { Combobox } from "@ds/design-system/blocks";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
+  EVENT_EXPERT_PROGRAM_ROLE_LABELS,
+  EVENT_EXPERT_PROGRAM_ROLES,
+  EventExpertProgramRoleSchema,
   type CreateEventExpertRequest,
   type EventAdminDetail,
   type EventExpertAdminList,
@@ -72,7 +76,7 @@ import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
  *
  * THE ENDPOINTS ARE NOT PATCHABLE. Re-pointing a link at another expert or event
  * would rewrite a row the audit ledger already attributes, so the edit dialog
- * renders the expert as a FACT and offers only role + slot; changing the expert
+ * renders the expert as a FACT and offers only role, caption + slot; changing the expert
  * is a retire plus a new link, and the copy says so.
  *
  * Every write rides the provider's `custom` path, which owns the EARS-16/17
@@ -234,9 +238,9 @@ type DoneHandler = (toastKey: string) => void;
 type ErrorHandler = (error: unknown, fallbackKey: string) => void;
 
 /**
- * One link — the expert, the authored role, the slot it holds in the event's
- * speaker projection, and the actions its CURRENT status allows (retire on an
- * active row, restore on a retired one; never both).
+ * One link — the expert, the programme role and caption, the slot it holds in
+ * the event's speaker projection, and the actions its CURRENT status allows
+ * (retire on an active row, restore on a retired one; never both).
  */
 function LinkRow({
   mode,
@@ -273,10 +277,15 @@ function LinkRow({
       </div>
 
       <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Fact label={t("eventExperts.columns.programRole")}>
+          <span data-testid={`event-expert-program-role-${row.id}`}>
+            {EVENT_EXPERT_PROGRAM_ROLE_LABELS[row.programRole]}
+          </span>
+        </Fact>
         <Fact label={t("eventExperts.columns.role")}>
-          {/* A null role means §2.4's editorial removal cleared it (#1306); the
-              row still exists and still holds its slot, so it renders labelled
-              rather than blank. */}
+          {/* The caption under the name is optional (EARS-31), and §2.4's
+              editorial removal also clears it (#1306); either way the row still
+              holds its slot, so it renders labelled rather than blank. */}
           <span data-testid={`event-expert-role-${row.id}`}>
             {row.role ?? t("common.notSet")}
           </span>
@@ -482,6 +491,8 @@ function LinkDialog({
     ),
     defaultValues: {
       expertId: row?.expertId ?? (mode === "expert" ? entityId : ""),
+      // No preselected role on create: the operator chooses (EARS-31).
+      programRole: row?.programRole ?? "",
       role: row?.role ?? "",
       positionText: row ? String(row.position) : "",
     },
@@ -489,9 +500,15 @@ function LinkDialog({
 
   function submit(values: EventExpertFormFields) {
     const position = Number(values.positionText.trim());
+    // The resolver has refused `""`, so only a closed-set value reaches here.
+    const programRole = EventExpertProgramRoleSchema.parse(values.programRole);
+    // A blank caption is no caption; on an edit `null` clears a stored one.
+    const caption = values.role.trim();
+    const role = caption.length > 0 ? caption : null;
     if (row) {
       const body: UpdateEventExpertRequest = {
-        role: values.role.trim(),
+        programRole,
+        role,
         position,
       };
       mutate(
@@ -518,7 +535,8 @@ function LinkDialog({
     const body: CreateEventExpertRequest = {
       eventId: mode === "event" ? entityId : selectedEventId,
       expertId: mode === "expert" ? entityId : values.expertId,
-      role: values.role.trim(),
+      programRole,
+      role,
       position,
     };
     mutate(
@@ -627,6 +645,40 @@ function LinkDialog({
                 )}
               />
             )}
+
+            {/* EARS-31 — the programme role is a closed two-value set, so it is
+                the admin's closed-vocabulary select (as the 017 «Вид связи»
+                box), never free text; its labels come from the SSOT map. */}
+            <FormField
+              control={form.control}
+              name="programRole"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor={`${testId}-program-role`}>
+                    {t("eventExperts.fields.programRole")}
+                  </FormLabel>
+                  <FormControl>
+                    <NativeSelect
+                      id={`${testId}-program-role`}
+                      data-testid={`${testId}-program-role`}
+                      {...field}
+                    >
+                      <option value="">
+                        {t("eventExperts.fields.programRolePlaceholder")}
+                      </option>
+                      {EVENT_EXPERT_PROGRAM_ROLES.map((value) => (
+                        <option key={value} value={value}>
+                          {EVENT_EXPERT_PROGRAM_ROLE_LABELS[value]}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </FormControl>
+                  <FormMessage>
+                    {t("eventExperts.fields.programRoleHint")}
+                  </FormMessage>
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

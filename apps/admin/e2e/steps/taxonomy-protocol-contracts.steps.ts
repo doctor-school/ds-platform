@@ -1173,6 +1173,7 @@ Given("an event and a publishable expert exist", async ({ page, world }) => {
       body: {
         eventId: event.body.id,
         expertId: experts[1],
+        programRole: "speaker",
         role: "Спикер",
         position: 0,
       },
@@ -1211,11 +1212,15 @@ When(
       const body: Record<string, unknown> = {
         eventId: current.eventId,
         expertId,
+        programRole: "speaker",
         role: "Спикер",
         position: 1,
       };
-      if (invalid === "a missing role") delete body.role;
-      else if (invalid === "a blank role") body.role = "   ";
+      // 012 EARS-31: the programme role is required and closed; the caption
+      // (`role`) is optional, so a blank caption is no longer a refusal.
+      if (invalid === "a missing programme role") delete body.programRole;
+      else if (invalid === "an unknown programme role")
+        body.programRole = "panelist";
       else if (invalid === "a negative position") body.position = -1;
       else if (invalid === "a fractional position") body.position = 0.5;
       else

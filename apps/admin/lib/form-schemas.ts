@@ -21,6 +21,9 @@ import {
   DurationSecSchema,
   EmbedRefSchema,
   EVENT_EXPERT_POSITION_MAX,
+  EVENT_EXPERT_ROLE_MAX,
+  type EventExpertProgramRole,
+  EventExpertProgramRoleSchema,
   LegacyBroadcastCreateBodySchema,
   EXPERT_AFFILIATION_MAX,
   EXPERT_BIO_MAX,
@@ -634,15 +637,19 @@ export interface RecordingExpectedByFields {
 
 /**
  * 012 EARS-7 (#1289) — the event↔expert link form. Create and edit share one
- * shape: both author the same triple (which expert, what role, which slot), and
- * the edit simply cannot move the expert (re-pointing a link at another expert
- * would rewrite a row the audit ledger already attributes — that is a retire
- * plus a new link, 012-design §5.1), so the edit renders the expert box
- * disabled rather than a second schema.
+ * shape: both author the same values (which expert, which programme role, the
+ * optional caption, which slot), and the edit simply cannot move the expert
+ * (re-pointing a link at another expert would rewrite a row the audit ledger
+ * already attributes — that is a retire plus a new link, 012-design §5.1), so the
+ * edit renders the expert as a fact rather than a second schema.
  *
- * DERIVED from the `@ds/schemas` SSOT rather than re-typed: the role trim/length
- * bounds and the 0–32767 slot range come from the same validators the API
- * enforces, so a refusal reads the same in the browser and on the wire.
+ * DERIVED from the `@ds/schemas` SSOT rather than re-typed: the closed programme
+ * role set (EARS-31), the caption's 80-character bound and the 0–32767 slot range
+ * come from the same validators the API enforces, so a refusal reads the same in
+ * the browser and on the wire. The programme role box starts EMPTY on create so
+ * the operator chooses — `""` is outside the closed set and is refused. The
+ * caption stays a string in the form (blank = no caption); the submit maps blank
+ * to `null`, the SSOT's own «no caption».
  *
  * `position` is a TEXT box here, not a `number`. An operator types into a box,
  * and `<input type="number">` hands React an empty string for «12abc» — folding
@@ -653,7 +660,8 @@ export interface RecordingExpectedByFields {
 export const EventExpertFormSchema = z
   .object({
     expertId: z.uuid(),
-    role: CreateEventExpertRequestSchema.shape.role,
+    programRole: EventExpertProgramRoleSchema,
+    role: z.string().trim().max(EVENT_EXPERT_ROLE_MAX),
     positionText: z.string(),
   })
   .superRefine((values, ctx) => {
@@ -680,6 +688,8 @@ export const EventExpertFormSchema = z
 
 export interface EventExpertFormFields {
   expertId: string;
+  /** `""` until the operator picks one — refused by the closed set. */
+  programRole: EventExpertProgramRole | "";
   role: string;
   positionText: string;
 }

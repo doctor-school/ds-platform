@@ -734,17 +734,21 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.getByTestId("event-experts-panel").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    // The add `Dialog` — the searchable combobox, two text boxes and their hints.
+    // The add `Dialog` — the searchable combobox, the closed «Роль» select, the
+    // optional caption and slot boxes, and their hints (012 EARS-31).
     await page.getByTestId("event-expert-add").click();
     await page
       .getByTestId("event-expert-add-form")
       .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    // The REJECTED form, still inside the modal.
+    // The REJECTED form, still inside the modal — no role chosen and a bad slot.
     await page.getByTestId("event-expert-add-position").fill("не число");
     await page.getByTestId("event-expert-add-submit").click();
     await expect(page.getByTestId("event-expert-add-form")).toBeVisible();
+    await expect(
+      page.getByText("Выберите роль: докладчик или модератор."),
+    ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
 
     // A real link, so the row's badges and its action pair are scanned as state,
@@ -755,7 +759,12 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       familyName,
       expertName,
     );
-    await page.getByTestId("event-expert-add-role").fill("Модератор");
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("moderator");
+    await page
+      .getByTestId("event-expert-add-role")
+      .fill("Заведующий кафедрой кардиологии");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
     await page

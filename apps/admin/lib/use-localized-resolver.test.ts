@@ -274,8 +274,12 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       stage: "running",
       stageNote: "",
     };
-    expect(ProjectFormSchema.safeParse({ ...draft, description: "" }).success).toBe(true);
-    expect(ProjectFormSchema.safeParse({ ...draft, description: "   " }).success).toBe(true);
+    expect(
+      ProjectFormSchema.safeParse({ ...draft, description: "" }).success,
+    ).toBe(true);
+    expect(
+      ProjectFormSchema.safeParse({ ...draft, description: "   " }).success,
+    ).toBe(true);
     expect(
       keysFor(ProjectFormSchema, { ...draft, title: "", description: "" }),
     ).toEqual(["required"]);
@@ -498,39 +502,57 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
   it("EARS-7: every event↔expert link failing rule maps to a specific key, never fallback", () => {
     const expertId = "11111111-1111-4111-8111-111111111111";
 
-    // Empty submit — the expert selector, the role box and the place box are all
-    // required, and none of the three may degrade to the generic sentence.
+    // Empty submit — the expert selector and the programme role select are
+    // required (the caption is not), and neither may degrade to the generic
+    // sentence.
     const empty = keysFor(EventExpertFormSchema, {
       expertId: "",
+      programRole: "",
       role: "",
       positionText: "",
     });
     expect(empty).not.toContain("fallback");
     expect(empty).toContain("expert");
-    expect(empty).toContain("required");
+    expect(empty).toContain("programRole");
 
     // Nothing chosen in the selector gets the «pick from the list» sentence, not
     // «обязательное поле» — under a dropdown the latter names no action.
     expect(
       keysFor(EventExpertFormSchema, {
         expertId: "",
+        programRole: "moderator",
         role: "Модератор",
         positionText: "1",
       }),
     ).toEqual(["expert"]);
 
-    // The role box: empty and over the 80-character SSOT bound are the two shapes
-    // it can fail on, and they map to the two generic-tail keys, never fallback.
+    // EARS-31 — the programme role is the closed set only: nothing chosen and
+    // a free-text value are the same refusal, naming the two choices.
+    for (const bad of ["", "Ведущий", "Модератор"]) {
+      expect(
+        keysFor(EventExpertFormSchema, {
+          expertId,
+          programRole: bad,
+          role: "",
+          positionText: "1",
+        }),
+      ).toEqual(["programRole"]);
+    }
+
+    // EARS-31 — the caption is optional: blank passes, and over the 80-character
+    // SSOT bound is its one failure shape.
     expect(
-      keysFor(EventExpertFormSchema, {
+      EventExpertFormSchema.safeParse({
         expertId,
+        programRole: "speaker",
         role: "",
         positionText: "1",
-      }),
-    ).toEqual(["required"]);
+      }).success,
+    ).toBe(true);
     expect(
       keysFor(EventExpertFormSchema, {
         expertId,
+        programRole: "speaker",
         role: "х".repeat(81),
         positionText: "1",
       }),
@@ -544,6 +566,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       expect(
         keysFor(EventExpertFormSchema, {
           expertId,
+          programRole: "moderator",
           role: "Модератор",
           positionText: bad,
         }),
@@ -554,6 +577,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(EventExpertFormSchema, {
         expertId,
+        programRole: "moderator",
         role: "Модератор",
         positionText: String(EVENT_EXPERT_POSITION_MAX + 1),
       }),

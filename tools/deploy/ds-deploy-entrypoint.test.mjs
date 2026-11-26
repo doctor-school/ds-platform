@@ -2958,6 +2958,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       const data = answer.units.at(-1);
       assert.equal(data.unit, `ds-prod-${sha12}-data-secret`);
       assert.equal(data.reason, reason);
+      assert.deepEqual(data.lines, [], "a failed hop's output never reads as the unit's journal");
       assert.equal(answer.units[0].lines.length, 3, "the api box's units still answer");
       assert.ok(!("reason" in answer.units[0]), "a readable unit carries no reason");
       assert.doesNotMatch(JSON.stringify(answer) + r.stderr, /secret detail/);

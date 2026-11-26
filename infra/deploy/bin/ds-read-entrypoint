@@ -363,7 +363,7 @@ PY
 # value; a line that still reads as a NAME=value assignment, or a docker compose
 # interpolation warning (it quotes the text after a "$" of an .env value), is dropped all
 # the same. The data-secret unit comes over the hop: a failed hop (its exit code in
-# hop.rc) answers one fixed reason beside the unit, so «not read» never reads as «no journal».
+# hop.rc) answers no lines and one fixed reason, so «not read» never reads as «no journal».
 read -r -d '' RELEASE_JOURNAL_PY <<'PY' || true
 import datetime, json, os, re, sys
 sha, work, max_lines, max_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
@@ -391,7 +391,9 @@ for i, unit in enumerate(sys.argv[5:]):
         lines = [l for l in lines if not ASSIGNMENT.search(l) and not COMPOSE_UNSET.search(l)]
     entry = {"unit": unit, "lines": lines, "truncated": cut}
     if unit.endswith("-data-secret") and hop_rc != 0:
-        entry["reason"] = HOP_REASONS.get(hop_rc, "the read failed")
+        # a failed hop's output is not the unit's journal: none of it leaves
+        entry = {"unit": unit, "lines": [], "truncated": False,
+                 "reason": HOP_REASONS.get(hop_rc, "the read failed")}
     units.append(entry)
 try:
     with open(os.path.join(work, "failure"), "rb") as f:

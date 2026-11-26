@@ -2,13 +2,10 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 
 import { AuthShell as AuthShellBlock } from "@ds/design-system/blocks";
-import { Link as DsLink } from "@ds/design-system/link";
 
+import { BotProtectionDisclosure } from "../bot-protection/disclosure";
 import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
-
-/** The vendor's own processing notice (003 EARS-17) — the same page for every host. */
-const SMARTCAPTCHA_NOTICE_URL = "https://yandex.com/legal/smartcaptcha_notice/";
 
 export type AuthShellProps = {
   config: AuthFlowHostConfig;
@@ -46,8 +43,7 @@ export type AuthShellProps = {
  */
 export function AuthShell({ config, returnContext, children }: AuthShellProps) {
   const { wordmark, panel } = config.brand;
-  const { brand: brandCopy, botProtectionDisclosure: disclosure } =
-    resolveAuthFlowCopy(config);
+  const { brand: brandCopy } = resolveAuthFlowCopy(config);
 
   return (
     <AuthShellBlock
@@ -97,23 +93,7 @@ export function AuthShell({ config, returnContext, children }: AuthShellProps) {
       copy={brandCopy}
     >
       {children}
-      {config.botProtection?.siteKey ? (
-        <p
-          className="mt-3.5 text-xs leading-normal text-faint"
-          data-testid="smartcaptcha-disclosure"
-        >
-          {disclosure.notice}{" "}
-          <DsLink
-            href={SMARTCAPTCHA_NOTICE_URL}
-            variant="standalone"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={disclosure.linkLabel}
-          >
-            {disclosure.link}
-          </DsLink>
-        </p>
-      ) : null}
+      <BotProtectionDisclosure config={config} className="mt-3.5" />
     </AuthShellBlock>
   );
 }

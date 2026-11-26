@@ -42,16 +42,20 @@ export function resolveRoomReturnTarget(
 
 /**
  * 024 EARS-22 - this host's LEARNING return (`routes.courses` and every page
- * below it; 023 EARS-8 - `routes.schools` likewise), or `null`. A host that serves no learning path admits none.
+ * below it; 023 EARS-8 - `routes.schools` likewise; 033 EARS-3 - the
+ * application page `routes.apply`), or `null`. A host that serves no learning path admits none.
  */
 export function resolveCoursesReturnTarget(
   host: ReturnContextHost,
   returnTo: string | undefined,
 ): string | null {
-  // 023 EARS-8 — the school screen is part of the learning family.
+  // 023 EARS-8 — the school screen is part of the learning family. 033 EARS-3
+  // — the Academy application page is one more page landing of the same kind:
+  // no эфир card, nothing registers, the page's own gate re-runs on arrival.
   return (
     parseCoursesReturnTarget(returnTo, host.routes.courses) ??
-    parseCoursesReturnTarget(returnTo, host.routes.schools)
+    parseCoursesReturnTarget(returnTo, host.routes.schools) ??
+    parseCoursesReturnTarget(returnTo, host.routes.apply)
   );
 }
 

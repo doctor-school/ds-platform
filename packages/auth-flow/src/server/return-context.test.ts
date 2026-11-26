@@ -539,6 +539,30 @@ describe("024 EARS-22: the learning family lands and carries on the doctor host 
   it.each([
     ["the package fixture", ACADEMY_FIXTURE],
     ["the shipped Academy host", ACADEMY_AUTH_FLOW],
+  ])("033 EARS-3: on %s the application page lands and carries as itself, segment-bounded", (_label, host) => {
+    expect(resolveReturnLandingPath(host, "/apply")).toBe("/apply");
+    expect(resolveCarriedReturnTarget(host, "/apply")).toBe("/apply");
+    expect(withReturnContext(host, "/login", "/apply")).toBe(
+      `/login?${RETURN_CONTEXT_PARAM}=%2Fapply`,
+    );
+    expect(isCoursesReturnTarget(host, "/apply")).toBe(true);
+    expect(resolveReturnTargetPath("/apply")).toBeNull();
+    expect(resolveCarriedReturnTarget(host, "/applyX")).toBeNull();
+    expect(resolveCarriedReturnTarget(host, "//evil.example/apply")).toBeNull();
+  });
+
+  it.each([
+    ["the package fixture", DOCTOR_FIXTURE],
+    ["the shipped doctor host", DOCTOR_AUTH_FLOW],
+  ])("033 EARS-2: %s serves no application page and admits none", (_label, host) => {
+    expect("apply" in host.routes).toBe(false);
+    expect(resolveCarriedReturnTarget(host, "/apply")).toBeNull();
+    expect(resolveReturnLandingPath(host, "/apply")).toBeNull();
+  });
+
+  it.each([
+    ["the package fixture", ACADEMY_FIXTURE],
+    ["the shipped Academy host", ACADEMY_AUTH_FLOW],
   ])("024 EARS-27: %s declares no learning family and admits none", (_label, host) => {
     expect("courses" in host.routes).toBe(false);
     // 023 EARS-24 — nor the school screen.

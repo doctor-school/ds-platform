@@ -105,6 +105,9 @@ export default defineConfig({
     /[\\/]e2e[\\/]refusal-canvas-structure\.e2e\.spec\.ts$/,
     // #2478: the not-found page, guest and signed in, against the session double.
     /[\\/]e2e[\\/]not-found\.e2e\.spec\.ts$/,
+    // 033: «Подать заявку» — gate, form and its states against the session
+    // double, the browser's `/v1/me/applications*` calls answered in-spec.
+    /[\\/]e2e[\\/]apply\.e2e\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,

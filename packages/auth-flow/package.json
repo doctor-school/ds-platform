@@ -12,6 +12,7 @@
     "./server": "./src/server/index.ts",
     "./errors": "./src/errors/index.ts",
     "./bot-protection": "./src/bot-protection/index.ts",
+    "./bot-protection/server": "./src/bot-protection/server.ts",
     "./fields": "./src/fields/index.ts",
     "./test-support": "./src/test-support/host-config-fixtures.ts",
     "./shell": "./src/shell/index.ts",

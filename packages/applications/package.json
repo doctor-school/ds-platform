@@ -1,0 +1,44 @@
+{
+  "name": "@ds/applications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform shared application-queue unit — the «Подать заявку» page: its copy, the account gate, the author form, its states and the repeat banner, the /v1/me/applications client and the route component (feature 033, ADR-0013 A1).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./route": "./src/route/apply-route.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ds/auth-flow": "workspace:*",
+    "@ds/design-system": "workspace:*",
+    "@ds/legal-content": "workspace:*",
+    "@ds/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.0.1",
+    "next": "16.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

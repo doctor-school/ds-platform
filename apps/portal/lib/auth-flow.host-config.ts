@@ -1,4 +1,5 @@
 import type { AccountHostConfig } from "@ds/account/host-config";
+import type { ApplyHostConfig } from "@ds/applications/route";
 import { ACADEMY_AUTH_FLOW } from "@ds/auth-flow/hosts";
 import { bindEventGoneNotice } from "@ds/auth-flow/landing-notice";
 
@@ -28,6 +29,18 @@ export const ACADEMY_ACCOUNT = {
   // 046 EARS-4 is a doctor-storefront section: the Academy mounts none (row 14).
   congress: null,
 } satisfies AccountHostConfig;
+
+/**
+ * 033 EARS-1, EARS-3 — «Подать заявку» at `/apply` (`routes.apply`), mounted
+ * from `@ds/applications` with this host's auth flow — a third export of this
+ * file for the same reason as the cabinet's. The breadcrumb leads home and the
+ * consent row to the legal documents list (policy and consents).
+ */
+export const ACADEMY_APPLY = {
+  authFlow: ACADEMY_AUTH_FLOW,
+  homeHref: "/",
+  policyHref: "/documents",
+} satisfies ApplyHostConfig;
 
 /**
  * 021 EARS-10 (amendment 2026-11-11) — the event-gone notice bound to this

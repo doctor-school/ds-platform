@@ -2548,6 +2548,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ApplicationsMeController_listOwn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/applications/author": {
         parameters: {
             query?: never;
@@ -3864,6 +3880,17 @@ export interface components {
         AdminMfaReverifyRequestDto: {
             code: string;
             endpoint: string;
+        };
+        ApplicantApplicationListDto: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** @constant */
+                state: "received";
+                /** Format: date-time */
+                submittedAt: string;
+                topic: string;
+            }[];
         };
         ApplicationRefusalDto: {
             problems: {
@@ -10259,6 +10286,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningSchoolReadDto"];
+                };
+            };
+        };
+    };
+    ApplicationsMeController_listOwn: {
+        parameters: {
+            query: {
+                kind: "author";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicantApplicationListDto"];
                 };
             };
         };

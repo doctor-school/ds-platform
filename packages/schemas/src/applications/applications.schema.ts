@@ -196,3 +196,38 @@ export const ApplicationRefusalSchema = z.object({
     .min(1),
 });
 export type ApplicationRefusal = z.infer<typeof ApplicationRefusalSchema>;
+
+/**
+ * EARS-10 — `GET /v1/me/applications?kind=…`: the kind the applicant reads.
+ * Only a kind with a signed-in intake is readable here (`author`).
+ */
+export const ApplicantApplicationsQuerySchema = z
+  .object({ kind: z.literal("author") })
+  .strict();
+export type ApplicantApplicationsQuery = z.infer<
+  typeof ApplicantApplicationsQuerySchema
+>;
+
+/**
+ * EARS-10 — one of the caller's own open applications as the applicant sees
+ * it: `state` is always `received`; no status, outcome or note ever leaves the
+ * queue towards the applicant (EARS-16, invariant «The applicant sees only
+ * received»).
+ */
+export const ApplicantApplicationSchema = z
+  .object({
+    id: z.uuid(),
+    submittedAt: z.iso.datetime({ offset: true }),
+    topic: z.string().min(1).max(AUTHOR_APPLICATION_TOPIC_MAX),
+    state: z.literal("received"),
+  })
+  .strict();
+export type ApplicantApplication = z.infer<typeof ApplicantApplicationSchema>;
+
+/** EARS-10 — the caller's own author applications that are not closed, newest first. */
+export const ApplicantApplicationListSchema = z
+  .object({ items: z.array(ApplicantApplicationSchema) })
+  .strict();
+export type ApplicantApplicationList = z.infer<
+  typeof ApplicantApplicationListSchema
+>;

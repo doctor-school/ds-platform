@@ -31,6 +31,7 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     account: "/account",
     eventPathTemplate: "/webinars/:slug",
     room: "/webinars/:slug/room",
+    apply: "/apply",
   },
   landing: {
     afterLogin: "/webinars",

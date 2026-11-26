@@ -521,6 +521,13 @@ export type AuthFlowRoutes = {
    * serves no school screen (the Academy answers `/schools/*` 404, EARS-24).
    */
   readonly schools?: string;
+  /**
+   * 033 EARS-3 — this host's application page (`/apply`): a guest met by its
+   * account gate comes back to the open form after sign-in or registration.
+   * Absent on a host that serves no application page (the doctor storefront,
+   * 033 EARS-2), which therefore admits none.
+   */
+  readonly apply?: string;
 };
 
 /** The event-page shapes a host can serve — Academy `/webinars/<slug>`, doctor `/events/<slug>`. */

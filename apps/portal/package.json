@@ -20,6 +20,7 @@
   "dependencies": {
     "@ds/account": "workspace:*",
     "@ds/api-client": "workspace:*",
+    "@ds/applications": "workspace:*",
     "@ds/auth-flow": "workspace:*",
     "@ds/design-system": "workspace:*",
     "@ds/event-page": "workspace:*",

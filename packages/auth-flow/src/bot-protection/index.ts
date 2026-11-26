@@ -32,3 +32,5 @@ export function botProtectionMessages(
 ): BotProtectionMessages {
   return resolveAuthFlowCopy(config).botProtection;
 }
+
+export { BotProtectionDisclosure, SMARTCAPTCHA_NOTICE_URL } from "./disclosure";

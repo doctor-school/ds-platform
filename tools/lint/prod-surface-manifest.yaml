@@ -46,6 +46,10 @@ routes:
     file: apps/portal/app/account/page.tsx
     status: product-ready
   - app: portal
+    route: /apply
+    file: apps/portal/app/apply/page.tsx
+    status: product-ready
+  - app: portal
     route: /documents
     file: apps/portal/app/documents/page.tsx
     status: product-ready

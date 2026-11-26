@@ -157,7 +157,7 @@ Admin endpoints use `AdminAuthorityGuard` (`apps/api/src/auth/admin-session/admi
 
 ## UI composition
 
-### Academy (canvas, Stage A pending)
+### Academy (canvas, Stage A recorded — owner 2026-11-25, #4031)
 
 Canvas `design-source/academy-apply.dc.html`, switch «Объём» = «срез 1», and the «Экспертам» entries of `design-source/academy-home.dc.html`.
 

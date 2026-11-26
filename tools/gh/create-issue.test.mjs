@@ -642,7 +642,9 @@ test("productTrackMilestoneError homes track:migration on «Переезд …»
   for (const m of ["Витрина В4 — Новая витрина", "Академия А3 — Каталоги", FALLBACK_MILESTONE]) {
     const err = productTrackMilestoneError(["--label", "track:migration"], m, () => opened);
     assert.match(err, /track:migration/);
-    assert.ok(err.includes("«Переезд …» release or «Переезд · Позже»"));
+    // The hint names the prefix, never a backlog milestone that may not exist.
+    assert.ok(err.includes("starts with «Переезд»"));
+    assert.ok(!err.includes("«Переезд · Позже»"));
     assert.ok(err.includes("«Переезд П1 — Врачи старой платформы на новой»"));
     assert.ok(!err.includes("«Витрина R1 — MVP витрины»"));
   }

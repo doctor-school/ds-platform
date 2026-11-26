@@ -7,7 +7,7 @@ description: "The owner's order of work per product track; pnpm bootstrap prints
 
 The order in which each product track's Issues are taken, set by the owner. The lead changes it on the owner's word in one Ship-tier PR; titles, state, claims and blockers are never stored here — `pnpm bootstrap` and `pnpm backlog:triage` read them live from GitHub. A queue item is an outcome Issue — a feature parent or a delivery Issue — never a spec or discovery step; bootstrap expands a parent to its next open child.
 
-A key is a track label without the `track:` prefix. A new track needs its key here, its `track:*` label, and its entry in the track taxonomy `tools/gh/lib/roadmap-taxonomy.mjs` (plus the PR-side copy in `tools/gh/sync-pr-track.mjs` and the `backlog:triage` track order) — without the taxonomy entry `pnpm issue:create` refuses the label.
+A key is a track label without the `track:` prefix. A new track needs its key here, its `track:*` label and its entry in the one track taxonomy `tools/gh/lib/roadmap-taxonomy.mjs`, which `pnpm issue:create`, `pr-track-sync` and `backlog:triage` all read — without that entry `pnpm issue:create` refuses the label.
 
 <!-- prettier-ignore -->
 ```yaml

@@ -17,6 +17,7 @@
  *   epic          | `epic: …`                | NONE (spans releases)| none
  *   feature       | `[Академия][NNN] …`      | the track release    | Start+Target
  *                 | `[Витрина][NNN] …`       |                      |
+ *                 | `[Переезд][NNN] …`       |                      |
  *   ears-task     | `[NNN] EARS-k: …`        | INHERITED from parent| none
  *   release-gate  | `gate: <milestone name>` | the gated release    | Start+Target
  *   platform-task | no prefix                | via blocked_by, else | none
@@ -160,7 +161,7 @@ export function isReleaseGateTitle(title) {
 }
 
 /**
- * The feature title prefix (`[Академия]` / `[Витрина]`) this title carries, or
+ * The feature title prefix (a FEATURE_TITLE_TRACKS key) this title carries, or
  * null when it is not a feature-level title.
  * @param {string} title
  * @returns {string|null}

@@ -40,17 +40,16 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
+import { TRACK_LABELS } from "./lib/roadmap-taxonomy.mjs";
+
 const GH_MAX_BUFFER = 64 * 1024 * 1024;
 const REPO = "doctor-school/ds-platform";
 
 /**
- * The track taxonomy (#1583). Duplicated from create-issue.mjs by intent, not by
- * omission: that module spawns `gh` at import-time-adjacent paths and is the
- * Issue-creation entry point — importing it here to share three strings would
- * couple the PR-side CI job to the whole board-mutation helper. The unit test
- * pins this copy to the taxonomy's values.
+ * The track taxonomy (#1583), read from the pure shared lib — not from
+ * create-issue.mjs, which is the board-mutating Issue-creation entry point.
  */
-export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform", "track:migration"];
+export { TRACK_LABELS };
 
 /** GitHub's auto-close keywords — identical to `tools/lint/spec-link-lint.ts`. */
 const CLOSE_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi;

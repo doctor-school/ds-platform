@@ -19,7 +19,7 @@ test("TRACK_LABELS is the #1583 taxonomy", () => {
     "track:platform",
     "track:migration",
   ]);
-  // The PR-side copy never drifts from the one taxonomy the Issue gate reads.
+  // The PR side reads the same taxonomy the Issue gate reads.
   assert.deepEqual(TRACK_LABELS, TAXONOMY_TRACK_LABELS);
 });
 

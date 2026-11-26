@@ -548,8 +548,8 @@ export function milestoneError(args, { parent = null } = {}) {
 /**
  * A product-track Issue homes on a milestone of its OWN track (#3375, spec
  * §7.1): a `track:doctor` / `track:academy` / `track:migration` Issue takes a release or the
- * «· Позже» backlog of that track, never «Platform ops & hardening» or the
- * other track's milestone — misrouted product work disappears from its track's
+ * «· Позже» backlog of that track, never «Platform ops & hardening» or another
+ * track's milestone — misrouted product work disappears from its track's
  * release rotation. `track:platform` keeps the fallback. Any track refuses a
  * milestone typed with a Latin look-alike release letter («Витрина B3»), which
  * would otherwise drop out of the forecast unnoticed. Returns null when
@@ -576,8 +576,8 @@ export function productTrackMilestoneError(args, milestone, listOpenMilestones) 
   if (milestoneTrack(name) === track) return null;
   const own = (listOpenMilestones() ?? []).filter((t) => milestoneTrack(t) === track);
   return (
-    `a \`${track}\` Issue must home on a milestone of its own track — a ` +
-    `«${TRACK_MILESTONE_PREFIXES[track]} …» release or «${TRACK_MILESTONE_PREFIXES[track]} · Позже»; ` +
+    `a \`${track}\` Issue must home on a milestone of its own track — one ` +
+    `whose name starts with «${TRACK_MILESTONE_PREFIXES[track]}» (a release or the track's backlog); ` +
     `«${name}» is not one (spec §7.1, #3375). Open milestones of this track: ` +
     (own.length ? own.map((t) => `«${t}»`).join(", ") : "(none open)") +
     "."

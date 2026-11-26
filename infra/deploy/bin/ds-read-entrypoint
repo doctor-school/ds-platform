@@ -14,7 +14,7 @@
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
 # the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearse-restore`,
-# `rehearsal-status`, `read-host-state` and the
+# `rehearsal-status`, `read-host-state`, `read-secret-journal` (#4280) and the
 # recovery verbs (an older data entrypoint rejects them: fail-closed), ds-recovery
 # (#3662), for `release-journal` (#4067) `journalctl` on fixed unit names and, for
 # `host-state` (#4144), the fixed probe commands of HOST_STATE_PY.
@@ -32,10 +32,13 @@
 # restores prod onto the throw-away copy with no migration applied: the restore path
 # and its measured headroom, on demand, with nothing pending. `release-journal <sha>`
 # (#4067) answers the bounded journal tail of the release's driver unit and of every
-# step unit this box's status file records as not succeeded, with the failure note: a
-# failed release is read without the break-glass key. `host-state` (#4144) answers
-# both prod boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's WAL
-# archiver and pgBackRest version: a closed field list, without the break-glass key.
+# step unit this box's status file records as not succeeded, of the SHA's api-secret
+# and (over the hop) data-secret rotation units (#4280), with the failure note: a
+# failed release or rotation is read without the break-glass key; a data-secret unit the
+# hop could not read carries one fixed reason. `host-state` (#4144) answers both prod
+# boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's WAL archiver,
+# pgBackRest version and each offsite repo's reachability (#4280): a closed field list,
+# without the break-glass key.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -356,9 +359,23 @@ PY
 
 # The answer (argv: sha, the work dir, the line and byte bounds, the units): each unit's
 # tail, and the failure note as the driver recorded it (null when absent or not JSON).
+# #4280: the secret units print fixed status lines and pgBackRest's own errors, never a
+# value; a line that still reads as a NAME=value assignment, or a docker compose
+# interpolation warning (it quotes the text after a "$" of an .env value), is dropped all
+# the same. The data-secret unit comes over the hop: a failed hop (its exit code in
+# hop.rc) answers no lines and one fixed reason, so «not read» never reads as «no journal».
 read -r -d '' RELEASE_JOURNAL_PY <<'PY' || true
-import datetime, json, os, sys
+import datetime, json, os, re, sys
 sha, work, max_lines, max_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+SECRET_UNIT = re.compile(r"ds-prod-[0-9a-f]{12}-(data|api)-secret")
+ASSIGNMENT = re.compile(r"(?<![A-Za-z0-9_-])[A-Z][A-Z0-9_]{2,}=")
+COMPOSE_UNSET = re.compile(r"variable is not set")
+NOT_SERVED = "ds-data-prod does not serve read-secret-journal (the next release installs it)"
+HOP_REASONS = {2: NOT_SERVED, 3: NOT_SERVED, 124: "the read timed out", 255: "ds-data-prod is unreachable"}
+try:
+    hop_rc = int(open(os.path.join(work, "hop.rc"), "rb").read(16))
+except (OSError, ValueError):
+    hop_rc = -1
 units = []
 for i, unit in enumerate(sys.argv[5:]):
     try:
@@ -369,7 +386,15 @@ for i, unit in enumerate(sys.argv[5:]):
     lines = raw.decode("utf-8", "replace").splitlines()
     if cut and lines:
         lines = lines[1:]  # the byte bound cut the first line
-    units.append({"unit": unit, "lines": lines, "truncated": cut or len(lines) >= max_lines})
+    cut = cut or len(lines) >= max_lines
+    if SECRET_UNIT.fullmatch(unit):
+        lines = [l for l in lines if not ASSIGNMENT.search(l) and not COMPOSE_UNSET.search(l)]
+    entry = {"unit": unit, "lines": lines, "truncated": cut}
+    if unit.endswith("-data-secret") and hop_rc != 0:
+        # a failed hop's output is not the unit's journal: none of it leaves
+        entry = {"unit": unit, "lines": [], "truncated": False,
+                 "reason": HOP_REASONS.get(hop_rc, "the read failed")}
+    units.append(entry)
 try:
     with open(os.path.join(work, "failure"), "rb") as f:
         failure = json.load(f)
@@ -403,6 +428,15 @@ release_journal() {
       python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
     i=$((i + 1))
   done
+  # #4280: the SHA's secret rotation units — api-secret on this box, data-secret on
+  # ds-data-prod over the hop (a data box that predates read-secret-journal answers none).
+  units+=("ds-prod-${sha:0:12}-api-secret")
+  { sudo "$JOURNALCTL" -u "${units[-1]}" -n "$JOURNAL_LINES" -o short-iso -q --no-pager </dev/null 2>/dev/null || true; } |
+    python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
+  i=$((i + 1))
+  units+=("ds-prod-${sha:0:12}-data-secret")
+  { rc=0; data_prod_hop "read-secret-journal $sha" 2>/dev/null || rc=$?; printf '%s' "$rc" >"$read_work/hop.rc"; } |
+    python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
   { sudo cat "$RELEASE_FAILURE_DIR/$sha.failure" 2>/dev/null || true; } | head -c 4096 >"$read_work/failure"
   python3 -I -X utf8 -c "$RELEASE_JOURNAL_PY" "$sha" "$read_work" "$JOURNAL_LINES" "$JOURNAL_MAX_BYTES" \
     "${units[@]}" >"$read_work/answer.json" 2>/dev/null || read_fail "the read failed"
@@ -530,6 +564,46 @@ def pgbackrest():
     lines = (run(["docker", "compose", "exec", "-T", "postgres", "pgbackrest", "version"], 30, compose) or "").strip().splitlines()
     return {"version": lines[0]} if lines and VERSION_RE.fullmatch(lines[0]) else err("pgbackrest version failed")
 
+# #4280: each offsite repo's endpoint (argv[4:], "<n>=<endpoint>" as the data verb read
+# them): one anonymous HTTPS request by curl, -q so no curlrc and no credential goes
+# along, capped at 8 s; its TCP and TLS phase times classify a failure.
+ENDPOINT_RE = re.compile(r"(?:https://)?([A-Za-z0-9][A-Za-z0-9.-]{0,252}(?::[0-9]{1,5})?)/?")
+CURL_W = "%{http_code} %{time_connect} %{time_appconnect}"
+
+def reach(host):
+    try:
+        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https",
+                            "-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=12)
+    except subprocess.TimeoutExpired:
+        return "timeout", None
+    f = p.stdout[:256].decode("ascii", "replace").split()
+    num = lambda i: float(f[i]) if len(f) > i and re.fullmatch(r"[0-9]+(\.[0-9]+)?", f[i]) else 0.0
+    code = int(num(0))
+    http = code if 100 <= code <= 599 else None
+    if p.returncode == 6:
+        return "dns-fail", None
+    if num(2) > 0:
+        return "reachable", http
+    if p.returncode == 28:
+        return "timeout", None
+    return ("tls-fail" if num(1) > 0 else "tcp-refused"), None
+
+def offsite():
+    out = []
+    for arg in sys.argv[4:]:
+        n, _, endpoint = arg.partition("=")
+        if n not in ("2", "3"):
+            continue
+        m = ENDPOINT_RE.fullmatch(endpoint)
+        if not m:
+            # not an https host[:port]: a fixed entry, the value never echoed
+            out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+            continue
+        state, http = reach(m.group(1))
+        out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
+    return out
+
 def safe(probe):
     try:
         return probe()
@@ -547,6 +621,7 @@ answer = {
 if role == "data":
     answer["archiver"] = safe(archiver)
     answer["pgbackrest"] = safe(pgbackrest)
+    answer["offsite"] = safe(offsite)
 json.dump(answer, sys.stdout, separators=(",", ":"))
 PY
 
@@ -588,8 +663,14 @@ SCHEMA = {
     "data": dict(BOX, disk={"root": VOLUME, "postgresData": VOLUME},
                  archiver={"archivedCount": nat, "failedCount": nat, "lastArchivedTime": opt(iso),
                            "lastFailedTime": opt(iso), "lastFailedWal": opt(pattern(r"[0-9A-Za-z.]{8,64}"))},
-                 pgbackrest={"version": pattern(r"pgBackRest [0-9][0-9A-Za-z.-]{0,31}")}),
+                 pgbackrest={"version": pattern(r"pgBackRest [0-9][0-9A-Za-z.-]{0,31}")},
+                 offsite=lambda v: isinstance(v, list) and len(v) <= 2 and all(isinstance(r, dict) and "error" not in r and ok(r, OFFSITE_REPO) for r in v)),
 }
+# #4280: one offsite repo's reachability (HOST_STATE_PY offsite()).
+OFFSITE_REPO = {"repo": lambda v: v in (2, 3) and not isinstance(v, bool),
+                "host": opt(pattern(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[0-9]{1,5})?")),
+                "state": lambda v: v in ("reachable", "tcp-refused", "timeout", "dns-fail", "tls-fail", "endpoint-unparsed"),
+                "http": opt(lambda v: nat(v) and 100 <= v <= 599)}
 def ok(value, spec):
     if isinstance(value, dict) and set(value) == {"error"} and value["error"] in ERRORS:
         return True

@@ -785,7 +785,7 @@ postgres_artifact() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest read-host-state secret-recipient secret-apply postgres-load'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest read-host-state read-secret-journal secret-recipient secret-apply postgres-load'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 # What data-env writes there (DATA_PY GENERATED_COMPOSE); a ship carries them (#3822).
@@ -1748,6 +1748,46 @@ def pgbackrest():
     lines = (run(["docker", "compose", "exec", "-T", "postgres", "pgbackrest", "version"], 30, compose) or "").strip().splitlines()
     return {"version": lines[0]} if lines and VERSION_RE.fullmatch(lines[0]) else err("pgbackrest version failed")
 
+# #4280: each offsite repo's endpoint (argv[4:], "<n>=<endpoint>" as the data verb read
+# them): one anonymous HTTPS request by curl, -q so no curlrc and no credential goes
+# along, capped at 8 s; its TCP and TLS phase times classify a failure.
+ENDPOINT_RE = re.compile(r"(?:https://)?([A-Za-z0-9][A-Za-z0-9.-]{0,252}(?::[0-9]{1,5})?)/?")
+CURL_W = "%{http_code} %{time_connect} %{time_appconnect}"
+
+def reach(host):
+    try:
+        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https",
+                            "-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=12)
+    except subprocess.TimeoutExpired:
+        return "timeout", None
+    f = p.stdout[:256].decode("ascii", "replace").split()
+    num = lambda i: float(f[i]) if len(f) > i and re.fullmatch(r"[0-9]+(\.[0-9]+)?", f[i]) else 0.0
+    code = int(num(0))
+    http = code if 100 <= code <= 599 else None
+    if p.returncode == 6:
+        return "dns-fail", None
+    if num(2) > 0:
+        return "reachable", http
+    if p.returncode == 28:
+        return "timeout", None
+    return ("tls-fail" if num(1) > 0 else "tcp-refused"), None
+
+def offsite():
+    out = []
+    for arg in sys.argv[4:]:
+        n, _, endpoint = arg.partition("=")
+        if n not in ("2", "3"):
+            continue
+        m = ENDPOINT_RE.fullmatch(endpoint)
+        if not m:
+            # not an https host[:port]: a fixed entry, the value never echoed
+            out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+            continue
+        state, http = reach(m.group(1))
+        out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
+    return out
+
 def safe(probe):
     try:
         return probe()
@@ -1765,11 +1805,29 @@ answer = {
 if role == "data":
     answer["archiver"] = safe(archiver)
     answer["pgbackrest"] = safe(pgbackrest)
+    answer["offsite"] = safe(offsite)
 json.dump(answer, sys.stdout, separators=(",", ":"))
 PY
 
+# #4280: "<n>=<endpoint>" for each offsite repo (2, 3) with an endpoint: data.env's
+# PGBACKREST_REPO<n>_S3_ENDPOINT line (grep reads that one name, no other line leaves),
+# else a committed `[#repo<n>: ]repo<n>-s3-endpoint=` line of pgbackrest.conf.
+offsite_endpoints() {
+  local n value
+  for n in 2 3; do
+    value=$({ sudo grep -E "^PGBACKREST_REPO${n}_S3_ENDPOINT=" "$DATA_ENV" 2>/dev/null || true; } | tail -n 1)
+    value=${value#*=}
+    if [[ -z $value ]]; then
+      value=$({ grep -E "^(#repo${n}: )?repo${n}-s3-endpoint=" "$DATA_COMPOSE/pgbackrest/pgbackrest.conf" 2>/dev/null || true; } | tail -n 1)
+      value=${value#*=}
+    fi
+    value=${value//[\"\']/}
+    if [[ -n $value ]]; then printf '%s=%s\n' "$n" "$value"; fi
+  done
+}
+
 data_verb() {
-  local n=${#words[@]}
+  local n=${#words[@]} endpoints=()
   case "$verb" in
     capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema | recovery-bundle | read-host-state)
       ((n == 1)) || reject "usage: $verb" ;;
@@ -1781,6 +1839,8 @@ data_verb() {
         reject "usage: recovery-latest api-prod [2|3]" ;;
     recovery-check)
       ((n == 1)) || [[ $n == 2 && ${words[1]} =~ ^[23]$ ]] || reject "usage: recovery-check [2|3]" ;;
+    read-secret-journal) ((n == 2)) || reject "usage: $verb <sha>"
+      check_sha "${words[1]}" ;;
     read-observe)
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
     secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
@@ -1853,7 +1913,12 @@ data_verb() {
     recovery-put) recovery_put "${words[2]}" "${words[3]}" ;;
     recovery-latest) recovery_latest "${words[2]-}" </dev/null ;;
     # #4144: no release check — the host state answers during a release too.
-    read-host-state) exec sudo python3 -I -X utf8 -c "$HOST_STATE_PY" data "$ROOT" "$DATA_COMPOSE" </dev/null ;;
+    read-host-state)
+      mapfile -t endpoints < <(offsite_endpoints)
+      exec sudo python3 -I -X utf8 -c "$HOST_STATE_PY" data "$ROOT" "$DATA_COMPOSE" "${endpoints[@]}" </dev/null ;;
+    # #4280: the SHA's data-secret unit journal; the reading side bounds and filters it.
+    read-secret-journal)
+      exec sudo journalctl -u "ds-prod-${words[1]:0:12}-data-secret" -n 400 -o short-iso -q --no-pager </dev/null ;;
     secret-recipient) secret_recipient ds-data-prod-secret-intake </dev/null ;;
     secret-apply) secret_apply "${words[1]}" ;;
     postgres-load) postgres_load "${words[1]}" "${words[2]}" "${words[3]}" ;;
@@ -2435,7 +2500,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | read-host-state | secret-recipient | secret-apply | postgres-load)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | read-host-state | read-secret-journal | secret-recipient | secret-apply | postgres-load)
     data_verb
     ;;
   *)

@@ -27,11 +27,13 @@ name: Prod observe
 # headroom. A final state `failed` (or still `started` / `running` at the cap) fails
 # the job after the upload, so a green run is a green rehearsal.
 # `release-journal` (#4067) answers a release's driver journal, its failed step units'
-# journals and its failure note — the box journal a failed release points to, read
-# with no break-glass key; `pnpm prod:read <run-id>` prints it on the operator's terminal.
+# journals, the SHA's api-secret and data-secret rotation units' journals (#4280) and its
+# failure note — the box journal a failed release or rotation points to, read with no
+# break-glass key; `pnpm prod:read <run-id>` prints it on the operator's terminal.
 # `host-state` (#4144) answers both prod boxes' resolver, self-hostname, disk and uptime,
-# and ds-data-prod's WAL archiver and pgBackRest version — a closed field list, no
-# input; `pnpm prod:read <run-id>` prints it likewise.
+# and ds-data-prod's WAL archiver, pgBackRest version and each offsite repo's
+# reachability (#4280) — a closed field list, no input; `pnpm prod:read <run-id>`
+# prints it likewise.
 
 on:
   workflow_dispatch:

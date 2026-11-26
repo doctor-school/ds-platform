@@ -502,9 +502,9 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
   it("EARS-7: every event↔expert link failing rule maps to a specific key, never fallback", () => {
     const expertId = "11111111-1111-4111-8111-111111111111";
 
-    // Empty submit — the expert selector and the programme role select are
-    // required (the caption is not), and neither may degrade to the generic
-    // sentence.
+    // Empty submit — the expert selector, the programme role select and the
+    // place box are required (the caption is not), and none may degrade to the
+    // generic sentence.
     const empty = keysFor(EventExpertFormSchema, {
       expertId: "",
       programRole: "",
@@ -514,6 +514,9 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(empty).not.toContain("fallback");
     expect(empty).toContain("expert");
     expect(empty).toContain("programRole");
+    // The slot sentence shows on the SAME submit, not only once the role is
+    // fixed — an empty closed-set select must not hide it.
+    expect(empty).toContain("position");
 
     // Nothing chosen in the selector gets the «pick from the list» sentence, not
     // «обязательное поле» — under a dropdown the latter names no action.

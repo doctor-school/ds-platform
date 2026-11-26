@@ -657,15 +657,15 @@ export interface RecordingExpectedByFields {
  * all resolve to the ONE actionable sentence («whole number 0…32767») while an
  * over-cap value keeps its own.
  */
-export const EventExpertFormSchema = z
-  .object({
-    expertId: z.uuid(),
-    programRole: EventExpertProgramRoleSchema,
-    role: z.string().trim().max(EVENT_EXPERT_ROLE_MAX),
-    positionText: z.string(),
-  })
-  .superRefine((values, ctx) => {
-    const text = values.positionText.trim();
+export const EventExpertFormSchema = z.object({
+  expertId: z.uuid(),
+  programRole: EventExpertProgramRoleSchema,
+  role: z.string().trim().max(EVENT_EXPERT_ROLE_MAX),
+  // Refined on the FIELD, not the object: an object-level refinement is skipped
+  // once another field fails its type (an empty closed-set select does), and
+  // the operator would meet the slot sentence only after fixing the role.
+  positionText: z.string().superRefine((value, ctx) => {
+    const text = value.trim();
     // Parsed by hand rather than with `Number()`: `Number(" ")` is 0 and
     // `Number("1e3")` is 1000, so a blank box and an exponent would both slip
     // past as a legal slot the operator never typed.
@@ -680,11 +680,11 @@ export const EventExpertFormSchema = z
             origin: "number",
             maximum: EVENT_EXPERT_POSITION_MAX,
             inclusive: true,
-            path: ["positionText"],
           }
-        : { code: "custom", path: ["positionText"] },
+        : { code: "custom" },
     );
-  });
+  }),
+});
 
 export interface EventExpertFormFields {
   expertId: string;

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<link rel="stylesheet" href="ds/dsdesignsystem/tokens.css">
 </head>
 <body>
 <x-dc>
@@ -56,7 +57,7 @@
     </div>
   </div>
 
-  <main style="padding:0 clamp(16px,4vw,48px)">
+  <main style="padding:0 clamp(16px,4vw,48px);padding-bottom:clamp(var(--space-section-sm),4vw,var(--space-section))">
     <div style="max-width:1104px;margin:0 auto">
 
       <!-- Загрузка · скелет блоков -->
@@ -149,7 +150,7 @@
         <!-- ============ ЭКСПЕРТЫ И СОБЫТИЯ ============ -->
         <section data-screen-label="a-partner · эксперты и события" style="margin-top:clamp(48px,7vw,72px)">
           <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
-            <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Эксперты проектов партнёра</span>
+            <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};min-width:0">Эксперты проектов партнёра</span>
             <span style="flex:1;border-top:2px solid {{ ink }}"></span>
             <a href="academy-experts.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все эксперты</a>
           </div>
@@ -182,7 +183,7 @@
             <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
               <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Продукция</span>
               <span style="flex:1;border-top:2px solid {{ ink }}"></span>
-              <span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px;white-space:nowrap">Партнёрский материал · Партнёр А</span>
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px;min-width:0;overflow-wrap:break-word">Партнёрский материал · Партнёр А</span>
             </div>
             <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:22px;max-width:640px">Каталог продуктов компании, которые встречаются в проектах Академии.</div>
             <div style="{{ prodGrid }}">
@@ -304,7 +305,7 @@ class Component extends DCLogic {
     const projCountWord = noProjects ? 'проектов' : 'проекта';
 
     const projects = noProjects ? [] : [
-      { kind: 'Школа', title: 'Ортобиология — школа и курс-сериал', desc: 'PRP, клеточные технологии и биоортопедия в практике травматолога. Модули, эфиры и очные разборы — бесплатно для врача.', count: '24 эфира', emblem: 'Ор', exclusive: excl === 'А' },
+      { kind: 'Школа', title: 'Ортобиология — школа и курс-сериал', desc: 'PRP, клеточные технологии и биоортопедия в практике травматолога. Модули, эфиры и очные разборы.', count: '24 эфира', emblem: 'Ор', exclusive: excl === 'А' },
       { kind: 'Конгресс', title: 'Конгресс-2026', desc: 'Ежегодная очная встреча направления · Москва, октябрь.', count: '2 дня программы', emblem: 'Кг', exclusive: false },
       { kind: 'Подкаст', title: 'Подкаст-цикл школы', desc: 'Разговоры с экспертами направления регенеративной медицины.', count: '12 выпусков', emblem: 'Пк', exclusive: false }
     ];

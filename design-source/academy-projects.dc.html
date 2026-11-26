@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<link rel="stylesheet" href="ds/dsdesignsystem/tokens.css">
 </head>
 <body>
 <x-dc>
@@ -18,13 +19,13 @@
       <div>
         <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Проекты платформы</div>
         <h1 style="margin:0;font-size:clamp(34px,6vw,56px);line-height:1;font-weight:800;letter-spacing:-.035em;color:#fff">Школы, программы и медиа</h1>
-        <div style="font-size:15px;font-weight:600;color:#D3E8FD;margin-top:16px;max-width:560px;line-height:1.6">У каждого проекта — своя команда экспертов, программа эфиров и партнёр индустрии. Всё для врачей бесплатно.</div>
+        <div style="font-size:15px;font-weight:600;color:#D3E8FD;margin-top:16px;max-width:560px;line-height:1.6">У каждого проекта — своя команда экспертов, программа эфиров и партнёр индустрии.</div>
       </div>
       <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;line-height:2;padding-bottom:6px">6 проектов · 4 партнёра<br><span style="color:#fff">98 эфиров с 2024 года</span></div>
     </div>
   </div>
 
-  <main style="flex:1;padding:0 clamp(16px,4vw,48px)">
+  <main style="flex:1;padding:0 clamp(16px,4vw,48px);padding-bottom:clamp(var(--space-section-sm),4vw,var(--space-section))">
     <div style="max-width:1104px;margin:clamp(36px,6vw,56px) auto 0">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:clamp(16px,3vw,26px)">
         <sc-for list="{{ projects }}" as="pr" hint-placeholder-count="6">

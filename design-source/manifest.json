@@ -16,23 +16,22 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "academy-expert.dc.html": {
-      "sha256": "77be46dfbe85025cb8568302b474818f6d98d0f30a1690f9c66253a9710e24e0",
-      "pulledSha256": "e6a6ad4fc0ec4e4effcdb89d3c095314d75045953cc54f6244ba96fe3f98d1c4",
-      "pulledAt": "2026-10-16T09:50:49.944Z",
-      "remotePath": "academy-expert.dc.html"
+      "sha256": "a43634e7092c82045aa27d1bfa5eddc4f59a9683df946dc67b0c6fea8c270d7d",
+      "pulledSha256": "8bac7d7dc4f38ca7359e57ac8be320302fe08527dfa74631737cb64cc11d0861",
+      "pulledAt": "2026-11-26T03:22:07.394Z",
+      "remotePath": "project/academy-expert.dc.html"
     },
     "academy-experts.dc.html": {
-      "sha256": "3198970581be220c7566c7445526f0246ad86377b8a340f2b18c401b2adb46bc",
-      "pulledSha256": "662bb9f769835f703c44e8e18fb230995800fc58df323e0a20a121eef1436f5f",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "bf63fcfe10ca7eca6a0ff10d9f3747fdca344bc44263150f9e1c89a19a2064ce",
+      "pulledSha256": "acd97634c40d8283d5cbea80b0136dbb5f27d0da5c2a9edafd81a90929f25375",
+      "pulledAt": "2026-11-26T03:22:06.396Z",
+      "remotePath": "project/academy-experts.dc.html"
     },
     "academy-home.dc.html": {
-      "sha256": "c8f7b04a2584df6c8755f5a4b6057508da19bb3e5679c1e0e2b706b32cad0adb",
-      "pulledSha256": "6082d1d80dd1068eb244335b121a06cf48161d71293ffd1c7805e1006a30c218",
-      "pulledAt": "2026-10-29T08:18:03.922Z",
-      "remotePath": "academy-home.dc.html"
+      "sha256": "1b4c011e40f08c3369664e0056ad57ff19d1a90d26c46293523314677d784976",
+      "pulledSha256": "b1a15a0ba52a8ef17ca175f4d07c5acef9a13eb0d82dc3f62a93ec37f6d10743",
+      "pulledAt": "2026-11-26T03:22:02.166Z",
+      "remotePath": "project/academy-home.dc.html"
     },
     "academy-index-demo.dc.html": {
       "sha256": "488f978760af88aed88108bd32cab4d0ac7235b2cc54145e2e57c45dba31a5f2",
@@ -42,10 +41,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "academy-invest.dc.html": {
-      "sha256": "538470cfea7e0aca3ee8b81827a676bf8a7e54f3857271561c4dd5181f9ecfad",
-      "pulledSha256": "7b2a19fa1891df57d90082cc4d1a714e82e92e55ff9a8dcdda0ea0c9fd7038ca",
-      "pulledAt": "2026-10-28T12:09:58.795Z",
-      "remotePath": null
+      "sha256": "727ab43517821d510387c7a10cb3c100d97c10986d0cff98d5af4d5a9b0810d4",
+      "pulledSha256": "68a79a9f46d716f078c12abcd958b8bb234a990afb6239e8b534355187ef88b5",
+      "pulledAt": "2026-11-26T03:22:08.385Z",
+      "remotePath": "project/academy-invest.dc.html"
     },
     "academy-investor-cabinet.dc.html": {
       "sha256": "79fc7a32f571cc67eb6ba57e3bf54acee8503910c1f1960eaa59d07e89e860c0",
@@ -61,18 +60,16 @@
       "remotePath": "academy-material.dc.html"
     },
     "academy-partner.dc.html": {
-      "sha256": "bc2b8a225d2c9a0c9bfdfe4edf183849053b4e63a290d7fa4410bd78cbffcaad",
-      "pulledSha256": "575b2f4540ed4ad0d5651ab7432de377a951908ac986ece93fdceea9fbc92099",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "a1b703089beef83b4e68be3ed565c54e4e77526595fb2da135fc6e005a581347",
+      "pulledSha256": "8a4aa4b2f4f5fc9593f751bd15d469270bac6da849ff3f3a0dc6ed27b72ee3f5",
+      "pulledAt": "2026-11-26T03:34:52.216Z",
+      "remotePath": "project/academy-partner.dc.html"
     },
     "academy-partners.dc.html": {
-      "sha256": "0471035227aed91dc75c0d652ba5e30db728cfc18c93a6d4ae3c710b08eca2dd",
-      "pulledSha256": "3315d03b7d03fc3904696cd0cd0d5a645805aa5919bf7f1de4aefb511acd52b6",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "ca85df0cbaa496bffba4eb52c1b90e7774d89cdfc46aeddd2d5e7d513aa0da9b",
+      "pulledSha256": "d4eaee9052e5f50871fa94dc1946afbed4f28cf361b970e727e8ce7ad771b011",
+      "pulledAt": "2026-11-26T03:22:10.329Z",
+      "remotePath": "project/academy-partners.dc.html"
     },
     "academy-project.dc.html": {
       "sha256": "f08bb82ac703bc4a9921be8c03d2e554cd86a73e28ad17ca6b440fefb866e13c",
@@ -81,10 +78,10 @@
       "remotePath": null
     },
     "academy-projects.dc.html": {
-      "sha256": "d5d365fe1661c12f093196f93783c9498a7fa8f0c9ddaa87daf69dbe35ab8a35",
-      "pulledSha256": "61f7b9ffb156824a4a3a57daf8a985b36016873310754943db063e85ffc48151",
-      "pulledAt": "2026-10-28T09:48:47.012Z",
-      "remotePath": null
+      "sha256": "600727f25b57e27f505715843eaf436157165a4159720ede9b4c726a795d89f8",
+      "pulledSha256": "23808b13bced993b864ff0e18049163deae12c9f212ab2fe59f7d2f4cb36e792",
+      "pulledAt": "2026-11-26T03:34:50.780Z",
+      "remotePath": "project/academy-projects.dc.html"
     },
     "account-my-events.dc.html": {
       "sha256": "fbdd09693f364c683194ca1bd166a514b9df2370dcf3a85befddcc5e2e4f6ad1",
@@ -307,16 +304,16 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "unit-feed-card.dc.html": {
-      "sha256": "27a239d946a5a1ef80586c1955d0f553f83608a1ac29d3570550736d4ec832d3",
-      "pulledSha256": "da47ef23c709e7b226da79a113891098fa8756945936af2388ae8143c323f96a",
-      "pulledAt": "2026-10-29T08:51:10.086Z",
-      "remotePath": "unit-feed-card.dc.html"
+      "sha256": "3298ad91d57d3d423f67189014e9f79698fb05b3238a4dfd67e67a6e68ee2a1f",
+      "pulledSha256": "e26d5c78987151e4b3bb69bab28743ee4c0700ce990cdbe2c05d1d485b5044f3",
+      "pulledAt": "2026-11-26T03:22:04.418Z",
+      "remotePath": "project/unit-feed-card.dc.html"
     },
     "unit-project-card.dc.html": {
-      "sha256": "f369bac6f3635e58c2bec3610a12a982f005d43763105490fa6d3f2d9ef1f078",
-      "pulledSha256": "224dd8f0f5973cd694d09a9c9769db5e56934595783af58a1fbcbf481580f858",
-      "pulledAt": "2026-10-29T08:18:04.271Z",
-      "remotePath": "unit-project-card.dc.html"
+      "sha256": "533e4b7cf1febab031e9c4a2f6016bc72d447901ecdfb9adfb90cbb5028e738c",
+      "pulledSha256": "aca4645e8f7d2afa7835ee8edf829aca5dd5af69975ae8c6e239a46b83b2f1f0",
+      "pulledAt": "2026-11-26T03:22:03.248Z",
+      "remotePath": "project/unit-project-card.dc.html"
     },
     "unit-room-frame.dc.html": {
       "sha256": "b8b87e44f44df08c69e51bdbc14f23e0207ee8403132ec08e4dd8b01e201fb01",

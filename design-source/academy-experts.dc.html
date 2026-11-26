@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<link rel="stylesheet" href="ds/dsdesignsystem/tokens.css">
 </head>
 <body>
 <x-dc>
@@ -23,7 +24,7 @@
     </div>
   </div>
 
-  <main style="flex:1;padding:0 clamp(16px,4vw,48px)">
+  <main style="flex:1;padding:0 clamp(16px,4vw,48px);padding-bottom:clamp(var(--space-section-sm),4vw,var(--space-section))">
     <div style="max-width:1104px;margin:clamp(32px,5vw,48px) auto 0">
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px">
         <input value="{{ q }}" onInput="{{ setQ }}" aria-label="Поиск по имени" placeholder="Поиск по имени" style="font:inherit;font-size:14.5px;font-weight:600;padding:13px 16px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};box-sizing:border-box;flex:1;min-width:220px;max-width:420px">

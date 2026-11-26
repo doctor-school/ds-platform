@@ -23,14 +23,14 @@
         </div>
         <div style="height:264px;box-sizing:border-box;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)">
           <div style="display:flex;align-items:center;gap:var(--space-2)">
-            <div style="width:40px;height:40px;flex:none"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
-            <div style="width:55%;height:14px"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+            <div style="width:var(--space-10);height:var(--space-10);flex:none"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+            <div style="width:55%;height:var(--space-4)"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
           </div>
-          <div style="width:38%;height:22px"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
-          <div style="height:18px"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
-          <div style="height:18px;width:82%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
-          <div style="height:18px;width:58%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
-          <div style="margin-top:auto;height:14px;width:30%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+          <div style="width:38%;height:var(--space-6)"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+          <div style="height:var(--space-5)"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+          <div style="height:var(--space-5);width:82%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+          <div style="height:var(--space-5);width:58%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
+          <div style="margin-top:auto;height:var(--space-4);width:30%"><x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import></div>
         </div>
       </x-import>
     </div>
@@ -45,17 +45,17 @@
             <img src="{{ image }}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block">
           </sc-if>
           <sc-if value="{{ coverPh }}" hint-placeholder-val="{{ true }}">
-            <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 11px,var(--color-hairline) 11px 13px)"></div>
-            <span style="position:absolute;left:var(--space-3);top:var(--space-3);font-size:11px;font-weight:var(--font-weight-bold);letter-spacing:.1em;text-transform:uppercase;color:var(--color-muted-foreground);background:var(--color-card);padding:2px 6px">{{ phLabel }}</span>
+            <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 var(--space-2-5),var(--color-hairline) var(--space-2-5) var(--space-3))"></div>
+            <span style="position:absolute;left:var(--space-3);top:var(--space-3);font-size:var(--font-size-eyebrow);font-weight:var(--font-weight-bold);letter-spacing:var(--font-letter-spacing-micro);text-transform:uppercase;color:var(--color-muted-foreground);background:var(--color-card);padding:var(--space-0-5) var(--space-1-5)">{{ phLabel }}</span>
           </sc-if>
           <sc-if value="{{ noMedia }}" hint-placeholder-val="{{ false }}">
             <div style="position:absolute;inset:0;display:flex;align-items:flex-end;padding:var(--space-4)">
-              <span style="font-size:var(--font-size-3xl);font-weight:var(--font-weight-extrabold);letter-spacing:-.03em;line-height:1;color:var(--color-primary);text-wrap:balance">{{ fieldMark }}</span>
+              <span style="font-size:var(--font-size-3xl);font-weight:var(--font-weight-extrabold);letter-spacing:var(--font-letter-spacing-display);line-height:var(--font-line-height-none);color:var(--color-primary);text-wrap:balance">{{ fieldMark }}</span>
             </div>
           </sc-if>
           <sc-if value="{{ isVideo }}" hint-placeholder-val="{{ false }}">
-            <span aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:52px;height:52px;display:flex;align-items:center;justify-content:center;background:var(--color-foreground);color:var(--color-background);font-size:18px;box-shadow:var(--shadow-btn)">▶</span>
-            <span style="position:absolute;right:var(--space-2);bottom:var(--space-2);font-size:12px;font-weight:var(--font-weight-bold);font-variant-numeric:tabular-nums;color:var(--color-background);background:var(--color-foreground);padding:2px 6px">{{ duration }}</span>
+            <span aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:var(--space-12);height:var(--space-12);display:flex;align-items:center;justify-content:center;background:var(--color-foreground);color:var(--color-background);font-size:var(--font-size-lead);box-shadow:var(--shadow-btn)">▶</span>
+            <span style="position:absolute;right:var(--space-2);bottom:var(--space-2);font-size:var(--font-size-xs);font-weight:var(--font-weight-bold);font-variant-numeric:tabular-nums;color:var(--color-background);background:var(--color-foreground);padding:var(--space-0-5) var(--space-1-5)">{{ duration }}</span>
           </sc-if>
         </div>
 
@@ -69,7 +69,7 @@
             </sc-if>
             <span style="flex:1;min-width:0;font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);color:var(--color-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sourceName }}</span>
             <sc-if value="{{ hasNet }}" hint-placeholder-val="{{ false }}">
-              <span title="{{ netName }}" aria-label="{{ netName }}" style="flex:none;font-size:11px;font-weight:var(--font-weight-extrabold);letter-spacing:.04em;color:var(--color-foreground);border:var(--border-width-2) solid var(--color-border);padding:1px 5px;line-height:16px">{{ netChip }}</span>
+              <span title="{{ netName }}" aria-label="{{ netName }}" style="flex:none;font-size:var(--font-size-eyebrow);font-weight:var(--font-weight-extrabold);letter-spacing:var(--font-letter-spacing-wide);color:var(--color-foreground);border:var(--border-width-2) solid var(--color-border);padding:var(--space-px) var(--space-1);line-height:var(--font-line-height-label)">{{ netChip }}</span>
             </sc-if>
           </div>
 
@@ -78,20 +78,20 @@
           </sc-if>
 
           <sc-if value="{{ isTitle }}" hint-placeholder-val="{{ true }}">
-            <div style="font-size:var(--font-size-lg);font-weight:var(--font-weight-bold);line-height:23px;letter-spacing:-.01em;color:var(--color-foreground);display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:{{ lines }};text-wrap:pretty">{{ textOut }}</div>
+            <div style="font-size:var(--font-size-lg);font-weight:var(--font-weight-bold);line-height:var(--font-line-height-title);letter-spacing:var(--font-letter-spacing-title);color:var(--color-foreground);display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:{{ lines }};text-wrap:pretty">{{ textOut }}</div>
           </sc-if>
           <sc-if value="{{ isPost }}" hint-placeholder-val="{{ false }}">
-            <div style="font-size:var(--font-size-base);font-weight:400;line-height:24px;color:var(--color-foreground);display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:{{ lines }};text-wrap:pretty">{{ textOut }}</div>
+            <div style="font-size:var(--font-size-base);font-weight:var(--font-weight-normal);line-height:var(--font-line-height-normal);color:var(--color-foreground);display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:{{ lines }};text-wrap:pretty">{{ textOut }}</div>
           </sc-if>
 
           <div style="margin-top:auto;display:flex;flex-direction:column;gap:var(--space-2)">
             <sc-if value="{{ hasPartner }}" hint-placeholder-val="{{ false }}">
-              <div style="font-size:12px;line-height:17px;font-weight:var(--font-weight-semibold);color:var(--color-muted-foreground);border-top:1px solid var(--color-hairline);padding-top:var(--space-2)">{{ partnerText }}</div>
+              <div style="font-size:var(--font-size-xs);line-height:var(--font-line-height-label);font-weight:var(--font-weight-semibold);color:var(--color-muted-foreground);border-top:var(--border-width-1) solid var(--color-hairline);padding-top:var(--space-2)">{{ partnerText }}</div>
             </sc-if>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);font-size:var(--font-size-sm);line-height:20px;font-weight:var(--font-weight-semibold);color:var(--color-muted-foreground)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);font-size:var(--font-size-sm);line-height:var(--font-line-height-label);font-weight:var(--font-weight-semibold);color:var(--color-muted-foreground)">
               <span>{{ date }}</span>
               <sc-if value="{{ external }}" hint-placeholder-val="{{ false }}">
-                <span style="position:relative;font-weight:var(--font-weight-bold);color:var(--color-foreground)"><span aria-hidden="true">{{ netName }} ↗</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">, откроется в новой вкладке на площадке {{ netName }}</span></span>
+                <span style="position:relative;font-weight:var(--font-weight-bold);color:var(--color-foreground)"><span aria-hidden="true">{{ netName }} ↗</span><span class="sr-only">, откроется в новой вкладке на площадке {{ netName }}</span></span>
               </sc-if>
             </div>
           </div>
@@ -126,7 +126,7 @@ class Component extends DCLogic {
       'vk': 'Записали первый выпуск второго сезона подкаста «Кто стоит за брендом». Спасибо гостям и команде производства — премьера в ноябре, а пока делимся кадрами со съёмочной площадки.',
       'rutube': 'PRP при гонартрозе — фрагмент эфира',
       'vk-видео': 'Как устроен проект «Ортобиология» — за минуту',
-      'дзен': 'Как устроено бесплатное медицинское образование: модель Doctor.School'
+      'дзен': 'Как устроено медицинское образование: модель Doctor.School'
     };
     const isPost = !!s.post;
     const hasType = !!s.own;
@@ -135,7 +135,8 @@ class Component extends DCLogic {
     const hasImg = !noMedia && !!p.image;
     const textOut = (isPost ? (p.text || p.title) : (p.title || p.text)) || SAMPLE[src];
 
-    // body 264 − padding 32 − source row 40 − gaps 24 − date 20 = 148
+    // body 264 − padding 32 (--space-4×2) − source row 40 (аватар) − gaps 24 (--space-3×2) − date 20 (14×1.4) = 148.
+    // Строки: title 20×1.15 = 23, post 16×1.5 = 24, partner 12×1.4 + 8 + 1 + gap 8 ≈ 34 — px-значения строк выведены из токенов line-height.
     let avail = 148 - (hasType ? 36 : 0) - (partner ? 34 : 0);
     const lines = Math.max(2, Math.floor(avail / (isPost ? 24 : 23)));
 

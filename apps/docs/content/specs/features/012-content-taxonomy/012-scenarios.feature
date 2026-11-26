@@ -1150,19 +1150,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | a client-supplied coverRef photoRef or logoRef      | 400    | VALIDATION_FAILED       |
 
     @taxonomy-input-refusals
-    @EARS-7 @failure
-    Scenario Outline: An expert link requires a role and a non-negative integer position
+    # Read under «Amendment — 2026-11-26 — the expert's programme role in an event»: the caption is optional, the programme role is required.
+    @EARS-7 @EARS-31 @failure @rule
+    Scenario Outline: An expert link requires a programme role from the closed set and a non-negative integer position
       Given an event and a publishable expert exist
       When the operator submits an event_experts link with <invalid_field>
       Then the request is refused with 400 Problem Details
       And no event_experts row is created or restored
 
       Examples:
-        | invalid_field         |
-        | a missing role        |
-        | a blank role          |
-        | a negative position   |
-        | a fractional position |
+        | invalid_field             |
+        | a missing programme role  |
+        | an unknown programme role |
+        | a negative position       |
+        | a fractional position     |
 
     @taxonomy-input-refusals
     @EARS-16 @EARS-17 @failure

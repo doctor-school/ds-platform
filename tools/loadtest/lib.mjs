@@ -60,10 +60,11 @@ export function floatEnv(name, fallback) {
   return n;
 }
 
-// Production-target tripwire. Every scenario that MUTATES state or loads a live
-// room gates on it (room-fanout, auth-burst, the room-behavior verifier), each
-// behind its own explicit confirmation env, so a production run is never an
-// accident. The check is name-based and fails closed:
+// Production-target tripwire. The scenarios that load a live room or mutate
+// state through the api (room-fanout, auth-burst, the room-behavior verifier)
+// run through `productionGate` below, each behind its own explicit confirmation
+// env (the verifier behind none), so a production run is never an accident.
+// `isProdTarget` decides what production is; it is name-based and fails closed:
 //
 // • Every name under the `doctor.school` apex is production — the api, the
 //   sign-in host `login.`, both storefronts (`new.`, `academy.`), the IdP `id.`
@@ -152,6 +153,66 @@ export function isProdTarget(origin, env = process.env) {
   if (isIP(host) === 0) return false;
   if (isLoopbackIp(host)) return false;
   return !nonProdIps(env).has(host);
+}
+
+/**
+ * Every env var naming an origin a gated run requests or presents itself as:
+ * the api, the storefront whose door and callback a sign-in drives, the sign-in
+ * host the password step posts as, and the Centrifugo origin. One list for
+ * every gate, so no scenario can leave one of them unchecked: a production
+ * value in any of them is a production run.
+ */
+export const RUN_ORIGIN_ENV = Object.freeze([
+  "LOADTEST_API_ORIGIN",
+  "LOADTEST_STOREFRONT_ORIGIN",
+  "LOADTEST_SIGN_IN_HOST_ORIGIN",
+  "LOADTEST_CENTRIFUGO_ORIGIN",
+]);
+
+/** The origin of a URL for a refusal message, never its path or query (a callback carries a code). */
+function displayOrigin(url) {
+  try {
+    const { origin } = new URL(String(url).trim());
+    if (origin && origin !== "null") return origin;
+  } catch {
+    // A bare host: fall through to its canonical name.
+  }
+  return targetHostname(url);
+}
+
+/**
+ * The one production gate of a gated scenario. Before any request it checks
+ * every origin the run will request: each `RUN_ORIGIN_ENV` value that is set,
+ * plus `origins` (label → origin) the caller resolved itself. It returns
+ * `allowTarget(url, what)`, which the run calls before each request to a URL
+ * no env var names — the IdP authorize hop and the storefront callback a
+ * sign-in follows, the WebSocket a room grant names — so a server answer
+ * cannot route the run into production either.
+ *
+ * A production target is refused unless `confirmation` names an env var set
+ * to exactly `1`; `confirmation: null` refuses production outright. One
+ * scenario's confirmation never unlocks another's gate.
+ */
+export function productionGate(
+  { scenario, confirmation = null, refusal, origins = {} },
+  env = process.env,
+) {
+  const confirmed = confirmation !== null && env[confirmation] === "1";
+  const allowTarget = (url, what) => {
+    if (confirmed || !isProdTarget(url, env)) return;
+    throw new Error(
+      `REFUSING to run ${scenario} against production target ${what} ` +
+        `${JSON.stringify(displayOrigin(url))}: ${refusal}`,
+    );
+  };
+  for (const name of RUN_ORIGIN_ENV) {
+    const value = (env[name] ?? "").trim();
+    if (value) allowTarget(value, name);
+  }
+  for (const [what, origin] of Object.entries(origins)) {
+    if (origin) allowTarget(origin, what);
+  }
+  return allowTarget;
 }
 
 /**

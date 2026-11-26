@@ -10,12 +10,18 @@
 //     — the clean way to measure sign-in capacity without tripping the
 //     register bot-gate.
 //
-// HARD PROD GUARD (fail-closed, tracked as #1068): this scenario REFUSES to run
-// against a prod host until `LOADTEST_SUPPRESSION_CONFIRMED=1` is set — because
-// synthetic register/verify traffic to prod can dispatch REAL verification
-// emails (no per-user delivery-suppression seam exists yet, recon fact 3) and a
-// single-source burst measures the rate limiter (per-IP 20/15min, per-ASN
-// 100/h, recon fact 2), not capacity. Both are phase-2 owner decisions.
+// HARD PROD GUARD (fail-closed, lib.mjs `productionGate`): this scenario
+// REFUSES to run when any origin it requests is production — the api, the
+// storefront and sign-in host its sign-in drives, the Centrifugo origin, or a
+// URL a sign-in follows from a server answer (the IdP authorize hop, the
+// storefront callback) — until `LOADTEST_SUPPRESSION_CONFIRMED=1` is set. Why:
+// register traffic dispatches REAL mail unless the api runs with
+// `LOADTEST_SUPPRESS_SYNTHETIC=true` (the #1068 seam drops
+// `LOADTEST_SYNTHETIC_DOMAIN` recipients before the relay), and a single-source
+// burst measures the rate limiter, not capacity: the verification and sending
+// doors (20 failures / 60 sends per IP per 15 min, env-raisable in the window)
+// and the fixed 1200 / 15 min sign-in entry and redeem scopes (README «Rate
+// limits a single-source run meets»).
 //
 //   LOADTEST_API_ORIGIN=http://localhost:3000 LOADTEST_VUS=3 \
 //   LOADTEST_DURATION_SECONDS=8 pnpm loadtest:auth
@@ -25,8 +31,8 @@ import {
   floatEnv,
   intEnv,
   invokedDirectly,
-  isProdTarget,
   optEnv,
+  productionGate,
   report,
   runVUs,
   timedFetch,
@@ -45,21 +51,27 @@ const SIGN_IN_HEADERS = {
 };
 
 /**
- * Fail-closed prod tripwire (exported for the guard test). Throws unless the
- * target is non-prod OR the operator has explicitly confirmed the phase-2
- * suppression decision via LOADTEST_SUPPRESSION_CONFIRMED=1.
+ * Fail-closed prod tripwire (exported for the guard test). Throws unless every
+ * origin the run requests (`origin` plus every lib.mjs `RUN_ORIGIN_ENV` value)
+ * is non-prod OR the operator has explicitly confirmed the phase-2 suppression
+ * decision via LOADTEST_SUPPRESSION_CONFIRMED=1. Returns the run's
+ * `allowTarget` check for the URLs a sign-in follows from server answers.
  */
 export function assertAuthBurstAllowed(origin, env = process.env) {
-  if (!isProdTarget(origin, env)) return;
-  if (env.LOADTEST_SUPPRESSION_CONFIRMED === "1") return;
-  throw new Error(
-    `REFUSING to run auth-burst against production target ${JSON.stringify(origin)}: ` +
-      `synthetic register/code traffic dispatches REAL mail unless the api runs ` +
-      `with LOADTEST_SUPPRESS_SYNTHETIC=true (${SUPPRESSION_ISSUE}), and a ` +
-      `single-source burst measures the rate limiter, not capacity. Set ` +
-      `LOADTEST_SUPPRESSION_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
-      `after the window prerequisites (suppression on, per-IP raise applied) are ` +
-      `in place on the api (tools/loadtest/README.md «Window recipe»).`,
+  return productionGate(
+    {
+      scenario: "auth-burst",
+      confirmation: "LOADTEST_SUPPRESSION_CONFIRMED",
+      refusal:
+        `synthetic register/code traffic dispatches REAL mail unless the api runs ` +
+        `with LOADTEST_SUPPRESS_SYNTHETIC=true (${SUPPRESSION_ISSUE}), and a ` +
+        `single-source burst measures the rate limiter, not capacity. Set ` +
+        `LOADTEST_SUPPRESSION_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
+        `after the window prerequisites (suppression on, per-IP raise applied) are ` +
+        `in place on the api (tools/loadtest/README.md «Rate-limit window recipe»).`,
+      origins: { LOADTEST_API_ORIGIN: origin },
+    },
+    env,
   );
 }
 
@@ -78,7 +90,7 @@ function loadManifestEmails() {
 async function main() {
   const origin = apiOrigin();
   // Guard FIRST — before any request is issued.
-  assertAuthBurstAllowed(origin);
+  const allowTarget = assertAuthBurstAllowed(origin);
 
   const domain = optEnv("LOADTEST_SYNTHETIC_DOMAIN", "loadtest.invalid");
   const password = optEnv("LOADTEST_AUTH_PASSWORD", "LoadTest!" + "Passw0rd");
@@ -125,11 +137,14 @@ async function main() {
       });
     }
     // The sign-in the storefronts run: every step of the host journey is a
-    // sample (transaction, authorize, entry, password step, redeem).
+    // sample — the storefront door (internal transport: the transaction), the
+    // authorize hop, the host entry, the password step, and the storefront
+    // callback (internal transport: the redeem).
     const { steps } = await hostSignIn(origin, {
       email,
       password,
       headers: SIGN_IN_HEADERS,
+      allowTarget,
     });
     for (const step of steps) {
       samples.record({

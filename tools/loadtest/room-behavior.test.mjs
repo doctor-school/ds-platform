@@ -577,7 +577,9 @@ test("room:verify refuses a production storefront or sign-in host origin before 
     );
     assert.match(
       String(error?.message),
-      new RegExp(`REFUSING to run room:verify against production target ${name}`),
+      new RegExp(
+        `REFUSING to run room:verify against production target ${name}`,
+      ),
       name,
     );
     assert.deepEqual(calls, [], name);

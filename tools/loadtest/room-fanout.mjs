@@ -21,13 +21,16 @@
 // that, GET /room returns the gate's 401/403/409; the scenario records it and
 // reports the fixture gap rather than faking a grant.
 //
-// HARD PROD GUARD (fail-closed): this scenario REFUSES to run against a
-// production target (lib.mjs `isProdTarget`) until
-// `LOADTEST_ROOM_PROD_CONFIRMED=1` is set. A production room run loads the live
-// realtime path real doctors are on, and its chat leg publishes real messages
-// into the event's room chat that every participant sees — so it runs only in
-// the owner-approved window, against the dedicated synthetic event of the run
-// protocol (README «Run protocol»).
+// HARD PROD GUARD (fail-closed, lib.mjs `productionGate`): this scenario
+// REFUSES to run when any origin it requests is production — the api, the
+// storefront and sign-in host its sign-in drives, the Centrifugo origin, or a
+// URL it follows from a server answer (the IdP authorize hop, the storefront
+// callback, the room grant's WebSocket) — until `LOADTEST_ROOM_PROD_CONFIRMED=1`
+// is set. A production room run loads the live realtime path real doctors are
+// on, and its chat leg publishes real messages into the event's room chat that
+// every participant sees — so it runs only in the owner-approved window,
+// against the dedicated synthetic event of the run protocol (README «Run
+// protocol»).
 //
 //   LOADTEST_API_ORIGIN=http://localhost:3000 LOADTEST_EVENT_ID=<idOrSlug> \
 //   LOADTEST_USE_PROVISIONED=1 LOADTEST_VUS=20 LOADTEST_DURATION_SECONDS=30 \
@@ -38,8 +41,8 @@ import {
   floatEnv,
   intEnv,
   invokedDirectly,
-  isProdTarget,
   optEnv,
+  productionGate,
   report,
   reqEnv,
   runVUs,
@@ -57,26 +60,32 @@ import {
 
 /**
  * Fail-closed production tripwire (exported for the guard test). Throws unless
- * the target is non-production OR the operator has explicitly confirmed the
- * approved run window via LOADTEST_ROOM_PROD_CONFIRMED=1.
+ * every origin the run requests (`origin` plus every lib.mjs `RUN_ORIGIN_ENV`
+ * value) is non-production OR the operator has explicitly confirmed the
+ * approved run window via LOADTEST_ROOM_PROD_CONFIRMED=1. Returns the run's
+ * `allowTarget` check for the URLs it follows from server answers.
  */
 export function assertRoomFanoutAllowed(origin, env = process.env) {
-  if (!isProdTarget(origin, env)) return;
-  if (env.LOADTEST_ROOM_PROD_CONFIRMED === "1") return;
-  throw new Error(
-    `REFUSING to run room-fanout against production target ${JSON.stringify(origin)}: ` +
-      `it loads the live webinar realtime path real doctors are on, and its chat ` +
-      `leg publishes messages every participant of the room sees. Set ` +
-      `LOADTEST_ROOM_PROD_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
-      `against the dedicated synthetic event of the run protocol ` +
-      `(tools/loadtest/README.md «Run protocol»).`,
+  return productionGate(
+    {
+      scenario: "room-fanout",
+      confirmation: "LOADTEST_ROOM_PROD_CONFIRMED",
+      refusal:
+        `it loads the live webinar realtime path real doctors are on, and its chat ` +
+        `leg publishes messages every participant of the room sees. Set ` +
+        `LOADTEST_ROOM_PROD_CONFIRMED=1 ONLY inside the owner-approved run window, ` +
+        `against the dedicated synthetic event of the run protocol ` +
+        `(tools/loadtest/README.md «Run protocol»).`,
+      origins: { LOADTEST_API_ORIGIN: origin },
+    },
+    env,
   );
 }
 
 async function main() {
   const origin = apiOrigin();
   // Guard FIRST — before the manifest is read or any request is issued.
-  assertRoomFanoutAllowed(origin);
+  const allowTarget = assertRoomFanoutAllowed(origin);
   const eventId = reqEnv("LOADTEST_EVENT_ID");
   const useProvisioned = optEnv("LOADTEST_USE_PROVISIONED", "") === "1";
   const pool = useProvisioned ? loadManifestCredentials() : [];
@@ -107,7 +116,12 @@ async function main() {
       cookie = sessions.get(account) ?? null;
       if (!cookie) {
         const cred = pool[account];
-        cookie = await loginCookie(origin, cred.email, cred.password);
+        cookie = await loginCookie(
+          origin,
+          cred.email,
+          cred.password,
+          allowTarget,
+        );
         if (cookie) sessions.set(account, cookie);
       }
     }
@@ -142,14 +156,18 @@ async function main() {
         gateReported = true;
         console.log(
           `  fixture gap: GET ${roomPath}/room → ${grantRes.status} (no grant). ` +
-            `A real run needs a LIVE event whose roster includes the synthetic users ` +
-            `(provision + roster-join). WS/heartbeat/chat legs are skipped this run.`,
+            `The scenario joins each account to the roster itself; what remains is ` +
+            `the event not being live, LOADTEST_USE_PROVISIONED=1 unset ` +
+            `(no accounts), or the sign-in failing. WS/heartbeat/chat legs are ` +
+            `skipped this run.`,
         );
       }
       return;
     }
 
-    // 3. WS connect + hold for one heartbeat window
+    // 3. WS connect + hold for one heartbeat window — the grant's WebSocket is
+    // a URL no env var names, so it passes the gate before the connect.
+    allowTarget(grant.chat.url, "the room grant's WebSocket");
     const beatSec = grant.heartbeatIntervalSeconds ?? 60;
     const hold = await centrifugoHold(
       grant.chat.url,

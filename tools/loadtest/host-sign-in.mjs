@@ -23,9 +23,12 @@
 //   reachable only where the api is reached directly (the dev stand), never on
 //   a public production host.
 //
-// Every step is a timed sample, so a scenario can record the whole journey.
+// Every step is a timed sample, so a scenario can record the whole journey,
+// and every step's URL passes the run's production gate (`allowTarget`, lib.mjs
+// `productionGate`) before it is requested — the authorize hop and the callback
+// come from server answers, so no env check alone can vouch for them.
 
-import { isProdTarget, reqEnv, timedFetch } from "./lib.mjs";
+import { isProdTarget, productionGate, reqEnv, timedFetch } from "./lib.mjs";
 
 /** The storefront door both storefronts serve (auth-flow host configs `routes.login`). */
 const STOREFRONT_LOGIN_PATH = "/login";
@@ -82,15 +85,36 @@ export function signInTransport(origin, env = process.env) {
 }
 
 /**
- * Sign `email` in through the sign-in host and the storefront callback.
- * Returns every step's timed response and, when all succeeded, the session
- * `Cookie` header (`cookie`); `cookie` is null at the first refused step.
+ * The gate of a sign-in that no scenario gate covers: production is refused
+ * outright, so a caller that forgets its own gate can never reach production.
  */
-export async function hostSignIn(origin, { email, password, headers }) {
+function standaloneSignInGate(origin) {
+  return productionGate({
+    scenario: "sign-in",
+    refusal:
+      "a sign-in reaches production only under the confirmed gate of the scenario " +
+      "that runs it (room-fanout, auth-burst; tools/loadtest/README.md «Production tripwires»).",
+    origins: { LOADTEST_API_ORIGIN: origin },
+  });
+}
+
+/**
+ * Sign `email` in through the sign-in host and the storefront callback.
+ * `allowTarget` is the running scenario's production gate (lib.mjs
+ * `productionGate`); without one, production is refused outright. Returns
+ * every step's timed response and, when all succeeded, the session `Cookie`
+ * header (`cookie`); `cookie` is null at the first refused step. A production
+ * URL the run is not confirmed for throws before it is requested.
+ */
+export async function hostSignIn(
+  origin,
+  { email, password, headers, allowTarget = standaloneSignInGate(origin) },
+) {
   const transport = signInTransport(origin);
   const hostOrigin = new URL(reqEnv("LOADTEST_SIGN_IN_HOST_ORIGIN")).origin;
   const steps = [];
-  const step = async (url, opts) => {
+  const step = async (what, url, opts) => {
+    allowTarget(url, what);
     const res = await timedFetch(url, opts);
     steps.push(res);
     return res;
@@ -106,10 +130,14 @@ export async function hostSignIn(origin, { email, password, headers }) {
     // The storefront door, opened as a document: 303 to the IdP authorize URL
     // with the host-only transaction cookie (003 EARS-61).
     const storefront = new URL(reqEnv("LOADTEST_STOREFRONT_ORIGIN")).origin;
-    const door = await step(`${storefront}${STOREFRONT_LOGIN_PATH}`, {
-      headers: navigationHeaders(headers, "none"),
-      redirect: "manual",
-    });
+    const door = await step(
+      "the storefront door",
+      `${storefront}${STOREFRONT_LOGIN_PATH}`,
+      {
+        headers: navigationHeaders(headers, "none"),
+        redirect: "manual",
+      },
+    );
     authorizeUrl = door.status === 303 ? door.headers?.get("location") : null;
     txCookies = cookiePairs(door.headers);
     if (!authorizeUrl) return { steps, cookie: null };
@@ -119,18 +147,25 @@ export async function hostSignIn(origin, { email, password, headers }) {
       authorization: `Bearer ${reqEnv("LOADTEST_INTERNAL_API_TOKEN")}`,
       "content-type": "application/json",
     };
-    const tx = await step(`${origin}/v1/internal/oidc/transaction`, {
-      method: "POST",
-      headers: internal,
-      body: JSON.stringify({ client, kind: "interactive", door: "login" }),
-    });
+    const tx = await step(
+      "the internal transaction",
+      `${origin}/v1/internal/oidc/transaction`,
+      {
+        method: "POST",
+        headers: internal,
+        body: JSON.stringify({ client, kind: "interactive", door: "login" }),
+      },
+    );
     if (!tx.ok) return { steps, cookie: null };
     ({ txId, authorizeUrl } = JSON.parse(tx.body));
   }
 
   // Step 2 — the IdP's authorize hop, never followed: its `Location` names the
   // auth request the sign-in host form acts on.
-  const authorize = await step(authorizeUrl, { headers, redirect: "manual" });
+  const authorize = await step("the IdP authorize hop", authorizeUrl, {
+    headers,
+    redirect: "manual",
+  });
   const location = authorize.headers?.get("location");
   const authRequest = location
     ? new URL(location).searchParams.get("authRequest")
@@ -139,6 +174,7 @@ export async function hostSignIn(origin, { email, password, headers }) {
 
   // Steps 3–4 — the host form's entry and its password step.
   const entry = await step(
+    "the sign-in host entry",
     `${origin}/v1/sign-in-host/entry?authRequest=${encodeURIComponent(authRequest)}`,
     { headers },
   );
@@ -146,22 +182,26 @@ export async function hostSignIn(origin, { email, password, headers }) {
   const form = JSON.parse(entry.body);
   if (form.action !== "render" || !form.csrf) return { steps, cookie: null };
 
-  const login = await step(`${origin}/v1/sign-in-host/login`, {
-    method: "POST",
-    headers: {
-      ...headers,
-      "content-type": "application/json",
-      origin: hostOrigin,
-      "sec-fetch-site": "same-origin",
-      cookie: cookieHeader(cookiePairs(entry.headers)),
+  const login = await step(
+    "the password step",
+    `${origin}/v1/sign-in-host/login`,
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        origin: hostOrigin,
+        "sec-fetch-site": "same-origin",
+        cookie: cookieHeader(cookiePairs(entry.headers)),
+      },
+      body: JSON.stringify({
+        identifier: email,
+        password,
+        authRequest,
+        csrf: form.csrf,
+      }),
     },
-    body: JSON.stringify({
-      identifier: email,
-      password,
-      authRequest,
-      csrf: form.csrf,
-    }),
-  });
+  );
   if (!login.ok) return { steps, cookie: null };
   const answer = JSON.parse(login.body);
   if (answer.status !== "redirect" || !answer.url) {
@@ -173,7 +213,7 @@ export async function hostSignIn(origin, { email, password, headers }) {
     // The browser follows the answer to the storefront callback (003 EARS-62):
     // the storefront server redeems with the cookie's transaction and answers
     // 303 with the API's session cookie.
-    const callback = await step(answer.url, {
+    const callback = await step("the storefront callback", answer.url, {
       headers: {
         ...navigationHeaders(headers, "cross-site"),
         cookie: cookieHeader(txCookies),
@@ -185,16 +225,20 @@ export async function hostSignIn(origin, { email, password, headers }) {
     return { steps, cookie: `${SESSION_COOKIE}=${session}` };
   }
   const params = new URL(answer.url).searchParams;
-  const redeem = await step(`${origin}/v1/internal/oidc/redeem`, {
-    method: "POST",
-    headers: internal,
-    body: JSON.stringify({
-      client,
-      txId,
-      state: params.get("state"),
-      code: params.get("code"),
-    }),
-  });
+  const redeem = await step(
+    "the internal redeem",
+    `${origin}/v1/internal/oidc/redeem`,
+    {
+      method: "POST",
+      headers: internal,
+      body: JSON.stringify({
+        client,
+        txId,
+        state: params.get("state"),
+        code: params.get("code"),
+      }),
+    },
+  );
   if (!redeem.ok) return { steps, cookie: null };
   const minted = cookiePairs(redeem.headers);
   return { steps, cookie: minted.size > 0 ? cookieHeader(minted) : null };

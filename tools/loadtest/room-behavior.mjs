@@ -13,6 +13,7 @@ import {
   intEnv,
   invokedDirectly,
   isProdTarget,
+  productionGate,
   reqEnv,
   timedFetch,
 } from "./lib.mjs";
@@ -61,6 +62,47 @@ export function assertDevStandOrigin(origin) {
       `room behavioral verification requires a loopback dev-stand origin; got ${parsed.origin}`,
     );
   }
+}
+
+/** `fn` with every error it throws re-thrown as a BehaviorSetupError (exit 3, no behavioral claim). */
+function asSetupError(fn) {
+  return (...args) => {
+    try {
+      return fn(...args);
+    } catch (error) {
+      throw new BehaviorSetupError(error.message);
+    }
+  };
+}
+
+/**
+ * The verifier's production gate (lib.mjs `productionGate`) with no
+ * confirmation: production is refused outright on every origin the run
+ * requests — the api and Centrifugo origins, every `RUN_ORIGIN_ENV` value (the
+ * storefront door, the sign-in host), and each URL a sign-in follows from a
+ * server answer (the IdP authorize hop, the storefront callback). No scenario
+ * confirmation unlocks it. Returns the per-URL `allowTarget` check.
+ */
+export function assertRoomVerifyAllowed(
+  { origin, centrifugoOrigin },
+  env = process.env,
+) {
+  const allowTarget = asSetupError(productionGate)(
+    {
+      scenario: "room:verify",
+      confirmation: null,
+      refusal:
+        "the #1139 verifier is a dev-stand Stage-B artifact generator and never runs " +
+        "against production; no confirmation unlocks it (tools/loadtest/README.md " +
+        "«Production tripwires»).",
+      origins: {
+        LOADTEST_API_ORIGIN: origin,
+        LOADTEST_CENTRIFUGO_ORIGIN: centrifugoOrigin,
+      },
+    },
+    env,
+  );
+  return asSetupError(allowTarget);
 }
 
 function normalizedUrlHost(parsed) {
@@ -360,11 +402,13 @@ async function prepareActor(
   credential,
   label,
   expectedWebSocketUrl,
+  allowTarget,
 ) {
   const cookie = await loginCookie(
     origin,
     credential.email,
     credential.password,
+    allowTarget,
   );
   if (!cookie) {
     throw new BehaviorSetupError(
@@ -490,6 +534,8 @@ export async function runRoomBehaviorVerification({
 }) {
   const runStartedAt = new Date().toISOString();
   assertDevStandOrigin(origin);
+  // Before any request: every origin the run requests, production refused.
+  const allowTarget = assertRoomVerifyAllowed({ origin, centrifugoOrigin });
   const expectedWebSocketUrl =
     deriveExpectedCentrifugoWebSocketUrl(centrifugoOrigin);
   const [observerCredential, participantCredential] =
@@ -500,6 +546,7 @@ export async function runRoomBehaviorVerification({
     observerCredential,
     "observer",
     expectedWebSocketUrl,
+    allowTarget,
   );
   const participant = await prepareActor(
     origin,
@@ -507,6 +554,7 @@ export async function runRoomBehaviorVerification({
     participantCredential,
     "participant",
     expectedWebSocketUrl,
+    allowTarget,
   );
 
   if (

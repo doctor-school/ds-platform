@@ -1,0 +1,25 @@
+# slot pr-4248, /v1/health 67a88849bb2fcc16053833add0c2c2f428c26ecf, 2026-11-26T03:23:55Z
+# pnpm exec playwright test --config=playwright.flows.config.ts --workers=1 e2e/drive-4030-parity.spec.ts
+# rows: author = golden seed; live 1ae7fdcb-dd22-4da2-bb45-ccb448cd414e and long email a05d796e-acf6-4dec-91d3-093ebf8d661c = POST /v1/public/applications/partnership (long email: 403 BOT_PROTECTION_REQUIRED without proof, 201 with the stage test token, replay of the key → same id); imported 8e80d416-705b-400f-8be7-cafc9a203c2e = node dist/applications/import-partnership-records.main.js in pr-4248-api ({imported:1}, rerun {alreadyPresent:1}). No hand SQL.
+# long email: 192 bytes incl. newline, 64-character local part
+IMPORTED row 8e80d416-705b-400f-8be7-cafc9a203c2e (i.sokolova@pharmatrade.test)
+GEOM 01-list-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [730] el-overflow [0] text-right/box-right [730.1≤744.5 td] → PASS
+GEOM 01-list-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [730] el-overflow [0] text-right/box-right [730.1≤744.5 td] → PASS
+GEOM 02-list-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [346] el-overflow [0] text-right/box-right [346.1≤350 dd] → PASS
+GEOM 02-list-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [346] el-overflow [0] text-right/box-right [346.1≤350 dd] → PASS
+GEOM 03-detail-partnership-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 03-detail-partnership-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 04-detail-partnership-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 04-detail-partnership-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 05-detail-imported-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 05-detail-imported-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 06-detail-imported-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 06-detail-imported-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 09-detail-long-email-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [348] el-overflow [0] text-right/box-right [343.2≤348 dd] → PASS
+GEOM 09-detail-long-email-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [348] el-overflow [0] text-right/box-right [343.2≤348 dd] → PASS
+FILTER «Вид: Партнёрство»: 3 rows, kinds Партнёрство
+GEOM 07-filter-partnership: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [730] el-overflow [0] text-right/box-right [730.1≤744.5 td] → PASS
+OPENED /applications/1ae7fdcb-dd22-4da2-bb45-ccb448cd414e
+GEOM 08-filter-partnership-detail: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+  ✓  1 [chromium] › e2e\drive-4030-parity.spec.ts:131:1 › «Заявки» parity at 67a8884: list + partnership/imported detail × 4 profiles, then «Вид: Партнёрство» → detail (37.7s)
+  1 passed (39.5s)

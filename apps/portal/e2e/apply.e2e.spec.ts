@@ -22,7 +22,15 @@ import {
  * deterministically. The api side of those answers is proven by the api e2e
  * (`apps/api/test/applications/**`); the sign-in round trip through the sign-in
  * host is the live spec `apply-sign-in-live.spec.ts`.
+ *
+ * The file also runs against a live portal (`playwright.config.ts`, a stand
+ * slot's `live/academy/default` tier — `E2E_PORTAL_URL` set), where the page
+ * reads the real API: the fake session cookie is no session there, so the
+ * signed-in describe runs only on the backend-free tier, whose session double
+ * answers it (#4296, as `not-found.e2e.spec.ts` #3764). The guest describe runs
+ * on both tiers unchanged.
  */
+const LIVE_PORTAL = Boolean(process.env.E2E_PORTAL_URL);
 
 const PATH = "/apply";
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -163,6 +171,10 @@ test.describe("033 «Подать заявку» — guest", () => {
 });
 
 test.describe("033 «Подать заявку» — signed in", () => {
+  test.skip(
+    LIVE_PORTAL,
+    "the signed-in cookie is answered only by the backend-free tier's session double",
+  );
   test.beforeEach(async ({ context, baseURL }) => {
     await signIn(context, baseURL);
   });
@@ -181,7 +193,9 @@ test.describe("033 «Подать заявку» — signed in", () => {
       "обязательно",
     );
     await page.getByRole("combobox").click();
-    await expect(page.getByRole("option", { name: "Кардиология" })).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Кардиология" }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("apply-gate")).toHaveCount(0);
     await expectNoHorizontalScroll(page);
@@ -301,9 +315,7 @@ test.describe("033 «Подать заявку» — signed in", () => {
     await page.goto(PATH);
     await fillValid(page);
     // EARS-8 — a double tap sends one request.
-    await page
-      .getByRole("button", { name: "Отправить заявку" })
-      .dblclick();
+    await page.getByRole("button", { name: "Отправить заявку" }).dblclick();
     await expect(
       page.getByRole("heading", { name: "Заявка отправлена" }),
     ).toBeVisible();
@@ -361,8 +373,8 @@ test.describe("033 «Подать заявку» — signed in", () => {
     await expect(
       page.getByRole("button", { name: "Отправить заявку" }),
     ).toBeVisible();
-    await expect(page.getByText("Ваша предыдущая заявка в работе.")).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByText("Ваша предыдущая заявка в работе."),
+    ).toHaveCount(0);
   });
 });

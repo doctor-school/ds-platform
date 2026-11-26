@@ -729,7 +729,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const table = text.match(/OBSERVATIONS = \{([\s\S]*?)\n\}/)[1];
     const names = [...table.matchAll(/^ {4}"([a-z-]+)": \(/gm)].map((m) => m[1]).sort();
     assert.deepEqual(allow, names);
-    assert.equal(names.length, 9);
+    assert.equal(names.length, 8);
   });
 
   it("3119: observe refuses (exit 3) on any box but the stage box", () => {

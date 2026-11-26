@@ -37,6 +37,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
 const READ_ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-read-entrypoint");
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
+// #4298: backup-info's in-sidecar read of the offsite repos, as the entrypoint holds it.
+const OFFSITE_INFO_SH =
+  readFileSync(ENTRYPOINT, "utf8").match(/^OFFSITE_INFO_SH='([^']*)'$/m)?.[1] ?? "OFFSITE_INFO_SH missing";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const ATTEMPT = "attempt-1-run-19876543210";
 
@@ -2324,8 +2327,35 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(
       log("docker"),
       `docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c SELECT CASE WHEN to_regclass('public.event_speakers') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END @${compose}\n` +
-        `docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info @${compose}\n`,
+        `docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info @${compose}\n` +
+        // #4298: repo1's config names repo1 alone; each offsite repo that is on is
+        // read under its own config.
+        `docker compose exec -T pgbackrest sh -c ${OFFSITE_INFO_SH} @${compose}\n`,
     );
+  });
+
+  it("4298: backup-info reads each offsite repo that is on through pgbackrest-repo.sh, 20 lines each, never failing the verb", () => {
+    const sidecar = mkdtempSync(join(tmpdir(), "offsite-info-"));
+    const bin = join(sidecar, "bin");
+    mkdirSync(bin);
+    mkdirSync(join(sidecar, "offsite", "repo3"), { recursive: true });
+    writeFileSync(join(sidecar, "offsite", "repo3", "pgbackrest.conf"), "");
+    writeFileSync(join(bin, "gosu"), '#!/usr/bin/env bash\nshift; exec "$@"\n', { mode: 0o755 });
+    const repo = join(sidecar, "pgbackrest-repo.sh");
+    writeFileSync(repo, '#!/usr/bin/env bash\nfor i in $(seq 1 30); do echo "repo$1 line $i ${*:2}"; done\nexit 1\n', { mode: 0o755 });
+    const script = OFFSITE_INFO_SH.replaceAll("/etc/pgbackrest/offsite", join(sidecar, "offsite")).replaceAll(
+      "/usr/local/bin/pgbackrest-repo.sh",
+      repo,
+    );
+    const r = spawnSync("sh", ["-c", script], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    const lines = r.stdout.trimEnd().split("\n");
+    assert.equal(lines[0], "offsite repo3:");
+    assert.equal(lines[1], "repo3 line 1 info");
+    assert.equal(lines.length, 21);
   });
 
   // --- 3646: the prod read path ---------------------------------------------------------

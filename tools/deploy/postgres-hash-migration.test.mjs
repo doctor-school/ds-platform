@@ -454,3 +454,41 @@ test("3670: the probe gates the release on repo1 alone; an offsite repo is a sta
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), [["offsite repo2: no valid backups", "offsite repo3: other"], []]);
 });
+
+test("4298: the probe reads each offsite repo that is on through its repo-only config, one stderr line per repo", { skip: !python && "needs python3" }, () => {
+  // repo1's config names repo1 alone (#4298), so an all-repo `info` under it shows no
+  // offsite repo; each one that is on answers under pgbackrest-repo.sh <N>.
+  const r = spawnSync(
+    python,
+    [
+      "-I", "-B", "-c",
+      "import importlib.util, json, sys\n" +
+        "spec = importlib.util.spec_from_file_location('probe', sys.argv[1])\n" +
+        "probe = importlib.util.module_from_spec(spec); spec.loader.exec_module(probe)\n" +
+        "calls = []\n" +
+        "def run(*args, stdin=None):\n" +
+        "    calls.append(list(args))\n" +
+        "    cmd = list(args[4:])\n" +
+        "    if cmd[0] == 'sh': return '2 3'\n" +
+        "    if '/usr/local/bin/pgbackrest-repo.sh' in cmd:\n" +
+        "        n = cmd[cmd.index('/usr/local/bin/pgbackrest-repo.sh') + 1]\n" +
+        "        if n == '3': raise RuntimeError('repo3 unreachable')\n" +
+        "        return json.dumps([{'name': 'ds', 'repo': [{'key': int(n), 'status': {'code': 2, 'message': 'no valid backups'}}]}])\n" +
+        "    return json.dumps([{'name': 'ds', 'repo': [{'key': 1, 'status': {'code': 0, 'message': 'ok'}}]}])\n" +
+        "probe.run = run\n" +
+        "probe.report_offsite('bk')\n" +
+        "print(json.dumps(calls))",
+      PROBE,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "offsite repo2: no valid backups\noffsite repo3: status unavailable\n");
+  const calls = JSON.parse(r.stdout);
+  for (const n of ["2", "3"]) {
+    assert.ok(
+      calls.some((c) => c.join(" ") === `sudo docker exec bk gosu postgres /usr/local/bin/pgbackrest-repo.sh ${n} --output=json info`),
+      `repo${n} read through pgbackrest-repo.sh: ${r.stdout}`,
+    );
+  }
+});

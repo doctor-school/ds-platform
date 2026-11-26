@@ -52,7 +52,7 @@ The existing feature-012 `partners` table is the seed row family of organisation
 
 An **expert** is a domain entity — a physical person with a professional profile — that exists independently of any account (REQ-97). Speakers, lesson authors and podcast guests are always experts. The feature-012 `experts` row family stays the base and is not replaced.
 
-The account ↔ expert link is a **separate relation with explicit states** — `unlinked` → `claimed` ("It's me", initiated by the person) → `confirmed` (manual confirmation by an Academy admin) → `rejected` — per REQ-106, which closed brainstorm Q-27 in favour of claim-first with manual confirmation, universal for **any** order of events (the person may pre-exist the expert, e.g. the ~10k migrated GetCourse doctors, or the expert may pre-exist the account, e.g. historical congress speakers).
+The account ↔ expert link is a **separate relation with explicit states** — `unlinked` → `claimed` ("It's me", initiated by the person) → `confirmed` (manual confirmation by an Academy admin) → `rejected` — per REQ-106, which closed brainstorm Q-27 in favour of claim-first with manual confirmation, universal for **any** order of events (the person may pre-exist the expert, e.g. the ~10k doctors migrated from the old Doctor.School platform, or the expert may pre-exist the account, e.g. historical congress speakers).
 
 The link carries financial meaning: on confirmation, the history and accruals accumulated on the expert become visible and payable on the account (REQ-98). Therefore the relation is **audited and reversible**: a confirmation and a revocation are both events in the audit ledger, and the accrual ledger (§6) is never rewritten — accruals stay attached to the expert, and the account inherits them **through** the link.
 
@@ -110,7 +110,7 @@ The full table is in the companion design spec. The rule: every existing table i
 - **Feature 014** (`event_recordings`) — absorbed unchanged as an output artifact of the event output.
 - `users` kept (§1), `events` + `event_speakers` + `registrations` kept, `consent_records` kept (§7), `audit_ledger` kept, the operational tables (`lifecycle`, `presence_beats`, `idempotency_keys`, `media_cleanup_jobs`, `stream_config`) untouched.
 
-**REQ-105 (migration of the ~10k GetCourse doctors and the congress registration base) is named here as a follow-up, not designed here.** It is the people-side of **OWD-7** — the GetCourse exit, whose accepted form is that content moves to the new platform and **there is no integration with GetCourse and never will be**; the door as originally written covered content only, so the migration of people was split out into REQ-105. The constraint OWD-7 puts on that follow-up is binding here: the migration is a one-off import into the model above, never a sync, and no entity may assume a live GetCourse counterpart. The follow-up itself needs its own artifact covering legal basis, consent re-confirmation and field mapping, and it precedes the first investor report — but it is a migration decision, not a core-model decision.
+**REQ-105 (migration of the ~10k doctors of the old Doctor.School platform — Bubble + Directual + Supabase — and the congress registration base) is named here as a follow-up, not designed here.** It sits next to **OWD-7** — the GetCourse exit, whose accepted form is that OrthoBioSchool content moves to the new platform and **there is no integration with GetCourse and never will be**; the door covers content only, and the people come not from GetCourse but from the old platform, so their migration is its own requirement, REQ-105. The constraint binding here: the migration is a one-off import into the model above, never a sync, and no entity may assume a live counterpart on the old platform or on GetCourse. The follow-up itself needs its own artifact covering legal basis, consent re-confirmation and field mapping (discovery pre-read: `specs/product/old-platform-migration/legacy-recon.md`), and it precedes the first investor report — but it is a migration decision, not a core-model decision.
 
 ---
 
@@ -136,7 +136,7 @@ The full table is in the companion design spec. The rule: every existing table i
 
 Product decisions this ADR deliberately does **not** settle. Each stays with the Product Lead and blocks only the slice that needs it. The questions the finalisation session closed (Q-31 in its main part, Q-32, Q-33, Q-34 → REQ-114, Q-35, Q-38, Q-40), and REQ-134 closed by the owner (§6), are **not** listed here — they are carried by the decision above.
 
-1. `TODO(Product Lead)` **REQ-105** — legal basis and consent re-confirmation for migrating the ~10k GetCourse doctors and the congress registration base; the migration design is a separate artifact (§9, OWD-7).
+1. `TODO(Product Lead)` **REQ-105** — legal basis and consent re-confirmation for migrating the ~10k doctors of the old Doctor.School platform and the congress registration base; the migration design is a separate artifact (§9, feature 043).
 2. `TODO(Product Lead)` **REQ-36/48/49** — accrual rules, point prices and bonus policy (two-way doors, referenced by id in §6 and out of scope here).
 3. `TODO(Product Lead)` **Q-31 residue only** — the main part is closed (Doctor.School is the licence holder and the issuer, §7); what remains is naming: what is promised to the doctor by a direction that has no place in the Minzdrav nomenclature (ortho-biology). Recorded by the owner as explicitly **not a blocker**; it changes reference-book copy, not the model.
 4. `TODO(Product Lead)` — whether account ↔ expert confirmation is a **mandatory** precondition of the first payout to an author (accruals accumulate on the expert but cannot be withdrawn until linked). This is a policy rule, not a model change.
@@ -149,7 +149,7 @@ Product decisions this ADR deliberately does **not** settle. Each stays with the
 
 **Costs and risks.** Role assignments and organisation memberships are more machinery than a scalar column: authorization must consult the assignment context, and the policy layer (ADR-0003 §4) grows accordingly. The `topics` → directions rename touches shipped feature-012 surface and needs its own migration slice with the retained-row lifecycle preserved. The ledger forbids in-place balance updates, so every accrual path must be written as postings and every read as a fold — with a materialised balance cache once volumes demand it. Document records raise the platform's PD exposure (152-ФЗ), which is why §7 binds them to ADR-0009 and to the audit ledger from day one.
 
-**Deferred by construction.** Payment integration stays out (CON-16); accrual rules stay out (REQ-36/48/49); the GetCourse migration stays out (REQ-105). None of them requires a change to the entities decided here.
+**Deferred by construction.** Payment integration stays out (CON-16); accrual rules stay out (REQ-36/48/49); the old-platform migration stays out (REQ-105). None of them requires a change to the entities decided here.
 
 ---
 

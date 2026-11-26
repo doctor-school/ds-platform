@@ -381,6 +381,45 @@ describe("#3205: requiresStageCheck — the owner-consented Stage-check classes"
   });
 });
 
+describe("#4304: the runtime-app auth rules read deployed code only, never tools/**", () => {
+  it("#4304: non-deployed tooling with an auth segment, a lib auth module or a middleware file is neither Stage-check nor environment-sensitive", () => {
+    for (const path of [
+      "tools/loadtest/auth-burst.mjs",
+      "tools/ops/auth-events.mjs",
+      "tools/lint/endpoint-authz-lint.ts",
+      "tools/lint/eslint-rules/no-raw-auth-field-input.mjs",
+      "tools/lint/guard-tests/fixtures/x/packages/auth-flow/src/host-config.ts",
+      "tools/x/lib/auth.ts",
+      "tools/lint/guard-tests/fixtures/x/apps/portal/middleware.ts",
+    ]) {
+      expect(requiresStageCheck(path), path).toBe(false);
+      expect(isEnvironmentSensitivePath(path), path).toBe(false);
+    }
+  });
+  it("#4304: deployed auth / session / middleware code and the IdP / captcha tooling stay in both classes", () => {
+    for (const path of [
+      "apps/portal/app/(auth)/login/page.tsx",
+      "apps/api/src/auth/x.ts",
+      "packages/auth-flow/src/login.ts",
+      "apps/portal/lib/auth-session.ts",
+      "apps/portal/middleware.ts",
+      "tools/staging/idp.mjs",
+      "tools/deploy/idp-policy.mjs",
+      "tools/staging/captcha-keys.mjs",
+    ]) {
+      expect(requiresStageCheck(path), path).toBe(true);
+      expect(isEnvironmentSensitivePath(path), path).toBe(true);
+    }
+  });
+  it("#4304: a deployed lib session module and SMS tooling stay in the Stage-check class", () => {
+    for (const path of [
+      "apps/doctor/lib/account-session.ts",
+      "tools/ops/sms-delivery.mjs",
+    ])
+      expect(requiresStageCheck(path), path).toBe(true);
+  });
+});
+
 describe("#2807: test-only class, docs follow the code, wider Ship allowlist", () => {
   const added = (path: string): ChangeTierFile => ({
     ...mod(path),

@@ -144,6 +144,22 @@ export const FIELD_LABEL: Record<string, string> = {
   moduleId: "Модуль",
   courseId: "Курс",
   stepIds: "Порядок шагов",
+  slug: "Адрес",
+  facts: "Факты «О школе»",
+  soonNote: "Пометка «скоро»",
+  communityUrl: "Ссылка на сообщество",
+  mentoringOffer: "Наставничество",
+  internshipOffer: "Стажировка",
+  academicHours: "Академических часов",
+  documentKind: "Документ",
+  documentPrerequisites: "Что нужно для документа",
+  partnerOrganisationId: "Партнёр",
+  courseIds: "Порядок курсов",
+  moduleIds: "Порядок модулей",
+  directionId: "Направление",
+  leadExpertId: "Ведущий эксперт",
+  projectId: "Проект",
+  schoolId: "Школа",
 };
 
 export const ADMIN_COPY = {
@@ -400,4 +416,79 @@ export const RULES_COPY = {
   addToPreset: "Добавить настройку",
   addToPresetNone: "Выберите настройку",
   stepRules: (no: number) => `Правила шага ${no}`,
+} as const;
+
+const RU_PLURAL = new Intl.PluralRules("ru-RU");
+const DOCTORS: Partial<Record<Intl.LDMLPluralRule, string>> & { many: string } =
+  {
+    one: "врач",
+    few: "врача",
+    many: "врачей",
+  };
+
+/**
+ * 023 EARS-26, EARS-27 — the school and course structure editor in staff
+ * words. Never a price, a preset name or «бесплатно» (EARS-23 holds for the
+ * doctor screens; the editor follows the same vocabulary).
+ */
+export const STRUCTURE_COPY = {
+  // School editor
+  schoolState: { draft: "Черновик", published: "Опубликована" },
+  publishSchool: "Опубликовать школу",
+  unpublishSchool: "Снять школу с публикации",
+  schoolPublishedHint:
+    "Школа видна врачам на сайте. Пока в ней нет опубликованного курса, врачи видят её как «скоро».",
+  schoolOpenHint:
+    "Школа видна врачам на сайте и открыта: в ней есть опубликованный курс.",
+  schoolDraftHint: "Школа — черновик: врачи её не видят.",
+  interestCount: (n: number) =>
+    `Интерес к школе: ${n} ${DOCTORS[RU_PLURAL.select(n)] ?? DOCTORS.many}`,
+  detailsHeading: "Данные школы",
+  schoolTitle: "Название школы",
+  schoolDescription: "Описание",
+  soonNote: "Пометка «скоро»",
+  soonNoteHint: "Видна врачам, пока в школе нет опубликованного курса.",
+  communityUrl: "Ссылка на сообщество (https)",
+  mentoringOffer: "Наставничество — текст предложения",
+  internshipOffer: "Стажировка — текст предложения",
+  factsLegend: "Факты «О школе» (до четырёх)",
+  factLabel: (no: number) => `Факт ${no} — заголовок`,
+  factText: (no: number) => `Факт ${no} — текст`,
+  addFact: "Добавить факт",
+  removeFact: (no: number) => `Убрать факт ${no}`,
+  save: "Сохранить",
+  saved: "Сохранено.",
+  coursesHeading: "Курсы школы",
+  noCourses: "В школе пока нет курсов.",
+  courseUp: (title: string) => `Поднять курс «${title}»`,
+  courseDown: (title: string) => `Опустить курс «${title}»`,
+  newCourseHeading: "Новый курс",
+  courseTitle: "Название курса",
+  courseSlug: "Адрес курса (латиница, цифры и дефисы)",
+  addCourse: "Создать курс",
+  // Course editor
+  toSchool: "К школе",
+  courseDetailsHeading: "Данные курса",
+  courseDescription: "Описание курса",
+  academicHours: "Академических часов",
+  documentLegend: "Документ по окончании курса",
+  documentKind: {
+    certificate: "Сертификат",
+    "certificate-nmo": "Сертификат с баллами НМО",
+  },
+  documentPrerequisites: "Что нужно для документа",
+  publishCourse: "Опубликовать курс",
+  unpublishCourse: "Снять курс с публикации",
+  courseState: { draft: "Черновик", published: "Опубликован" },
+  moduleRename: (no: number) => `Новое название модуля ${no}`,
+  rename: "Переименовать",
+  moduleUp: (no: number) => `Поднять модуль ${no}`,
+  moduleDown: (no: number) => `Опустить модуль ${no}`,
+  // Refusals
+  coursePublishRefused:
+    "Курс нельзя опубликовать: в нём нет опубликованного урока. Опубликуйте хотя бы один урок.",
+  slugTaken: "Этот адрес уже занят — выберите другой.",
+  stale:
+    "Данные изменили в другом окне — показана текущая версия, повторите изменение.",
+  alreadyInState: "Состояние уже изменено — показана текущая версия.",
 } as const;

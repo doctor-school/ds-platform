@@ -31,6 +31,40 @@ const headersOf = (init: RequestInit | undefined) =>
   init?.headers as Record<string, string>;
 
 describe("learningAdminTransport", () => {
+  it("023 EARS-26: edits and publishes a school under its If-Match", async () => {
+    const stub = stubFetch();
+    await learningAdminTransport.updateSchool(ID, { title: "Школа" }, 3);
+    await learningAdminTransport.publishSchool(ID, 4);
+    const [editUrl, edit] = stub.mock.calls[0]!;
+    expect(editUrl).toBe(`/v1/admin/learning/schools/${ID}`);
+    expect(edit?.method).toBe("PATCH");
+    expect(headersOf(edit)["if-match"]).toBe('W/"3"');
+    expect(JSON.parse(String(edit?.body))).toEqual({ title: "Школа" });
+    const [publishUrl, publish] = stub.mock.calls[1]!;
+    expect(publishUrl).toBe(`/v1/admin/learning/schools/${ID}/publish`);
+    expect(headersOf(publish)["if-match"]).toBe('W/"4"');
+    expect(headersOf(publish)["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("023 EARS-27: orders a school's courses and a course's modules under the parent's If-Match", async () => {
+    const stub = stubFetch();
+    await learningAdminTransport.reorderCourses(ID, [ID], 2);
+    await learningAdminTransport.reorderModules(ID, [ID], 5);
+    await learningAdminTransport.updateModule(ID, { title: "Модуль" }, 1);
+    expect(stub.mock.calls.map(([u, i]) => [u, i?.method])).toEqual([
+      [`/v1/admin/learning/schools/${ID}/course-order`, "PUT"],
+      [`/v1/admin/learning/courses/${ID}/module-order`, "PUT"],
+      [`/v1/admin/learning/modules/${ID}`, "PATCH"],
+    ]);
+    expect(headersOf(stub.mock.calls[1]![1])["if-match"]).toBe('W/"5"');
+  });
+
+  it("023 EARS-27: reads a school's courses through the course list", async () => {
+    const stub = stubFetch(200, { data: [] });
+    expect(await learningAdminTransport.schoolCourses(ID)).toEqual([]);
+    expect(stub.mock.calls[0]![0]).toBe(`/v1/admin/learning/courses?schoolId=${ID}`);
+  });
+
   it("EARS-4: publishes a lesson under its If-Match with a fresh idempotency key", async () => {
     const stub = stubFetch();
     await learningAdminTransport.publishLesson(ID, 4);

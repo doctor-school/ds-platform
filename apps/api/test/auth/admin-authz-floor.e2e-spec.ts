@@ -1217,12 +1217,22 @@ const FLOOR_ROUTES: {
       ["GET", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
       ["POST", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
       ["GET", "/v1/admin/learning/schools/:id", `/v1/admin/learning/schools/${ABSENT_ID}`],
+      // 023 EARS-26/27 (#4018) — the school card's edit, publication and course order.
+      ["PATCH", "/v1/admin/learning/schools/:id", `/v1/admin/learning/schools/${ABSENT_ID}`],
+      ["POST", "/v1/admin/learning/schools/:id/publish", `/v1/admin/learning/schools/${ABSENT_ID}/publish`],
+      ["POST", "/v1/admin/learning/schools/:id/unpublish", `/v1/admin/learning/schools/${ABSENT_ID}/unpublish`],
+      ["PUT", "/v1/admin/learning/schools/:id/course-order", `/v1/admin/learning/schools/${ABSENT_ID}/course-order`],
       ["GET", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
       ["POST", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
       ["GET", "/v1/admin/learning/courses/:id", `/v1/admin/learning/courses/${ABSENT_ID}`],
+      // 023 EARS-27 (#4018) — the course card's edit and module order.
+      ["PATCH", "/v1/admin/learning/courses/:id", `/v1/admin/learning/courses/${ABSENT_ID}`],
+      ["PUT", "/v1/admin/learning/courses/:id/module-order", `/v1/admin/learning/courses/${ABSENT_ID}/module-order`],
       ["POST", "/v1/admin/learning/courses/:id/publish", `/v1/admin/learning/courses/${ABSENT_ID}/publish`],
       ["POST", "/v1/admin/learning/courses/:id/unpublish", `/v1/admin/learning/courses/${ABSENT_ID}/unpublish`],
       ["POST", "/v1/admin/learning/modules", "/v1/admin/learning/modules"],
+      // 023 EARS-27 (#4018) — the module's rename.
+      ["PATCH", "/v1/admin/learning/modules/:id", `/v1/admin/learning/modules/${ABSENT_ID}`],
       ["POST", "/v1/admin/learning/lessons", "/v1/admin/learning/lessons"],
       ["GET", "/v1/admin/learning/lessons/:id", `/v1/admin/learning/lessons/${ABSENT_ID}`],
       ["PATCH", "/v1/admin/learning/lessons/:id", `/v1/admin/learning/lessons/${ABSENT_ID}`],

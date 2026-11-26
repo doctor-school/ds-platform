@@ -42,8 +42,8 @@ describe("024 learning contract", () => {
   it("EARS-25: the learning routes are in the generated contract", () => {
     // 024's 29 + the 023 school read (#4017) + the rule-change preview and
     // GET/PUT presets/{id} (#4012) + the 023 interest PUT/DELETE and the admin
-    // school read (#4019).
-    expect(operations.length).toBe(36);
+    // school read (#4019) + the 023 structure editor's seven writes (#4018).
+    expect(operations.length).toBe(43);
   });
 
   it("EARS-25: every learning route types its success response body", () => {

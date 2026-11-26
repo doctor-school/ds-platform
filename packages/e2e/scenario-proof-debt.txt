@@ -515,13 +515,13 @@
 023 | A school without a published course is «скоро» and a guest joins its interest list | #4023
 023 | A single-module course has no module level | #4023
 023 | Mentoring opens after the whole course | #4022
-023 | Staff build a school, a course and its modules and cannot publish an empty course | #4018
+023 | Staff build a school, a course and its modules and cannot publish an empty course | #4282
 023 | The Academy has no school screen | #4023
 023 | The course certificate is requested for the whole course whatever the module rewards | #4020
 023 | The course header states the rules in words and never the preset's name | #4023
 023 | The lesson of the day opens inside its course | #4023
 023 | The module reward decides what a finished module gives | #4020
-023 | The reward of a published course changes only through the rules change dialog | #4018
+023 | The reward of a published course changes only through the rules change dialog | #4282
 023 | The school screen and the course header work on a phone and pass axe | #4023
 023 | The school shows its club events and its community | #4022
 023 | The school's events section keeps the events feed block's states | #4022

@@ -4,7 +4,7 @@ import {
   learningSchools,
 } from "@ds/db";
 import type { LearningSchoolInterest } from "@ds/schemas";
-import { and, count, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne } from "drizzle-orm";
 import {
   LearningServerError,
   type LearningDb,
@@ -159,6 +159,31 @@ export async function withdrawSchoolInterest(
   });
 }
 
+/** Claim every active, unsent interest of the school and answer its notices. */
+async function claimInterests(
+  tx: LearningTx,
+  school: { id: string; slug: string; title: string },
+  courseTitle: string,
+  at: Date,
+): Promise<LearningSchoolOpenedNotice[]> {
+  const claimed = await tx
+    .update(learningSchoolInterests)
+    .set({ notifiedAt: at })
+    .where(
+      and(
+        eq(learningSchoolInterests.schoolId, school.id),
+        eq(learningSchoolInterests.state, "active"),
+        isNull(learningSchoolInterests.notifiedAt),
+      ),
+    )
+    .returning({ personId: learningSchoolInterests.personId });
+  return claimed.map(({ personId }) => ({
+    personId,
+    school: { slug: school.slug, title: school.title },
+    course: { title: courseTitle },
+  }));
+}
+
 /**
  * EARS-7 (023-design §6) — inside the transaction that publishes `courseId`:
  * WHILE no other course of its school is published (the school goes from
@@ -166,7 +191,8 @@ export async function withdrawSchoolInterest(
  * setting `notified_at`, and answer the notices to send after commit. A
  * replay, or a publication while another course is already published, claims
  * nothing; the `notified_at IS NULL` guard keeps concurrent publishers from
- * claiming the same doctor twice.
+ * claiming the same doctor twice. A draft school claims nothing here: its
+ * republish claims instead (`claimSchoolRepublishedNotices`).
  */
 export async function claimSchoolOpenedNotices(
   tx: LearningTx,
@@ -197,20 +223,39 @@ export async function claimSchoolOpenedNotices(
     )
     .limit(1);
   if (other) return [];
-  const claimed = await tx
-    .update(learningSchoolInterests)
-    .set({ notifiedAt: at })
+  return claimInterests(
+    tx,
+    { id: course.schoolId, slug: course.schoolSlug, title: course.schoolTitle },
+    course.title,
+    at,
+  );
+}
+
+/**
+ * EARS-7 (023-design §6) — inside the transaction that publishes a school:
+ * WHEN the school already has a published course (it was unpublished while
+ * staff published its first course), it opens to doctors now, so claim the
+ * unsent interests exactly as a first course publication does, naming its
+ * first published course. Without a published course it reads «скоро» and
+ * claims nothing; the `notified_at IS NULL` guard keeps a later republish or
+ * course publication from claiming the same doctor twice.
+ */
+export async function claimSchoolRepublishedNotices(
+  tx: LearningTx,
+  school: { id: string; slug: string; title: string },
+  at: Date,
+): Promise<LearningSchoolOpenedNotice[]> {
+  const [course] = await tx
+    .select({ title: learningCourses.title })
+    .from(learningCourses)
     .where(
       and(
-        eq(learningSchoolInterests.schoolId, course.schoolId),
-        eq(learningSchoolInterests.state, "active"),
-        isNull(learningSchoolInterests.notifiedAt),
+        eq(learningCourses.schoolId, school.id),
+        eq(learningCourses.state, "published"),
       ),
     )
-    .returning({ personId: learningSchoolInterests.personId });
-  return claimed.map(({ personId }) => ({
-    personId,
-    school: { slug: course.schoolSlug, title: course.schoolTitle },
-    course: { title: course.title },
-  }));
+    .orderBy(asc(learningCourses.position))
+    .limit(1);
+  if (!course) return [];
+  return claimInterests(tx, school, course.title, at);
 }

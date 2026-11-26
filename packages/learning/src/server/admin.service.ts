@@ -39,8 +39,12 @@ import {
   type LearningScopeRules,
   type LearningSettingValues,
   type LearningStepAdmin,
+  type UpdateLearningCourseRequest,
   type UpdateLearningLessonRequest,
+  type UpdateLearningModuleRequest,
+  type UpdateLearningSchoolRequest,
   type UpdateLearningStepRequest,
+  LEARNING_SCHOOL_EXPERT_TAKEN,
   LEARNING_SETTING_KEYS,
   LearningTestPayloadSchema,
   SetLearningStepSourceRequestSchema,
@@ -62,6 +66,7 @@ import { applyPresetValues } from "../rules/resolver.js";
 import {
   activeInterestCount,
   claimSchoolOpenedNotices,
+  claimSchoolRepublishedNotices,
 } from "./school-interest.js";
 import {
   EMPTY_RULE_SCOPE,
@@ -222,6 +227,113 @@ const toModule = (r: LearningModuleRow): LearningModuleAdmin => ({
   version: r.version,
 });
 
+/** A partial row write; an `undefined` field is left as it is (drizzle skips it). */
+type Loose<R> = { [K in keyof R]?: R[K] | undefined };
+
+/** 023 EARS-22 — a partner is a live row of the 032 registry (a field error otherwise). */
+async function assertPartner(
+  tx: LearningTx,
+  partnerOrganisationId: string | null,
+  issues: { path: string; message: string }[],
+): Promise<void> {
+  if (partnerOrganisationId === null) return;
+  const [partner] = await tx
+    .select({ id: organisations.id })
+    .from(organisations)
+    .where(
+      and(
+        eq(organisations.id, partnerOrganisationId),
+        isNull(organisations.deletedAt),
+      ),
+    );
+  if (!partner)
+    issues.push({
+      path: "partnerOrganisationId",
+      message: "unknown organisation",
+    });
+}
+
+/** A reorder names every child of its parent exactly once (a field error otherwise). */
+function assertExactOrder(
+  path: string,
+  message: string,
+  ordered: string[],
+  children: string[],
+): void {
+  const known = new Set(children);
+  if (
+    ordered.length !== known.size ||
+    new Set(ordered).size !== ordered.length ||
+    !ordered.every((id) => known.has(id))
+  )
+    throw fieldError(path, message);
+}
+
+/** Lock the school row, check its version, write `set` and bump the version. */
+async function bumpSchool(
+  tx: LearningTx,
+  schoolId: string,
+  expectedVersion: number,
+  set: Loose<LearningSchoolRow>,
+  check?: (current: LearningSchoolRow) => void,
+): Promise<LearningSchoolRow> {
+  const [current] = await tx
+    .select()
+    .from(learningSchools)
+    .where(eq(learningSchools.id, schoolId))
+    .for("update");
+  if (!current) throw notFound("school");
+  if (current.version !== expectedVersion) throw stale();
+  check?.(current);
+  const [row] = await tx
+    .update(learningSchools)
+    .set({ ...set, version: current.version + 1, updatedAt: new Date() })
+    .where(eq(learningSchools.id, schoolId))
+    .returning();
+  return row!;
+}
+
+/** Lock the course row and check its version. */
+async function lockCourse(
+  tx: LearningTx,
+  courseId: string,
+  expectedVersion: number,
+): Promise<LearningCourseRow> {
+  const [current] = await tx
+    .select()
+    .from(learningCourses)
+    .where(eq(learningCourses.id, courseId))
+    .for("update");
+  if (!current) throw notFound("course");
+  if (current.version !== expectedVersion) throw stale();
+  return current;
+}
+
+async function bumpCourse(
+  tx: LearningTx,
+  current: LearningCourseRow,
+  set: Loose<LearningCourseRow>,
+): Promise<LearningCourseRow> {
+  const [row] = await tx
+    .update(learningCourses)
+    .set({ ...set, version: current.version + 1, updatedAt: new Date() })
+    .where(eq(learningCourses.id, current.id))
+    .returning();
+  return row!;
+}
+
+/** The 200 answer of a versioned write, fenced with its idempotency record. */
+async function finish<T>(
+  tx: LearningTx,
+  body: T,
+  version: number,
+  complete: LearningComplete,
+): Promise<LearningCommandResult<T>> {
+  const result = { status: 200 as const, body, etag: taxonomyETag(version) };
+  await complete(tx, result);
+  return result;
+}
+
 export class LearningAdminService {
   constructor(private readonly deps: LearningServerDeps) {}
 
@@ -293,10 +405,7 @@ export class LearningAdminService {
     } catch (err) {
       const constraint = uniqueViolation(err);
       if (constraint === "learning_schools_direction_expert_key")
-        throw fieldError(
-          "leadExpertId",
-          "this expert already leads a school in this direction",
-        );
+        throw fieldError("leadExpertId", LEARNING_SCHOOL_EXPERT_TAKEN);
       if (constraint !== null)
         throw new LearningServerError("SLUG_CONFLICT", "the slug is taken");
       throw err;
@@ -331,23 +440,7 @@ export class LearningAdminService {
         if (!school)
           issues.push({ path: "schoolId", message: "unknown school" });
         await this.assertProject(tx, input.projectId, issues);
-        // 023 EARS-22 — a partner is a live row of the 032 registry.
-        if (input.partnerOrganisationId !== null) {
-          const [partner] = await tx
-            .select({ id: organisations.id })
-            .from(organisations)
-            .where(
-              and(
-                eq(organisations.id, input.partnerOrganisationId),
-                isNull(organisations.deletedAt),
-              ),
-            );
-          if (!partner)
-            issues.push({
-              path: "partnerOrganisationId",
-              message: "unknown organisation",
-            });
-        }
+        await assertPartner(tx, input.partnerOrganisationId, issues);
         if (issues.length > 0)
           throw new LearningServerError(
             "VALIDATION_FAILED",
@@ -476,6 +569,178 @@ export class LearningAdminService {
     // Off the response path: the port dispatches and returns at once.
     if (notices.length > 0) this.deps.notices.schoolOpened(notices);
     return result;
+  }
+
+  /**
+   * 023 EARS-26 — `GET /v1/admin/learning/schools/{id}` with its ETag, so the
+   * editor's writes carry the version it rendered from.
+   */
+  async schoolWithVersion(
+    schoolId: string,
+  ): Promise<{ body: LearningSchoolAdminDetail; etag: string }> {
+    const body = await this.school(schoolId);
+    return { body, etag: taxonomyETag(body.version) };
+  }
+
+  /** 023 EARS-26 — the school's EARS-1 data; the identity columns stay as created. */
+  async updateSchool(
+    schoolId: string,
+    input: UpdateLearningSchoolRequest,
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningSchoolAdmin>> {
+    return this.deps.transaction(async (tx) => {
+      const row = await bumpSchool(tx, schoolId, expectedVersion, input);
+      return finish(tx, toSchool(row), row.version, complete);
+    });
+  }
+
+  /**
+   * 023 EARS-26 — publish or unpublish a school. A published school is read by
+   * doctors (EARS-3: `soon` while it has no published course); a draft one is
+   * `404` to them. Its courses keep their own states. A republish that opens
+   * the school (EARS-7: it has a published course) claims the unsent
+   * school-opened notices, sent once the publication has committed.
+   */
+  async setSchoolState(
+    schoolId: string,
+    state: "draft" | "published",
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningSchoolAdmin>> {
+    let notices: LearningSchoolOpenedNotice[] = [];
+    const result = await this.deps.transaction(async (tx) => {
+      const row = await bumpSchool(
+        tx,
+        schoolId,
+        expectedVersion,
+        { state },
+        (current) => {
+          if (current.state === state)
+            throw new LearningServerError(
+              "INVALID_TRANSITION",
+              `the school is already ${state}`,
+            );
+        },
+      );
+      if (state === "published")
+        notices = await claimSchoolRepublishedNotices(tx, row, this.now());
+      return finish(tx, toSchool(row), row.version, complete);
+    });
+    // Off the response path: the port dispatches and returns at once.
+    if (notices.length > 0) this.deps.notices.schoolOpened(notices);
+    return result;
+  }
+
+  /** 023 EARS-27 — the school's courses in a new order, under the school's `If-Match`. */
+  async reorderCourses(
+    schoolId: string,
+    courseIds: string[],
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningSchoolAdmin>> {
+    return this.deps.transaction(async (tx) => {
+      const row = await bumpSchool(tx, schoolId, expectedVersion, {});
+      const courses = await tx
+        .select({ id: learningCourses.id })
+        .from(learningCourses)
+        .where(eq(learningCourses.schoolId, schoolId));
+      assertExactOrder(
+        "courseIds",
+        "name every course of the school exactly once",
+        courseIds,
+        courses.map((c) => c.id),
+      );
+      for (const [i, id] of courseIds.entries()) {
+        await tx
+          .update(learningCourses)
+          .set({ position: i + 1, updatedAt: new Date() })
+          .where(eq(learningCourses.id, id));
+      }
+      return finish(tx, toSchool(row), row.version, complete);
+    });
+  }
+
+  /** 023 EARS-27 — the course's EARS-1 data; a partner is a live 032 organisation. */
+  async updateCourse(
+    courseId: string,
+    input: UpdateLearningCourseRequest,
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningCourseAdmin>> {
+    return this.deps.transaction(async (tx) => {
+      const current = await lockCourse(tx, courseId, expectedVersion);
+      if (input.partnerOrganisationId !== undefined) {
+        const issues: { path: string; message: string }[] = [];
+        await assertPartner(tx, input.partnerOrganisationId, issues);
+        if (issues.length > 0)
+          throw new LearningServerError(
+            "VALIDATION_FAILED",
+            "the course references unknown rows",
+            issues,
+          );
+      }
+      const row = await bumpCourse(tx, current, input);
+      return finish(tx, toCourse(row), row.version, complete);
+    });
+  }
+
+  /** 023 EARS-27 — the course's modules in a new order, under the course's `If-Match`. */
+  async reorderModules(
+    courseId: string,
+    moduleIds: string[],
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningCourseAdmin>> {
+    return this.deps.transaction(async (tx) => {
+      const current = await lockCourse(tx, courseId, expectedVersion);
+      const modules = await tx
+        .select({ id: learningModules.id })
+        .from(learningModules)
+        .where(eq(learningModules.courseId, courseId));
+      assertExactOrder(
+        "moduleIds",
+        "name every module of the course exactly once",
+        moduleIds,
+        modules.map((m) => m.id),
+      );
+      const row = await bumpCourse(tx, current, {});
+      for (const [i, id] of moduleIds.entries()) {
+        await tx
+          .update(learningModules)
+          .set({ position: i + 1, updatedAt: new Date() })
+          .where(eq(learningModules.id, id));
+      }
+      return finish(tx, toCourse(row), row.version, complete);
+    });
+  }
+
+  /** 023 EARS-27 — rename a module, under the module's `If-Match`. */
+  async updateModule(
+    moduleId: string,
+    input: UpdateLearningModuleRequest,
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningModuleAdmin>> {
+    return this.deps.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(learningModules)
+        .where(eq(learningModules.id, moduleId))
+        .for("update");
+      if (!current) throw notFound("module");
+      if (current.version !== expectedVersion) throw stale();
+      const [row] = await tx
+        .update(learningModules)
+        .set({
+          title: input.title,
+          version: current.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(learningModules.id, moduleId))
+        .returning();
+      return finish(tx, toModule(row!), row!.version, complete);
+    });
   }
 
   // ── Modules and lessons (EARS-1, EARS-28) ─────────────────────────────────

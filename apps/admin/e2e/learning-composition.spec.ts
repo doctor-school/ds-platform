@@ -11,9 +11,10 @@ import { evidenceShot } from "./support/evidence-shot";
  * missing item named in words and then accepted, and the «Путь (Duolingo)»
  * preset applied on the course.
  *
- * The school and the course are created through the admin API (024-design §10
- * slice 1: the structure editor is 023's, #4018), over the direction, expert
- * and project the admin API authors here — no fixture SQL.
+ * The school and the course are created through the admin API, over the
+ * direction, expert and project the admin API authors here — no fixture SQL;
+ * the 023 structure editor screens have their own journey
+ * (`learning-structure-editor.spec.ts`).
  *
  * Dev-stand-gated like every `apps/admin/e2e` flow spec: run with
  * `--config=playwright.flows.config.ts` against a booted admin + api.

@@ -224,6 +224,50 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(lettersFor(slug)).toHaveLength(1);
     });
 
+    it("023 EARS-7: a soon school unpublished while its first course is published sends the notices once on its republish", async () => {
+      const school = await buildCourse(h, { publish: false });
+      const slug = `school-${school.f.suffix}`;
+      const schoolEtag = async () =>
+        (await admin(h, "GET", `/schools/${school.schoolId}`)).etag!;
+      const up = await admin(h, "POST", `/schools/${school.schoolId}/publish`, {
+        ifMatch: await schoolEtag(),
+      });
+      expect(up.status, JSON.stringify(up.body)).toBe(200);
+      const d = await doctor(h);
+      expect((await interest("PUT", school.schoolId, d.headers)).status).toBe(200);
+
+      const down = await admin(h, "POST", `/schools/${school.schoolId}/unpublish`, {
+        ifMatch: up.etag!,
+      });
+      expect(down.status, JSON.stringify(down.body)).toBe(200);
+      // The first course goes out while the school is a draft: nobody can read
+      // it yet, so nothing is claimed.
+      await publish(h, school);
+      expect(lettersFor(slug)).toHaveLength(0);
+
+      const again = await admin(h, "POST", `/schools/${school.schoolId}/publish`, {
+        ifMatch: down.etag!,
+      });
+      expect(again.status, JSON.stringify(again.body)).toBe(200);
+      await expect.poll(() => lettersFor(slug).length).toBe(1);
+      const { rows } = await h.pool.query<{ notified: boolean }>(
+        "SELECT notified_at IS NOT NULL AS notified FROM learning_school_interests WHERE school_id = $1",
+        [school.schoolId],
+      );
+      expect(rows.map((r) => r.notified)).toEqual([true]);
+
+      // Another unpublish and republish claims nothing more.
+      const off = await admin(h, "POST", `/schools/${school.schoolId}/unpublish`, {
+        ifMatch: again.etag!,
+      });
+      expect(off.status).toBe(200);
+      const on = await admin(h, "POST", `/schools/${school.schoolId}/publish`, {
+        ifMatch: off.etag!,
+      });
+      expect(on.status).toBe(200);
+      expect(lettersFor(slug)).toHaveLength(1);
+    });
+
     it("023 EARS-7: the publish response never waits on the school-opened letters", async () => {
       const school = await buildCourse(h, { publish: false });
       await publishSchool(school.schoolId);

@@ -19,8 +19,9 @@
 //     plan resolves the row (id AND values) at seed time — never a copy of the
 //     preset's contents in this file;
 //   * the school is `published` with its 023 EARS-1 data, so the 023 school
-//     read (`GET /v1/learning/schools/{slug}`) answers it on a slot; the admin
-//     school publish lands with #4018, so this row sets the state directly;
+//     read (`GET /v1/learning/schools/{slug}`) answers it on a slot; a seed
+//     row sets the state directly rather than through the admin school publish
+//     (`POST /v1/admin/learning/schools/{id}/publish`, 023 EARS-26);
 //   * the course carries its 023 EARS-1 data and `position` 1 in the school, as
 //     the admin course create writes it;
 //   * the download step's file is a golden media object (`media.ts`), so the

@@ -6,12 +6,13 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CourseCompositionScreen } from "./course-composition";
 import {
   AID,
   PRESETS,
+  course,
   fakeTransport,
   refusal,
   rules,
@@ -236,6 +237,179 @@ describe("CourseCompositionScreen", () => {
     expect(
       within(panel).getByRole("button", { name: "Применить пресет" }),
     ).toBeEnabled();
-    expect(within(panel).queryByTestId("rules-read-only")).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByTestId("rules-read-only"),
+    ).not.toBeInTheDocument();
+  });
+
+  // ── 023 EARS-27 (#4018) — the course's data, publish, modules ───────────
+
+  it("023 EARS-27: links back to the course's school", async () => {
+    render(
+      <CourseCompositionScreen
+        courseId={AID.course}
+        transport={fakeTransport()}
+        staffRoles={["platform_admin"]}
+        lessonHref={(id) => `/learning/lessons/${id}`}
+        schoolHref={(id) => `/learning/schools/${id}`}
+      />,
+    );
+    expect(
+      await screen.findByRole("link", { name: "К школе" }),
+    ).toHaveAttribute("href", `/learning/schools/${AID.school}`);
+  });
+
+  it("023 EARS-27: saves the course's EARS-1 data under the course's version", async () => {
+    const t = mount();
+    fireEvent.change(await screen.findByLabelText("Описание курса"), {
+      target: { value: "Ритм и проводимость" },
+    });
+    fireEvent.change(screen.getByLabelText("Академических часов"), {
+      target: { value: "36" },
+    });
+    fireEvent.click(screen.getByLabelText("Сертификат с баллами НМО"));
+    fireEvent.change(screen.getByLabelText("Что нужно для документа"), {
+      target: { value: "Подтверждённые документы" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(t.updateCourse).toHaveBeenCalledWith(
+        AID.course,
+        {
+          title: "ЭКГ с нуля",
+          description: "Ритм и проводимость",
+          academicHours: 36,
+          documentKind: "certificate-nmo",
+          documentPrerequisites: "Подтверждённые документы",
+        },
+        2,
+      ),
+    );
+    expect(await screen.findByTestId("write-saved")).toHaveTextContent(
+      "Сохранено.",
+    );
+  });
+
+  it("023 EARS-27: publishing a course without a published lesson is refused in staff words", async () => {
+    const t = mount(
+      fakeTransport({
+        publishCourse: async () => {
+          throw refusal("PUBLISH_REQUIREMENTS_NOT_MET", [
+            { path: "lessons", message: "publish at least one lesson" },
+          ]);
+        },
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Опубликовать курс" }),
+    );
+    expect(
+      await screen.findByText(/в нём нет опубликованного урока/),
+    ).toBeInTheDocument();
+    expect(t.course).toHaveBeenCalledTimes(1);
+  });
+
+  it("023 EARS-27: publishes a draft course under its version", async () => {
+    const t = mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Опубликовать курс" }),
+    );
+    await waitFor(() =>
+      expect(t.publishCourse).toHaveBeenCalledWith(AID.course, 2),
+    );
+  });
+
+  it("023 EARS-27: renames a module under the module's version", async () => {
+    const t = mount();
+    fireEvent.change(await screen.findByLabelText("Новое название модуля 1"), {
+      target: { value: "Ритм сердца" },
+    });
+    fireEvent.click(
+      within(screen.getByTestId("module-1")).getByRole("button", {
+        name: "Переименовать",
+      }),
+    );
+    await waitFor(() =>
+      expect(t.updateModule).toHaveBeenCalledWith(
+        AID.module,
+        { title: "Ритм сердца" },
+        1,
+      ),
+    );
+  });
+
+  it("023 EARS-27: moves a module up — the new order under the course's version", async () => {
+    const two = course();
+    two.modules.push({
+      id: AID.module2,
+      courseId: AID.course,
+      position: 2,
+      title: "Блокады",
+      version: 1,
+      lessons: [],
+    });
+    const t = mount(fakeTransport({ course: async () => two }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Поднять модуль 2" }),
+    );
+    await waitFor(() =>
+      expect(t.reorderModules).toHaveBeenCalledWith(
+        AID.course,
+        [AID.module2, AID.module],
+        2,
+      ),
+    );
+  });
+  it("023 EARS-27: unsaved course data survive a publish, and the save then carries the new version", async () => {
+    let version = 2;
+    const t = mount(
+      fakeTransport({
+        course: vi.fn(async () => ({ ...course(), version })),
+        publishCourse: async () => {
+          version = 3;
+          return { ...course(), version: 3, state: "published" } as never;
+        },
+      }),
+    );
+    fireEvent.change(await screen.findByLabelText("Описание курса"), {
+      target: { value: "Несохранённый текст" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать курс" }));
+    await waitFor(() => expect(t.course).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Описание курса")).toHaveValue(
+      "Несохранённый текст",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(t.updateCourse).toHaveBeenCalledWith(
+        AID.course,
+        expect.objectContaining({ description: "Несохранённый текст" }),
+        3,
+      ),
+    );
+  });
+
+  it("023 EARS-27: course data changed on the server replace the form's copy", async () => {
+    let description = "Старое описание";
+    let version = 2;
+    mount(
+      fakeTransport({
+        course: async () => ({ ...course(), description, version }),
+        publishCourse: async () => {
+          description = "Описание коллеги";
+          version = 4;
+          return course() as never;
+        },
+      }),
+    );
+    expect(await screen.findByLabelText("Описание курса")).toHaveValue(
+      "Старое описание",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать курс" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Описание курса")).toHaveValue(
+        "Описание коллеги",
+      ),
+    );
   });
 });

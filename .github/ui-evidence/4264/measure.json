@@ -1,0 +1,186 @@
+{
+  "head-desktop-light": {
+    "htmlClass": "_5Pz8a_variable",
+    "section": {
+      "w": 1440,
+      "h": 689
+    },
+    "scrollW": 1440,
+    "clientW": 1440,
+    "disclosure": {
+      "text": "Форма защищена Yandex SmartCaptcha. Условия обработки данных.",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(17, 77, 158)",
+      "fontSize": "13px",
+      "linkColor": "rgb(255, 255, 255)",
+      "linkDecoration": "underline",
+      "linkHref": "https://yandex.com/legal/smartcaptcha_notice/",
+      "contrast": 8.14,
+      "linkContrast": 8.14
+    },
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "head-desktop-dark": {
+    "htmlClass": "_5Pz8a_variable dark",
+    "section": {
+      "w": 1440,
+      "h": 689
+    },
+    "scrollW": 1440,
+    "clientW": 1440,
+    "disclosure": {
+      "text": "Форма защищена Yandex SmartCaptcha. Условия обработки данных.",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(17, 77, 158)",
+      "fontSize": "13px",
+      "linkColor": "rgb(255, 255, 255)",
+      "linkDecoration": "underline",
+      "linkHref": "https://yandex.com/legal/smartcaptcha_notice/",
+      "contrast": 8.14,
+      "linkContrast": 8.14
+    },
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "head-mobile-light": {
+    "htmlClass": "_5Pz8a_variable",
+    "section": {
+      "w": 390,
+      "h": 890
+    },
+    "scrollW": 390,
+    "clientW": 390,
+    "disclosure": {
+      "text": "Форма защищена Yandex SmartCaptcha. Условия обработки данных.",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(17, 77, 158)",
+      "fontSize": "13px",
+      "linkColor": "rgb(255, 255, 255)",
+      "linkDecoration": "underline",
+      "linkHref": "https://yandex.com/legal/smartcaptcha_notice/",
+      "contrast": 8.14,
+      "linkContrast": 8.14
+    },
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "head-mobile-dark": {
+    "htmlClass": "_5Pz8a_variable dark",
+    "section": {
+      "w": 390,
+      "h": 890
+    },
+    "scrollW": 390,
+    "clientW": 390,
+    "disclosure": {
+      "text": "Форма защищена Yandex SmartCaptcha. Условия обработки данных.",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(17, 77, 158)",
+      "fontSize": "13px",
+      "linkColor": "rgb(255, 255, 255)",
+      "linkDecoration": "underline",
+      "linkHref": "https://yandex.com/legal/smartcaptcha_notice/",
+      "contrast": 8.14,
+      "linkContrast": 8.14
+    },
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "main-desktop-light": {
+    "htmlClass": "_5Pz8a_variable",
+    "section": {
+      "w": 1440,
+      "h": 633
+    },
+    "scrollW": 1440,
+    "clientW": 1440,
+    "disclosure": null,
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "main-desktop-dark": {
+    "htmlClass": "_5Pz8a_variable dark",
+    "section": {
+      "w": 1440,
+      "h": 633
+    },
+    "scrollW": 1440,
+    "clientW": 1440,
+    "disclosure": null,
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "main-mobile-light": {
+    "htmlClass": "_5Pz8a_variable",
+    "section": {
+      "w": 390,
+      "h": 815
+    },
+    "scrollW": 390,
+    "clientW": 390,
+    "disclosure": null,
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "main-mobile-dark": {
+    "htmlClass": "_5Pz8a_variable dark",
+    "section": {
+      "w": 390,
+      "h": 815
+    },
+    "scrollW": 390,
+    "clientW": 390,
+    "disclosure": null,
+    "button": {
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(17, 77, 158)",
+      "h": 52
+    }
+  },
+  "head-reject": {
+    "errors": [
+      "⚠\nУкажите корректный email или Telegram в формате @username.",
+      "⚠\nВыберите роль.",
+      "⚠\nПодтвердите согласие на обработку персональных данных.",
+      "⚠\nИсправьте ошибки в форме\n\nУкажите корректный email или Telegram в формате @username.\nВыберите роль.\nПодтвердите согласие на обработку персональных данных."
+    ],
+    "postsSent": 0
+  },
+  "main-reject": {
+    "errors": [
+      "⚠\nУкажите корректный email или Telegram в формате @username.",
+      "⚠\nВыберите роль.",
+      "⚠\nПодтвердите согласие на обработку персональных данных.",
+      "⚠\nИсправьте ошибки в форме\n\nУкажите корректный email или Telegram в формате @username.\nВыберите роль.\nПодтвердите согласие на обработку персональных данных."
+    ],
+    "postsSent": 0
+  },
+  "head-accept": {
+    "status": 201,
+    "contact": "partnership-4121-ade28fda-6a4d-48ae-b9d8-468f740c3d1f@example.test",
+    "success": true,
+    "tokenHeader": true
+  }
+}

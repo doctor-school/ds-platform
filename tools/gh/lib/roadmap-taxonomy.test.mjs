@@ -37,9 +37,10 @@ test("isEpicTitle / isReleaseGateTitle match their prefixes, case-insensitively"
   assert.equal(isReleaseGateTitle("gateway rework"), false);
 });
 
-test("featureTitlePrefix recognises both track prefixes only", () => {
+test("featureTitlePrefix recognises the track prefixes only", () => {
   assert.equal(featureTitlePrefix("[Академия][012] Архив записей"), "[Академия]");
   assert.equal(featureTitlePrefix("[Витрина][017] MVP"), "[Витрина]");
+  assert.equal(featureTitlePrefix("[Переезд][040] Вход без регистрации"), "[Переезд]");
   assert.equal(featureTitlePrefix("[012] EARS-3: something"), null);
   assert.equal(featureTitlePrefix("plain platform task"), null);
 });
@@ -48,6 +49,8 @@ test("milestoneTrack maps the Russian milestone prefixes to track labels", () =>
   assert.equal(milestoneTrack("Академия R1 — Архив записей"), "track:academy");
   assert.equal(milestoneTrack("Академия · Позже"), "track:academy");
   assert.equal(milestoneTrack("Витрина R1 — MVP витрины"), "track:doctor");
+  assert.equal(milestoneTrack("Переезд П1 — Врачи старой платформы на новой"), "track:migration");
+  assert.equal(milestoneTrack("Переезд · Позже"), "track:migration");
   assert.equal(milestoneTrack("Platform ops & hardening"), null);
   assert.equal(milestoneTrack(null), null);
 });
@@ -241,10 +244,21 @@ test("rule (d) fires when the track label names the other track", () => {
     }),
     [],
   );
+  // The migration track (#4289) cross-homes like the other product tracks.
+  for (const [labels, milestone] of [
+    [["track:migration"], "Витрина В3 — Переезд аудитории"],
+    [["track:doctor"], "Переезд П1 — Врачи старой платформы на новой"],
+  ])
+    assert.equal(
+      roadmapFindingsFor({
+        number: 43, title: "x", labels, milestone, parent: null, startDate: null, targetDate: null,
+      }).filter((f) => f.rule === "track-milestone").length,
+      1,
+    );
   // `track:platform` on a track release is the DOCUMENTED shape — platform work
   // takes the milestone of the release it `blocked_by`-blocks (spec §7.1
   // Platform-task row; `.claude/rules/repo-conventions.md` → Issue conventions).
-  // Rule (d) is about the two PRODUCT tracks cross-homing, nothing else.
+  // Rule (d) is about the PRODUCT tracks cross-homing, nothing else.
   assert.deepEqual(
     roadmapFindingsFor({
       number: 42,
@@ -508,6 +522,9 @@ test("releaseLetterLookalike flags a Latin twin of the track's Cyrillic letter (
     "Витрина · Позже",
     "Platform ops & hardening",
     "Витрина Bonus",
+    // «П» has no Latin twin, so the migration track has nothing to flag.
+    "Переезд П1 — Врачи старой платформы на новой",
+    "Переезд · Позже",
     null,
   ])
     assert.equal(releaseLetterLookalike(ok), null);

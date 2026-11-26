@@ -23,7 +23,7 @@ Owner phrases: «сделай груминг», «триаж бэклога», �
 pnpm backlog:triage            # add --stalled-days <n> to widen/narrow the stale-claim window (default 3)
 ```
 
-The script **refuses to run on a stale `main`** — fetch/pull first. Read the whole report before speaking: `## Takeable`, `## Wait for reuse`, `## In flight elsewhere`, `## Blocked`, `## Mega-blockers`, `## Orphans`, `## Stalled`, `## Likely done`, `## Tracks`, `## Field hygiene`, `## Storefronts hygiene`, `## Warnings`. Every grooming section is grouped by `### track:academy` / `### track:doctor` / `### track:platform`; an empty section prints a single `none`. A row in `## Warnings` means a fetch degraded — say so instead of treating the section as empty.
+The script **refuses to run on a stale `main`** — fetch/pull first. Read the whole report before speaking: `## Takeable`, `## Wait for reuse`, `## In flight elsewhere`, `## Blocked`, `## Mega-blockers`, `## Orphans`, `## Stalled`, `## Likely done`, `## Tracks`, `## Field hygiene`, `## Storefronts hygiene`, `## Warnings`. Every grooming section is grouped by `### track:academy` / `### track:doctor` / `### track:platform` / `### track:migration`; an empty section prints a single `none`. A row in `## Warnings` means a fetch degraded — say so instead of treating the section as empty.
 
 ## Step 2 — Drain `## Stalled` FIRST (before any new pick)
 

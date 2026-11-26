@@ -345,8 +345,9 @@ export function kindLabelError(args) {
 
 /**
  * Validate the track-label requirement (#1583): exactly ONE `track:*` label,
- * drawn from TRACK_LABELS. The track is the permanent product axis (academy ↔
- * doctor showcase ↔ shared platform); the milestone is the track release and
+ * drawn from TRACK_LABELS. The track is the product axis (academy ↔ doctor
+ * showcase ↔ shared platform ↔ the old platform's migration, which closes with
+ * the move); the milestone is the track release and
  * the epic Issue is a closable container — a track never gets an evergreen
  * epic. Returns null when valid, else the error message to die with.
  * @param {string[]} args  the gh passthrough
@@ -546,7 +547,7 @@ export function milestoneError(args, { parent = null } = {}) {
 
 /**
  * A product-track Issue homes on a milestone of its OWN track (#3375, spec
- * §7.1): a `track:doctor` / `track:academy` Issue takes a release or the
+ * §7.1): a `track:doctor` / `track:academy` / `track:migration` Issue takes a release or the
  * «· Позже» backlog of that track, never «Platform ops & hardening» or the
  * other track's milestone — misrouted product work disappears from its track's
  * release rotation. `track:platform` keeps the fallback. Any track refuses a
@@ -842,7 +843,7 @@ function main() {
         "  an `epic: …` title needs NO milestone and rejects one (an epic spans releases).\n" +
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
         `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
-        `  and a --milestone: a product track (track:doctor / track:academy) takes a milestone of its OWN\n` +
+        `  and a --milestone: a product track (${Object.keys(TRACK_MILESTONE_PREFIXES).join(" / ")}) takes a milestone of its OWN\n` +
         `  track (a release or «· Позже»); only track:platform may use the fallback «${FALLBACK_MILESTONE}».\n` +
         "  Every tracked Issue (#1821, ADR-0013 §A1) additionally needs a body `Reuse:` line —\n" +
         "  `canon: <path>` | `extract-from: <path> (#N)` | `new: <reason>`; check the capability-ownership registry first.\n" +
@@ -947,7 +948,8 @@ function main() {
     }
   }
 
-  //   • product-track home (#3375): a `track:doctor` / `track:academy` Issue —
+  //   • product-track home (#3375): a `track:doctor` / `track:academy` /
+  //     `track:migration` Issue —
   //     passed or inherited milestone alike — lands on its own track's
   //     milestone, never the platform fallback. Still before any write.
   const trackHomeErr = productTrackMilestoneError(

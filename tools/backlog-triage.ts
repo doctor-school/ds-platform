@@ -476,12 +476,12 @@ export interface Triage {
 
 /**
  * The `track:*` label an Issue carries; null when it carries none. With several,
- * the first in academy/doctor/platform order wins, so the result never depends
- * on label order.
+ * the first in GROOM_TRACKS order wins, so the result never depends on label
+ * order.
  */
 export function trackOf(labels: string[]): string | null {
   const names = new Set(labels.map((l) => l.trim()));
-  for (const track of ["track:academy", "track:doctor", "track:platform"])
+  for (const track of GROOM_TRACKS)
     if (names.has(track)) return track;
   return null;
 }
@@ -893,6 +893,7 @@ export const GROOM_TRACKS = [
   "track:academy",
   "track:doctor",
   "track:platform",
+  "track:migration",
 ] as const;
 
 /** One grouped row of a grooming section: a track bucket plus its rendered line. */

@@ -48,9 +48,9 @@ const REPO = "doctor-school/ds-platform";
  * omission: that module spawns `gh` at import-time-adjacent paths and is the
  * Issue-creation entry point — importing it here to share three strings would
  * couple the PR-side CI job to the whole board-mutation helper. The unit test
- * pins both lists to the same three values.
+ * pins this copy to the taxonomy's values.
  */
-export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform", "track:migration"];
 
 /** GitHub's auto-close keywords — identical to `tools/lint/spec-link-lint.ts`. */
 const CLOSE_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi;

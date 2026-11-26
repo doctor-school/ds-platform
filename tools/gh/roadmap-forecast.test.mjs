@@ -114,6 +114,12 @@ test("releaseMilestoneTrack picks only the track releases", () => {
   assert.equal(releaseMilestoneTrack("Витрина R1.1 — Доделки MVP после запуска"), "track:doctor");
   assert.equal(releaseMilestoneTrack("Витрина В1.1 — Доделки MVP после запуска"), "track:doctor");
   assert.equal(releaseMilestoneTrack("Витрина В1."), null);
+  // The migration track (#4289) takes only its own letter «П».
+  assert.equal(releaseMilestoneTrack("Переезд П1 — Врачи старой платформы на новой"), "track:migration");
+  assert.equal(releaseMilestoneTrack("Переезд П2"), "track:migration");
+  assert.equal(releaseMilestoneTrack("Переезд В1 — x"), null);
+  assert.equal(releaseMilestoneTrack("Витрина П1 — x"), null);
+  assert.equal(releaseMilestoneTrack("Переезд · Позже"), null);
   assert.equal(releaseMilestoneTrack("Академия · Позже"), null);
   assert.equal(releaseMilestoneTrack("Витрина · Позже"), null);
   assert.equal(releaseMilestoneTrack("Platform ops & hardening"), null);

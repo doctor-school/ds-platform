@@ -1503,6 +1503,8 @@ describe("grooming sections (#1873)", () => {
       expect(trackOf(["kind:tooling", "track:doctor"])).toBe("track:doctor");
       expect(trackOf(["track:doctor", "track:academy"])).toBe(trackOf(["track:academy", "track:doctor"]));
       expect(trackOf(["kind:chore"])).toBeNull();
+      // #4289: the migration track is a track of its own, not the platform bucket.
+      expect(trackOf(["feature", "track:migration"])).toBe("track:migration");
     });
   });
 
@@ -1600,5 +1602,23 @@ describe("backlog-triage findStorefrontsGaps() — Storefronts hygiene (#3610)",
     expect(platform).toBeGreaterThan(doctor);
     expect(text.indexOf("#16 MISSING")).toBeGreaterThan(doctor);
     expect(text.indexOf("#16 MISSING")).toBeLessThan(platform);
+  });
+
+  it("4289: a track:migration row groups under its own ### track:migration heading", () => {
+    const text = formatStorefrontsHygiene(
+      findStorefrontsGaps(
+        [
+          issue(9, "nothing here"),
+          issue(17, "nothing here", [], "[x] 17", "track:migration"),
+        ],
+        lookup,
+      ),
+    );
+    const platform = text.indexOf("### track:platform (1)");
+    const migration = text.indexOf("### track:migration (1)");
+    expect(platform).toBeGreaterThan(-1);
+    expect(migration).toBeGreaterThan(platform);
+    expect(text.indexOf("#17 MISSING")).toBeGreaterThan(migration);
+    expect(text.indexOf("#9 MISSING")).toBeLessThan(migration);
   });
 });

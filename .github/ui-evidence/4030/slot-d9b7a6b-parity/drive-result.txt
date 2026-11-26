@@ -1,0 +1,26 @@
+# slot pr-4248, /v1/health d9b7a6b67b279742b5391371158300ea0067a5fc, 2026-11-26T02:03:17Z
+# pnpm exec playwright test --config=playwright.flows.config.ts --workers=1 e2e/drive-4030-parity.spec.ts
+GEOM 01-list-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [1027] el-overflow [0] → PASS
+GEOM 01-list-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [1027] el-overflow [0] → PASS
+GEOM 02-list-390 light: scrollWidth 627 clientWidth 390 (over 237); long email visible ×1 rights [627] el-overflow [0] → DEFECT
+GEOM 02-list-390 dark: scrollWidth 627 clientWidth 390 (over 237); long email visible ×1 rights [627] el-overflow [0] → DEFECT
+GEOM 03-detail-partnership-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 03-detail-partnership-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 04-detail-partnership-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 04-detail-partnership-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 05-detail-imported-1440 light: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 05-detail-imported-1440 dark: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+GEOM 06-detail-imported-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 06-detail-imported-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×0 → PASS
+GEOM 09-detail-long-email-390 light: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [348] el-overflow [0] → PASS
+GEOM 09-detail-long-email-390 dark: scrollWidth 390 clientWidth 390 (over 0); long email visible ×1 rights [348] el-overflow [0] → PASS
+FILTER «Вид: Партнёрство»: 5 rows, kinds Партнёрство
+GEOM 07-filter-partnership: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×1 rights [1027] el-overflow [0] → PASS
+OPENED /applications/a8c72016-67be-4502-9312-a65c48533e16
+GEOM 08-filter-partnership-detail: scrollWidth 1440 clientWidth 1440 (over 0); long email visible ×0 → PASS
+  ✘  1 [chromium] › e2e\drive-4030-parity.spec.ts:107:1 › «Заявки» parity at d9b7a6b: list + partnership/imported detail × 4 profiles, then «Вид: Партнёрство» → detail (31.0s)
+    Error: side scroll on 02-list-390 light
+    Error: long email overflows on 02-list-390 light
+    Error: side scroll on 02-list-390 dark
+    Error: long email overflows on 02-list-390 dark
+  1 failed

@@ -316,3 +316,19 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Then exactly that school's events in that state starting on that Moscow day are listed, newest first, page by page, and the total counts only them
     And a list request without a sort still returns the events alphabetically by title, as the event pickers read them
     And a request with an unknown parameter or an inverted period is refused
+
+  @EARS-14 @journey @happy @event-list-journey
+  Scenario: An operator finds events in the admin list by sorting and filtering, and a reload keeps the view
+    Given a platform_admin operator with events of several schools, states and start dates
+    When the operator opens the event list narrowed to those events by the search
+    Then the events are listed newest start date first and the default order is not in the address
+    When the operator sorts the list by title
+    Then the events are listed by title from А to Я and the sort is in the address
+    When the operator narrows the list to published events starting in a period of Moscow days
+    Then only those events are listed and each filter is shown as a removable chip
+    When the operator reloads the page
+    Then the same sorted and filtered view is shown
+    When the operator picks a «по» day before the «с» day
+    Then the «по» day is refused in place and is not applied
+    When the operator resets every filter with «Сбросить всё»
+    Then no filter chip remains and the list keeps only its sort

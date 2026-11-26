@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "@ds/e2e/admin-events";
+import { eventIdByTitle } from "./support/events-list";
 
 /**
  * 014 EARS-25 / EARS-27 (#1741 slice 2b), browser half — what an operator SEES
@@ -92,33 +93,19 @@ async function setPalette(
 }
 
 /**
- * Resolve a seeded event's id by walking the real admin list, page by page, to
- * the row carrying its title. The list is the only place the admin surfaces an
+ * Resolve a seeded event's id from the real admin list, narrowed to its title by
+ * the list's own search (007 EARS-14). The list is the only place the admin surfaces an
  * event id, and a hardcoded uuid would rot the moment the stand is re-seeded.
  */
 async function findEventIdByTitle(page: Page, title: string): Promise<string> {
-  await page.goto("/events");
-  await expect(page.getByTestId("events-table")).toBeVisible({
-    timeout: 20_000,
-  });
-
-  for (;;) {
-    const row = page.locator("tr", { hasText: title }).first();
-    if ((await row.count()) > 0) {
-      const testId = await row.getAttribute("data-testid");
-      const id = testId?.replace("event-row-", "");
-      expect(id, `event row for «${title}» carries an id`).toBeTruthy();
-      return id!;
-    }
-    const next = page.getByTestId("events-next");
-    if (await next.isDisabled()) {
-      throw new Error(
-        `Seeded event «${title}» is not in the admin list — is the branch DB seeded (pnpm --filter @ds/api seed:events)?`,
-      );
-    }
-    await next.click();
-    await expect(page.getByTestId("events-table")).toBeVisible();
+  // 007 EARS-14: the list is narrowed by the title through its own search.
+  const id = await eventIdByTitle(page, title);
+  if (!id) {
+    throw new Error(
+      `Seeded event «${title}» is not in the admin list — is the branch DB seeded (pnpm --filter @ds/api seed:events)?`,
+    );
   }
+  return id;
 }
 
 /** Every platform lifecycle control, by the test id `lib/lifecycle` assigns it. */

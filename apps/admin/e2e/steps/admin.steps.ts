@@ -13,6 +13,7 @@ import {
   E2E_PASSWORD,
   totpCode,
 } from "@ds/e2e/admin-events";
+import { eventListRow } from "../support/events-list";
 
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF");
 const DEFAULT_MSK = "2026-07-17T19:00";
@@ -156,7 +157,7 @@ Given("a platform_admin operator in the admin app", async ({ page, world }) => {
   world.email = email;
   await browserLoginAsAdmin(page, email, password);
   await page.goto("/events");
-  await expect(page.getByTestId("create-event")).toBeVisible();
+  await expect(page.getByTestId("events-create")).toBeVisible();
 });
 
 Given("a doctor_guest caller with a session", async ({ page, world }) => {
@@ -244,7 +245,7 @@ Then(
     // screen (create / edit) lands on the events list, never a dead end.
     await page.getByTestId("back-to-list").click();
     await page.waitForURL(/\/events$/);
-    await expect(page.getByTestId("create-event")).toBeVisible();
+    await expect(page.getByTestId("events-create")).toBeVisible();
   },
 );
 
@@ -290,9 +291,9 @@ Then(
 Then(
   "the event air time renders as {string} МСК in the admin list",
   async ({ page, world }, time: string) => {
-    await page.goto("/events");
-    const row = page.getByTestId(`event-row-${world.eventId}`);
-    await expect(row).toBeVisible();
+    // 007 EARS-14: the list opens newest first on a shared stand, so the row
+    // is reached by narrowing the list to this event.
+    const row = await eventListRow(page, world.eventId!);
     await expect(row).toContainText(time);
     await expect(row).toContainText("МСК");
   },

@@ -354,3 +354,76 @@ describe("dataProvider.custom — a write answered with no body", () => {
     ).resolves.toEqual({ data: null });
   });
 });
+
+describe("dataProvider — the admin event list (007 EARS-14, #4305)", () => {
+  function stub() {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+    return fetchStub;
+  }
+
+  it("007 EARS-14: the list sends its sort, state, period and search under the route's own names", async () => {
+    const fetchStub = stub();
+    await dataProvider.getList({
+      resource: "events",
+      pagination: { currentPage: 2, pageSize: 20 },
+      filters: [
+        { field: "q", operator: "contains", value: "Кардио" },
+        { field: "state", operator: "eq", value: "published" },
+        { field: "startsFrom", operator: "gte", value: "2026-10-01" },
+        { field: "startsTo", operator: "lte", value: "2026-10-31" },
+      ],
+      sorters: [{ field: "startsAt", order: "desc" }],
+    });
+    const [url] = fetchStub.mock.calls[0] as unknown as [string];
+    const [path, search] = url.split("?");
+    expect(path).toBe("/v1/admin/events");
+    expect(Object.fromEntries(new URLSearchParams(search))).toEqual({
+      page: "2",
+      pageSize: "20",
+      q: "Кардио",
+      state: "published",
+      startsFrom: "2026-10-01",
+      startsTo: "2026-10-31",
+      sort: "startsAt",
+      dir: "desc",
+    });
+  });
+
+  it("007 EARS-14: blank facets are left out and a caller without a sorter keeps the route's title order", async () => {
+    const fetchStub = stub();
+    await dataProvider.getList({
+      resource: "events",
+      pagination: { currentPage: 1, pageSize: 20 },
+      filters: [
+        { field: "q", operator: "contains", value: "" },
+        { field: "state", operator: "eq", value: "" },
+        { field: "startsFrom", operator: "gte", value: "" },
+        { field: "startsTo", operator: "lte", value: "" },
+      ],
+    });
+    const [url] = fetchStub.mock.calls[0] as unknown as [string];
+    expect(url).toBe("/v1/admin/events?page=1&pageSize=20");
+  });
+
+  it("007 EARS-14: a facet the strict route does not take is never sent", async () => {
+    const fetchStub = stub();
+    await dataProvider.getList({
+      resource: "events",
+      pagination: { currentPage: 1, pageSize: 20 },
+      filters: [
+        { field: "includeRetired", operator: "eq", value: true },
+        { field: "status", operator: "eq", value: "draft" },
+      ],
+      sorters: [{ field: "updatedAt", order: "asc" }],
+    });
+    const [url] = fetchStub.mock.calls[0] as unknown as [string];
+    expect(url).toBe("/v1/admin/events?page=1&pageSize=20");
+  });
+});

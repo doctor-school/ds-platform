@@ -65,7 +65,7 @@ async function signIn(page: Page) {
   const credentials = await bootstrapAdminSession(adminOrigin());
   operation(`owned fixture account ${credentials.email}`);
   await signInAsAdmin(page, credentials);
-  await expect(page.getByTestId("create-event")).toBeVisible();
+  await expect(page.getByTestId("events-create")).toBeVisible();
 }
 Given("a platform_admin signed in to the admin", async ({ page }) => {
   await signIn(page);

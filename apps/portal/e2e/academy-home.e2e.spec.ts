@@ -1,25 +1,17 @@
 import { randomUUID } from "node:crypto";
-import {
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import {
   MAIN_LANDMARK_RULES,
-  readStagePartnershipFaultCount,
   readStagePartnershipObservation,
   stageAcademyAddress,
   stagePartnershipUnavailableOrigin,
 } from "@ds/e2e";
-import { expect, test, type Page } from "@playwright/test";
+import {
+  captchaTestTokenFromEnv,
+  prepareCaptchaForJourney,
+} from "@ds/e2e/captcha-stub";
+import { expect, test, type Page, type Request } from "@playwright/test";
 
 const SECTION_ORDER = [
   "what",
@@ -78,58 +70,15 @@ function isShellRequest(url: string): boolean {
   );
 }
 
-const SUBMISSIONS_DIRECTORY = process.env.ACADEMY_SUBMISSIONS_DIR;
-const PERSISTENCE_E2E_SAFE = process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
-const SAFE_SUBMISSIONS_PREFIX = "academy-partnership-e2e-";
+/** 033 EARS-18 — the queue intake the home form posts to (same-origin BFF). */
+const PARTNERSHIP_INTAKE_PATH = "/v1/public/applications/partnership";
 
-function normalized(path: string): string {
-  const resolved = resolve(path);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
-function assertSafeCandidatePath(path: string): string {
-  const resolved = resolve(path);
-  if (
-    normalized(dirname(resolved)) !== normalized(tmpdir()) ||
-    !basename(resolved).startsWith(SAFE_SUBMISSIONS_PREFIX)
-  ) {
-    throw new Error("Refusing an unsafe Academy persistence E2E path");
-  }
-  return resolved;
-}
-
-async function assertSafeRealPath(
-  path: string,
-  kind: "directory" | "file",
-): Promise<string> {
-  if (!PERSISTENCE_E2E_SAFE) {
-    throw new Error("Academy persistence E2E marker is not enabled");
-  }
-  const resolved = assertSafeCandidatePath(path);
-  const [realTarget, realTemporaryRoot, metadata] = await Promise.all([
-    realpath(resolved),
-    realpath(tmpdir()),
-    stat(resolved),
-  ]);
-  const expectedKind =
-    kind === "directory" ? metadata.isDirectory() : metadata.isFile();
-  if (
-    !expectedKind ||
-    normalized(realTarget) !== normalized(resolved) ||
-    normalized(dirname(realTarget)) !== normalized(realTemporaryRoot)
-  ) {
-    throw new Error("Refusing an unsafe Academy persistence E2E target");
-  }
-  return realTarget;
-}
-
-async function jsonRecords(): Promise<string[]> {
-  if (!SUBMISSIONS_DIRECTORY) {
-    throw new Error("ACADEMY_SUBMISSIONS_DIR is required by Academy E2E");
-  }
-  return (await readdir(SUBMISSIONS_DIRECTORY))
-    .filter((file) => file.endsWith(".json"))
-    .sort();
+function isIntakePost(request: Request, stageContact?: string): boolean {
+  return (
+    request.method() === "POST" &&
+    new URL(request.url()).pathname === PARTNERSHIP_INTAKE_PATH &&
+    (!stageContact || request.postData()?.includes(stageContact) === true)
+  );
 }
 
 async function fillValidPartnershipForm(page: Page, stageContact?: string) {
@@ -157,7 +106,7 @@ async function fillValidPartnershipForm(page: Page, stageContact?: string) {
   return form;
 }
 
-async function expectUnavailablePartnershipStorage(
+async function expectUnavailablePartnershipIntake(
   page: Page,
   target: string,
   stageContact?: string,
@@ -173,19 +122,15 @@ async function expectUnavailablePartnershipStorage(
   const values = await Promise.all(fields.map((field) => field.inputValue()));
   const origin = new URL(page.url()).origin;
   const [submission] = await Promise.all([
-    page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      const request = response.request();
-      return (
-        url.origin === origin &&
-        url.pathname === "/" &&
-        request.method() === "POST" &&
-        (!stageContact || request.postData()?.includes(stageContact) === true)
-      );
-    }),
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).origin === origin &&
+        isIntakePost(response.request(), stageContact),
+    ),
     form.getByRole("button", { name: "Обсудить партнёрство" }).click(),
   ]);
-  expect(submission.ok()).toBe(true);
+  // The intake itself failed server-side — not a client-side short circuit.
+  expect(submission.status()).toBeGreaterThanOrEqual(500);
   await expect(
     form.getByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
   ).toBeVisible();
@@ -756,15 +701,11 @@ test.describe("Feature 013 — static public Academy home", () => {
     }
   });
 
-  test("EARS-6/7: accepted retry after a lost response shall create one exact private JSON record and then show success", async ({
+  test("033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success (013 EARS-6/7)", async ({
     baseURL,
     page,
   }) => {
     const stage = stageAcademyAddress(baseURL);
-    test.skip(
-      !stage && !PERSISTENCE_E2E_SAFE,
-      "requires the Academy stage leg or isolated CI persistence fixture",
-    );
     const stageContact = stage
       ? `partnership-4121-${randomUUID()}@example.test`
       : undefined;
@@ -772,38 +713,45 @@ test.describe("Feature 013 — static public Academy home", () => {
       stage && stageContact
         ? () => readStagePartnershipObservation(stage.origin, stageContact)
         : undefined;
-    let local: { directory: string; before: Set<string> } | undefined;
     if (observe) {
-      expect(await observe()).toEqual({ count: 0, privateRecord: false });
-    } else {
-      if (!SUBMISSIONS_DIRECTORY)
-        throw new Error("missing submissions directory");
-      local = {
-        directory: await assertSafeRealPath(SUBMISSIONS_DIRECTORY, "directory"),
-        before: new Set(await jsonRecords()),
-      };
+      expect(await observe()).toEqual({ count: 0, exactRow: false });
+    }
+    if (stage) {
+      // A stage slot runs bot protection ON and the portal hands the form the
+      // real site key; the invisible widget never yields a token in headless
+      // Playwright, so `captcha.js` resolves with the box's test token
+      // (`@ds/e2e/captcha-stub`). The hermetic CI tier renders no widget.
+      await prepareCaptchaForJourney(
+        page.context(),
+        stage.origin,
+        process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+      );
     }
     const mutationUrls: string[] = [];
     page.on("request", (request) => {
       if (request.method() === "POST") mutationUrls.push(request.url());
     });
 
-    let intercepted = false;
+    // The first attempt's response is lost. On a stage slot it reaches the
+    // real api first; the hermetic CI tier has no api, so the double below
+    // answers the retry the way the intake answers a replay (`201 { id }`).
+    const attempts: Request[] = [];
     let firstWriteReachedServer = false;
-    await page.route("**/*", async (route) => {
+    await page.route(`**${PARTNERSHIP_INTAKE_PATH}`, async (route) => {
       const request = route.request();
-      if (
-        !intercepted &&
-        request.method() === "POST" &&
-        (!stageContact || request.postData()?.includes(stageContact))
-      ) {
-        intercepted = true;
-        const response = await route.fetch();
-        firstWriteReachedServer = response.ok();
+      if (!isIntakePost(request, stageContact)) return route.continue();
+      attempts.push(request);
+      if (attempts.length === 1) {
+        if (stage) firstWriteReachedServer = (await route.fetch()).ok();
         await route.abort("failed");
         return;
       }
-      await route.continue();
+      if (stage) return route.continue();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: randomUUID() }),
+      });
     });
 
     await page.goto("/#partner-form");
@@ -812,77 +760,59 @@ test.describe("Feature 013 — static public Academy home", () => {
     await expect(
       form.getByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
     ).toBeVisible();
-    expect(firstWriteReachedServer).toBe(true);
     if (observe) {
-      expect(await observe()).toEqual({ count: 1, privateRecord: true });
-    } else if (local) {
-      await expect
-        .poll(async () => (await jsonRecords()).length)
-        .toBe(local.before.size + 1);
+      expect(firstWriteReachedServer).toBe(true);
+      expect(await observe()).toEqual({ count: 1, exactRow: true });
     }
 
-    await page.unrouteAll({ behavior: "wait" });
     await form.getByRole("button", { name: "Обсудить партнёрство" }).click();
     await expect(page.getByText("Спасибо! Заявка сохранена.")).toBeVisible();
+    await page.unrouteAll({ behavior: "wait" });
 
     if (observe) {
-      expect(await observe()).toEqual({ count: 1, privateRecord: true });
-    } else if (local) {
-      const recordsAfter = await jsonRecords();
-      const created = recordsAfter.filter((file) => !local.before.has(file));
-      expect(created).toHaveLength(1);
-      const recordPath = join(local.directory, created[0]!);
-      const record = JSON.parse(await readFile(recordPath, "utf8")) as {
-        id: string;
-        acceptedAt: string;
-        idempotencyKey: string;
-        name: string;
-        companyOrClinic: string;
-        contact: string;
-        role: string;
-        consent: Record<string, unknown>;
-      };
-      expect(created[0]).toBe(`${record.id}.json`);
-      expect(record).toMatchObject({
-        idempotencyKey: record.id,
-        name: "Анна Соколова",
-        companyOrClinic: "Клиника",
-        contact: "@anna_sokolova",
-        role: "Партнёр",
-        consent: {
-          purpose: "academy_partnership_contact",
-          versionTag: "academy-partnership-v1",
-          text: "Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.",
-          accepted: true,
-          acceptedAt: record.acceptedAt,
-          policyUrl: "https://doctor.school/index/privacy-pay",
-        },
-      });
-      expect(record.consent.textSha256).toMatch(/^[a-f0-9]{64}$/);
-      if (process.platform !== "win32") {
-        expect((await stat(recordPath)).mode & 0o777).toBe(0o600);
-      }
+      expect(await observe()).toEqual({ count: 1, exactRow: true });
     }
+    expect(attempts).toHaveLength(2);
+    const [first, retry] = attempts as [Request, Request];
+    const key = await first.headerValue("idempotency-key");
+    expect(key).toMatch(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    );
+    expect(await retry.headerValue("idempotency-key")).toBe(key);
+    if (stage) {
+      // Each attempt carries its own one-shot widget token to the api guard.
+      const token = captchaTestTokenFromEnv();
+      expect(await first.headerValue("x-smartcaptcha-token")).toBe(token);
+      expect(await retry.headerValue("x-smartcaptcha-token")).toBe(token);
+    }
+    expect(first.postDataJSON()).toEqual({
+      name: stage ? "Stage E2E 4121" : "Анна Соколова",
+      companyOrClinic: stage ? "Stage fixture" : "Клиника",
+      contact: stageContact ?? "@anna_sokolova",
+      role: "Партнёр",
+      consentVersion: "academy-partnership-v1",
+    });
+    expect(retry.postDataJSON()).toEqual(first.postDataJSON());
     expect(mutationUrls).not.toHaveLength(0);
     expect(
-      mutationUrls.every(
-        (url) => new URL(url).origin === new URL(page.url()).origin,
-      ),
+      mutationUrls.every((url) => {
+        const parsed = new URL(url);
+        return (
+          parsed.origin === new URL(page.url()).origin &&
+          parsed.pathname === PARTNERSHIP_INTAKE_PATH
+        );
+      }),
     ).toBe(true);
     expect((await page.request.get("/api/academy-partnership")).status()).toBe(
       404,
     );
   });
 
-  test("EARS-7: an actual unavailable persistence path shall preserve browser values and create no partial record", async ({
+  test("033 EARS-18: an unavailable intake shall preserve browser values and store no row (013 EARS-7)", async ({
     baseURL,
     page,
   }) => {
     const stage = stageAcademyAddress(baseURL);
-    test.skip(
-      !stage && !PERSISTENCE_E2E_SAFE,
-      "requires an Academy stage slot or the isolated CI persistence fixture",
-    );
     if (stage) {
       const fixture = stagePartnershipUnavailableOrigin(stage);
       if (fixture.startsWith("https://")) {
@@ -904,57 +834,23 @@ test.describe("Feature 013 — static public Academy home", () => {
         }
       }
       const contact = `partnership-4121-${randomUUID()}@example.test`;
-      const observeNormalStorage = () =>
+      const observeQueue = () =>
         readStagePartnershipObservation(stage.origin, contact);
-      const observeFixtureFault = () =>
-        readStagePartnershipFaultCount(stage.origin);
-      expect(await observeNormalStorage()).toEqual({
-        count: 0,
-        privateRecord: false,
-      });
-      const faultsBefore = await observeFixtureFault();
-      await expectUnavailablePartnershipStorage(
+      expect(await observeQueue()).toEqual({ count: 0, exactRow: false });
+      await expectUnavailablePartnershipIntake(
         page,
         fixture + "/#partner-form",
         contact,
       );
-      expect(await observeFixtureFault()).toBe(faultsBefore + 1);
-      expect(await observeNormalStorage()).toEqual({
-        count: 0,
-        privateRecord: false,
-      });
+      expect(await observeQueue()).toEqual({ count: 0, exactRow: false });
       return;
     }
-    if (!SUBMISSIONS_DIRECTORY)
-      throw new Error("missing submissions directory");
-    const safeDirectory = await assertSafeRealPath(
-      SUBMISSIONS_DIRECTORY,
-      "directory",
+    // The hermetic tier has no api: the intake answers as an unreachable
+    // upstream does through the BFF rewrite.
+    await page.route(`**${PARTNERSHIP_INTAKE_PATH}`, (route) =>
+      route.fulfill({ status: 503, body: "upstream unavailable" }),
     );
-    const recordsBefore = await jsonRecords();
-    const backup = assertSafeCandidatePath(`${safeDirectory}.backup`);
-    await rename(safeDirectory, backup);
-    await writeFile(safeDirectory, "not a directory", "utf8");
-
-    try {
-      await expectUnavailablePartnershipStorage(page, "/#partner-form");
-    } finally {
-      const safeUnavailableFile = await assertSafeRealPath(
-        safeDirectory,
-        "file",
-      );
-      const safeBackup = await assertSafeRealPath(backup, "directory");
-      await rm(safeUnavailableFile, { force: true });
-      assertSafeCandidatePath(safeDirectory);
-      await rename(safeBackup, safeDirectory);
-    }
-
-    expect(await jsonRecords()).toEqual(recordsBefore);
-    expect(
-      (await readdir(SUBMISSIONS_DIRECTORY)).filter((file) =>
-        file.endsWith(".tmp"),
-      ),
-    ).toEqual([]);
+    await expectUnavailablePartnershipIntake(page, "/#partner-form");
   });
 
   test("EARS-8: enabled partnership form shall remain keyboard-operable and axe-clean while pending", async ({

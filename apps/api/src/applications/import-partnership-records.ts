@@ -20,10 +20,13 @@ const RECORD_FILE =
   /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i;
 
 /**
- * One stored record of the interim form (`AcademyPartnershipRecord` of the
- * retired portal store): the fields the queue keeps, read leniently on the
- * rest so the record's own consent snapshot (text, hash, policy) does not
- * need to match byte for byte to be imported.
+ * One stored record of the interim form: the JSON file the retired portal
+ * file store wrote per accepted request (`<id>.json` on the
+ * `academy_partnership_submissions` volume; runbook
+ * `apps/docs/content/operations/academy-partnership-submissions.md`). This
+ * schema IS the record shape the import relies on: the fields the queue keeps,
+ * read leniently on the rest so the record's own consent snapshot (text, hash,
+ * policy) does not need to match byte for byte to be imported.
  */
 const InterimRecordSchema = z.object({
   id: z.uuid(),

@@ -17,7 +17,6 @@ import {
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
 import { MaterialsFeedSection } from "./materials-feed-section";
-import { submitAcademyPartnership } from "./academy-partnership-action";
 import styles from "./academy-home.module.css";
 
 function SectionIntro({
@@ -443,7 +442,11 @@ function FormatsSection() {
   );
 }
 
-function LeadDemoSection() {
+function LeadDemoSection({
+  botProtectionSiteKey,
+}: {
+  botProtectionSiteKey?: string | undefined;
+}) {
   return (
     <section
       id="partner-form"
@@ -482,7 +485,7 @@ function LeadDemoSection() {
           </p>
         </div>
 
-        <LeadDemoFields submitAction={submitAcademyPartnership} />
+        <LeadDemoFields botProtectionSiteKey={botProtectionSiteKey} />
       </Container>
     </section>
   );
@@ -542,7 +545,14 @@ export function AcademyHomeFooter() {
   );
 }
 
-export function AcademyHomeView() {
+export interface AcademyHomeViewProps {
+  /** The public SmartCaptcha site key for the partnership form (033 EARS-18). */
+  botProtectionSiteKey?: string | undefined;
+}
+
+export function AcademyHomeView({
+  botProtectionSiteKey,
+}: AcademyHomeViewProps = {}) {
   return (
     <div lang="ru" className="min-h-screen bg-background text-foreground">
       <div data-testid="academy-home-sections">
@@ -555,7 +565,7 @@ export function AcademyHomeView() {
         <ProjectsSection />
         <PartnerValueSection />
         <FormatsSection />
-        <LeadDemoSection />
+        <LeadDemoSection botProtectionSiteKey={botProtectionSiteKey} />
       </div>
     </div>
   );

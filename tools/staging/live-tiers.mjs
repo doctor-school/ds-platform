@@ -181,6 +181,13 @@ export const LIVE_TIERS = Object.freeze([
     },
     gated: [
       {
+        // 033 EARS-18 (#4032): the home partnership form posts to the
+        // bot-protected public intake, and a slot renders the real widget, so
+        // the accept journey resolves it with the bot-protection test token.
+        file: "e2e/academy-home.e2e.spec.ts",
+        requires: [URL_ACADEMY, "E2E_CAPTCHA_TEST_TOKEN"],
+      },
+      {
         file: "e2e/room.spec.ts",
         slotReason:
           "the golden dataset seeds only rutube streams — no YouTube, unavailable-provider, VK or CDNvideo room exists on a slot",

@@ -1194,6 +1194,23 @@ describe("planLiveLeg", () => {
     ]);
   });
 
+  it("033 EARS-18: runs the Academy home partnership journeys only with the bot-protection test token", () => {
+    const tier = LIVE_TIERS.find((t) => t.name === "live/academy/default");
+    const file = "e2e/academy-home.e2e.spec.ts";
+    const without = planLiveLeg(tier, { E2E_PORTAL_URL: "https://a" });
+    assert.deepEqual(
+      without.notRun.find((n) => n.file === file),
+      { file, missing: ["E2E_CAPTCHA_TEST_TOKEN"] },
+    );
+    assert.ok(without.invertList.includes(file));
+    const withToken = planLiveLeg(tier, {
+      E2E_PORTAL_URL: "https://a",
+      E2E_CAPTCHA_TEST_TOKEN: "box-token",
+    });
+    assert.ok(!withToken.notRun.some((n) => n.file === file));
+    assert.ok(!withToken.invertList.includes(file));
+  });
+
   it("does not launch a config that throws at load without its env", () => {
     const plan = planLiveLeg(
       { ...TIER, configRequires: ["E2E_DOCTOR_URL", "E2E_EVENTS_LOADED_PATH"] },

@@ -94,7 +94,7 @@ test("the edge admits exactly the slot names the tool can create", () => {
   }
 });
 
-test("4121: Academy partnership fault routes accept only gated home and asset traffic", () => {
+test("4121 / 033 EARS-18: Academy partnership fault routes accept only gated home, asset and intake traffic", () => {
   const fixture = matcherRegexp("stage_partnership_unavailable");
   assert.equal(fixture, `^academy-partnership-unavailable-${SLOT_ALTERNATION}[.]`);
   const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
@@ -105,7 +105,7 @@ test("4121: Academy partnership fault routes accept only gated home and asset tr
   assert.ok(!ask.test("/ask/academy-partnership-unavailable-pr-0.stage.test"));
   const block = text.match(/\n\thandle @stage_partnership_unavailable \{([\s\S]*?)\n\t\}/)?.[1];
   assert.ok(block, "fixture route exists");
-  assert.match(block, /@fixture_post\s*\{\s*method POST\s*path \/\s*\}/);
+  assert.match(block, /@fixture_post\s*\{\s*method POST\s*path \/v1\/public\/applications\/partnership\s*\}/);
   assert.match(block, /@fixture_get\s*\{\s*method GET HEAD\s*path \/ \/_next\/static\/\* \/_next\/image \/brand\/\* \/experts\/\* \/icon.svg \/favicon.ico\s*\}/);
   const upstream = "import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001";
   for (const matcher of ["fixture_post", "fixture_get"]) {
@@ -113,7 +113,8 @@ test("4121: Academy partnership fault routes accept only gated home and asset tr
   }
   assert.equal(block.split(upstream).length - 1, 2);
   assert.match(block, /handle\s*\{\s*respond 404\s*\}/);
-  assert.doesNotMatch(block, /\/v1\/|reverse_proxy/);
+  assert.doesNotMatch(block, /reverse_proxy/);
+  assert.deepEqual(block.match(/\/v1\/\S*/g), ["/v1/public/applications/partnership"]);
 });
 test("4128: both unavailable-entry fixture hosts are gated and route only browser reads", () => {
   const fixture = matcherRegexp("stage_entry_unavailable");

@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  BotProtectionDisclosure,
+  botProtectionMessages,
+} from "@ds/auth-flow/bot-protection";
+import { ACADEMY_AUTH_FLOW } from "@ds/auth-flow/hosts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+import {
+  BotProtectionField,
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import { Checkbox } from "@ds/design-system/checkbox";
 import {
@@ -31,14 +43,27 @@ import {
   type AcademyPartnershipSubmission,
   type AcademyPartnershipSubmissionInput,
 } from "@/lib/academy-partnership-schema";
+import { postAcademyPartnership } from "@/lib/academy-partnership-client";
 
 type SubmitAction = (
   input: AcademyPartnershipSubmission,
+  captchaToken?: string,
 ) => Promise<AcademyPartnershipActionResult>;
 
 export interface LeadDemoFieldsProps {
-  submitAction: SubmitAction;
+  /** 033 EARS-18 — one attempt against the queue intake; injectable for tests. */
+  submitAction?: SubmitAction;
+  /**
+   * The public SmartCaptcha site key the server page read from its runtime env
+   * (#2981). Absent — the dev-stand default — the attempt goes tokenless,
+   * matching the api guard's no-op without a provider.
+   */
+  botProtectionSiteKey?: string | undefined;
 }
+
+// The Academy host's challenge copy (003 EARS-17): the same sentences its auth
+// doors show, read from the shared auth-flow catalog.
+const CHALLENGE_MESSAGES = botProtectionMessages(ACADEMY_AUTH_FLOW);
 
 const SUMMARY_FIELDS: ReadonlyArray<{
   name: Exclude<keyof AcademyPartnershipSubmissionInput, "idempotencyKey">;
@@ -63,7 +88,10 @@ function submissionFingerprint(values: AcademyPartnershipSubmission): string {
   });
 }
 
-export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
+export function LeadDemoFields({
+  submitAction = postAcademyPartnership,
+  botProtectionSiteKey,
+}: LeadDemoFieldsProps) {
   const [saved, setSaved] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [summaryFocusRequest, setSummaryFocusRequest] = useState(0);
@@ -94,6 +122,21 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
     },
   });
 
+  const captcha = useBotProtectedAction({
+    onVerified: () => setSubmitError(null),
+    onChallengeError: (failure) =>
+      setSubmitError(botProtectionFailureMessage(failure, CHALLENGE_MESSAGES)),
+    onActionError: (error) => {
+      if (isBotProtectionRejected(error)) {
+        setSubmitError(CHALLENGE_MESSAGES.rejected);
+      } else if (isBotProtectionRequired(error)) {
+        setSubmitError(CHALLENGE_MESSAGES.required);
+      } else {
+        setSubmitError(ACADEMY_PARTNERSHIP_WRITE_ERROR);
+      }
+    },
+  });
+
   const summaryErrors = useMemo<readonly FormErrorSummaryItem[]>(
     () =>
       SUMMARY_FIELDS.flatMap(({ name, fieldId }) => {
@@ -113,7 +156,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
     }
   }, [summaryErrors, summaryFocusRequest]);
 
-  async function onSubmit(values: AcademyPartnershipSubmission) {
+  function onSubmit(values: AcademyPartnershipSubmission) {
     setSubmitError(null);
     const fingerprint = submissionFingerprint(values);
     const previousAttempt = lastAttemptRef.current;
@@ -126,8 +169,10 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
       form.setValue("idempotencyKey", idempotencyKey);
     }
     lastAttemptRef.current = { fingerprint, idempotencyKey };
-    try {
-      const result = await submitAction(submission);
+    // 033 EARS-18: each attempt mints one fresh proof; a retry of the same
+    // values reuses the idempotency key, so the queue keeps one row.
+    captcha.request(async (captchaToken) => {
+      const result = await submitAction(submission, captchaToken);
       if (result.status === "success") {
         setSaved(true);
         return;
@@ -147,9 +192,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
         return;
       }
       setSubmitError(result.message);
-    } catch {
-      setSubmitError(ACADEMY_PARTNERSHIP_WRITE_ERROR);
-    }
+    });
   }
 
   function onInvalid() {
@@ -293,7 +336,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
           type="submit"
           variant="on-primary"
           size="lg"
-          loading={form.formState.isSubmitting}
+          loading={form.formState.isSubmitting || captcha.pending}
           className="w-full"
         >
           Обсудить партнёрство
@@ -303,6 +346,19 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
           title="Исправьте ошибки в форме"
           errors={summaryErrors}
           data-testid="academy-form-error-summary"
+        />
+        <BotProtectionField
+          sitekey={botProtectionSiteKey}
+          {...captcha.fieldProps}
+        />
+        {/* Yandex SmartCaptcha's notice: the widget runs with its shield
+            hidden, so the form states the protection itself (003 EARS-17). */}
+        <BotProtectionDisclosure
+          config={{
+            ...ACADEMY_AUTH_FLOW,
+            botProtection: { siteKey: botProtectionSiteKey },
+          }}
+          tone="on-primary"
         />
       </form>
     </Form>

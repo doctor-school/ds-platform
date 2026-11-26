@@ -169,11 +169,6 @@ services:
       # route list the IMAGE mounts, to the derived route walk. Every image carries
       # the manifest; no production compose sets this, so prod answers 404 there.
       CONTOUR_MANIFEST: "1"
-      # Feature 013 EARS-6: fail-closed private JSON persistence (api-prod
-      # precedent). Per-slot volume — a preview must not read main's submissions.
-      ACADEMY_SUBMISSIONS_DIR: /var/lib/ds-platform/academy-submissions
-    volumes:
-      - academy_submissions:/var/lib/ds-platform/academy-submissions
     depends_on:
       api:
         condition: service_started
@@ -190,9 +185,10 @@ services:
       retries: 5
       start_period: 30s
 
-  # Academy partnership EARS-7 fixture. The same portal image serves the guest home
-  # against an actual non-directory. Keep its production-shaped sibling's volume
-  # and credentials out of this container.
+  # Academy partnership EARS-7 fixture (033 EARS-18). The same portal image serves
+  # the guest home, but its BFF rewrite target `api` resolves to this container's
+  # own loopback, where nothing listens: the form's intake POST really fails
+  # server-side and no row is written. No credentials enter this container.
   portal-partnership-unavailable:
     logging: *default-logging
     image: ds-portal:${DEPLOY_SHA:?}
@@ -201,14 +197,15 @@ services:
     environment:
       PORT: "3001"
       DOCTOR_PUBLIC_ORIGIN: https://doctor-${SLOT:?}.${STAGE_BASE_DOMAIN:?}
-      ACADEMY_SUBMISSIONS_DIR: /dev/null
+    extra_hosts:
+      - "api:127.0.0.1"
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "if(!require('node:fs').lstatSync(process.env.ACADEMY_SUBMISSIONS_DIR).isCharacterDevice())process.exit(1);fetch('http://localhost:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "require('node:dns').promises.lookup('api').then(a=>{if(a.address!=='127.0.0.1')process.exit(1);return fetch('http://localhost:3001/')}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s
@@ -411,7 +408,6 @@ services:
       - stg-infra
 
 volumes:
-  academy_submissions:
   centrifugo_data:
 
 networks:

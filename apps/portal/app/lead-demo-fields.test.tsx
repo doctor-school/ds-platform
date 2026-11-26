@@ -10,9 +10,32 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as botProtection from "@ds/auth-flow/bot-protection";
+import { SMARTCAPTCHA_NOTICE_URL } from "@ds/auth-flow/bot-protection";
+
 import { LeadDemoFields, type LeadDemoFieldsProps } from "./lead-demo-fields";
 
-type SubmitAction = LeadDemoFieldsProps["submitAction"];
+const BotProtectionDisclosureSpy = vi.hoisted(() =>
+  vi.fn<
+    (props: Parameters<typeof botProtection.BotProtectionDisclosure>[0]) => void
+  >(),
+);
+
+vi.mock("@ds/auth-flow/bot-protection", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@ds/auth-flow/bot-protection")>();
+  return {
+    ...actual,
+    BotProtectionDisclosure: (
+      props: Parameters<typeof actual.BotProtectionDisclosure>[0],
+    ) => {
+      BotProtectionDisclosureSpy(props);
+      return actual.BotProtectionDisclosure(props);
+    },
+  };
+});
+
+type SubmitAction = NonNullable<LeadDemoFieldsProps["submitAction"]>;
 type SubmitResult = Awaited<ReturnType<SubmitAction>>;
 
 const VALID_NAME = "  Анна Соколова  ";
@@ -248,6 +271,98 @@ describe("Feature 013 Academy partnership form", () => {
     expect(submit).toBeDisabled();
 
     await act(async () => resolveSubmit?.({ status: "success" }));
+  });
+
+  describe("033 EARS-18 — the queue intake", () => {
+    it("EARS-18: a refused bot-protection proof shows the challenge copy, keeps the values and a retry reuses the idempotency key", async () => {
+      const submitAction = vi
+        .fn<SubmitAction>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("refused"), {
+            code: "BOT_PROTECTION_REJECTED",
+          }),
+        )
+        .mockResolvedValueOnce({ status: "success" });
+      const user = userEvent.setup();
+      render(<LeadDemoFields submitAction={submitAction} />);
+      await fillValidForm(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+      expect(
+        await screen.findByText(
+          "Проверка истекла или не пройдена. Подтвердите ещё раз.",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Имя/)).toHaveValue(VALID_NAME);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+      expect(
+        await screen.findByText("Спасибо! Заявка сохранена."),
+      ).toBeVisible();
+      expect(submitAction).toHaveBeenCalledTimes(2);
+      expect(submitAction.mock.calls[1]![0].idempotencyKey).toBe(
+        submitAction.mock.calls[0]![0].idempotencyKey,
+      );
+    });
+
+    it("EARS-18: with protection off the attempt is sent once, tokenless", async () => {
+      const submitAction = vi
+        .fn<SubmitAction>()
+        .mockResolvedValue({ status: "success" });
+      const user = userEvent.setup();
+      render(<LeadDemoFields submitAction={submitAction} />);
+      await fillValidForm(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+
+      expect(
+        await screen.findByText("Спасибо! Заявка сохранена."),
+      ).toBeVisible();
+      expect(submitAction).toHaveBeenCalledTimes(1);
+      expect(submitAction.mock.calls[0]![1]).toBeUndefined();
+      expect(
+        screen.queryByTestId("smartcaptcha-disclosure"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("EARS-18: with a site key the form carries the SmartCaptcha disclosure", () => {
+      render(
+        <LeadDemoFields
+          submitAction={vi.fn<SubmitAction>()}
+          botProtectionSiteKey="site-key"
+        />,
+      );
+
+      expect(screen.getByTestId("smartcaptcha-disclosure")).toHaveTextContent(
+        "Форма защищена Yandex SmartCaptcha.",
+      );
+    });
+
+    it("EARS-18: the disclosure is the shared @ds/auth-flow notice on the brand surface", () => {
+      render(
+        <LeadDemoFields
+          submitAction={vi.fn<SubmitAction>()}
+          botProtectionSiteKey="site-key"
+        />,
+      );
+
+      expect(BotProtectionDisclosureSpy).toHaveBeenCalled();
+      const props = BotProtectionDisclosureSpy.mock.lastCall![0];
+      expect(props.config.botProtection?.siteKey).toBe("site-key");
+      expect(props.tone).toBe("on-primary");
+      expect(
+        within(screen.getByTestId("smartcaptcha-disclosure")).getByRole("link"),
+      ).toHaveAttribute("href", SMARTCAPTCHA_NOTICE_URL);
+    });
   });
 
   it("EARS-8: submit shall use the canonical on-primary surface treatment", () => {

@@ -423,3 +423,76 @@ describe("FeedCard post (Telegram)", () => {
     );
   });
 });
+
+/**
+ * 048 EARS-14 — the card and its placeholder draw the token values of the
+ * re-vendored `design-source/unit-feed-card.dc.html` (#4273, #4277): every
+ * size, tracking and leading below is the canvas `var(--…)` token's utility.
+ */
+describe("FeedCard — canvas token parity (unit-feed-card.dc.html)", () => {
+  const classesOf = (el: Element | null | undefined) =>
+    (el?.className ?? "").toString().split(/\s+/);
+
+  it("048 EARS-14: the title tracks at the title token and the no-media mark at the display token", () => {
+    const title = "Открыт набор центров в исследование эффективности PRP";
+    render(<FeedCard card={card({ title })} now={NOW} />);
+    const t = classesOf(screen.getByText(title));
+    expect(t).toContain("tracking-title");
+    expect(t).not.toContain("tracking-tight");
+    const { container } = render(
+      <FeedCard card={card({ image: null })} now={NOW} />,
+    );
+    const mark = classesOf(
+      container.querySelector('[data-feed-card-media="none"] span'),
+    );
+    expect(mark).toContain("tracking-display");
+    expect(mark).not.toContain("tracking-tight");
+  });
+
+  it("048 EARS-14: the partner mark and the date row set the label leading", () => {
+    const { container } = render(
+      <FeedCard card={card({ partner: { name: "Партнёр А" } })} now={NOW} />,
+    );
+    expect(
+      classesOf(screen.getByText("Партнёрский материал · Партнёр А")),
+    ).toContain("leading-label");
+    const date = container.querySelector("a")?.querySelector(".tabular-nums");
+    expect(classesOf(date)).toContain("leading-label");
+  });
+
+  it("048 EARS-14: the video play plate is the space-12 square with the lead glyph size", () => {
+    const { container } = render(
+      <FeedCard card={post({ duration: 72 })} now={NOW} />,
+    );
+    const play = classesOf(container.querySelector("[data-feed-card-play]"));
+    expect(play).toContain("size-12");
+    expect(play).toContain("text-lead");
+    expect(play).not.toContain("size-13");
+  });
+
+  it("048 EARS-14: the network chip is eyebrow type, wide tracking, label leading, space-px/space-1 padding", () => {
+    render(<FeedCard card={post()} now={NOW} />);
+    const chip = classesOf(screen.getByRole("img", { name: "Telegram" }));
+    for (const c of ["text-eyebrow", "tracking-wide", "leading-label", "px-1", "py-px"]) {
+      expect(chip).toContain(c);
+    }
+    expect(chip).not.toContain("text-xs");
+    expect(chip).not.toContain("leading-4");
+  });
+
+  it("048 EARS-14: the post date row sets the label leading", () => {
+    const { container } = render(<FeedCard card={post()} now={NOW} />);
+    const row = container.querySelector("[data-feed-card-external]")?.parentElement;
+    expect(classesOf(row)).toContain("leading-label");
+  });
+
+  it("048 EARS-14: the placeholder bars are the space-4 / space-6 / space-5 heights", () => {
+    const { container } = render(<FeedCardSkeleton />);
+    const heights = Array.from(
+      container.querySelectorAll('[data-slot="skeleton"], .animate-skeleton-pulse'),
+    )
+      .map((el) => classesOf(el).find((c) => /^h-/.test(c)))
+      .filter(Boolean);
+    expect(heights).toEqual(["h-4", "h-6", "h-5", "h-5", "h-5", "h-4"]);
+  });
+});

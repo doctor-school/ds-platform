@@ -7,6 +7,7 @@ import type {
   MaterialBodyMark,
   MaterialBodyText,
   FeedCard as FeedCardData,
+  FeedPostCard,
   PublicFeedPage,
 } from "@ds/schemas";
 import { RichTextContent } from "@ds/design-system/rich-text-content";
@@ -4805,6 +4806,22 @@ const FEED_CARD_PROPS: PropRow[] = [
   },
 ];
 
+function feedPostSample(over: Partial<FeedPostCard> = {}): FeedPostCard {
+  return {
+    id: "1b7e4d2a-5f60-4c1d-8a3e-2c9f0d6b7e11",
+    kind: "post",
+    text: "Сегодня в 19:00 МСК — эфир о показаниях к PRP",
+    publishedAt: "2026-11-10T10:00:00Z",
+    image: { url: FEED_SAMPLE_COVER },
+    duration: null,
+    source: { platform: "telegram", name: "BBM Academy · Telegram" },
+    partner: null,
+    href: "https://t.me/bbmacademy/1201",
+    external: true,
+    ...over,
+  };
+}
+
 function FeedCardSection() {
   const cases: Array<[string, FeedCardData]> = [
     ["news · image", feedSample(0, { kind: "news", partner: null })],
@@ -4834,6 +4851,8 @@ function FeedCardSection() {
         publishedAt: "2025-12-04T09:00:00Z",
       }),
     ],
+    ["post · video preview", feedPostSample({ duration: 72 })],
+    ["post · no image", feedPostSample({ image: null })],
   ];
   return (
     <BlockSection

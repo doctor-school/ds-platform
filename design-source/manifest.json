@@ -60,9 +60,9 @@
       "remotePath": "academy-material.dc.html"
     },
     "academy-partner.dc.html": {
-      "sha256": "343ccd774db33e28036315443b84991b28592e7eebb4cdb33c73711373d1fa8b",
-      "pulledSha256": "2bc462ef1083f5c8edc24a0995364cad5532c5f2d4ef4cf321c34f689f66ef91",
-      "pulledAt": "2026-11-26T03:22:09.351Z",
+      "sha256": "a1b703089beef83b4e68be3ed565c54e4e77526595fb2da135fc6e005a581347",
+      "pulledSha256": "8a4aa4b2f4f5fc9593f751bd15d469270bac6da849ff3f3a0dc6ed27b72ee3f5",
+      "pulledAt": "2026-11-26T03:34:52.216Z",
       "remotePath": "project/academy-partner.dc.html"
     },
     "academy-partners.dc.html": {
@@ -78,9 +78,9 @@
       "remotePath": null
     },
     "academy-projects.dc.html": {
-      "sha256": "298af5239f097205c101df7e1c5d03b86d6fbe650405a407767c3b72d1dc8494",
-      "pulledSha256": "b85aeb4e8c1a2674ff236aa6e5f7160d3c2c97f1b335d7310bb15b5a4ed7841a",
-      "pulledAt": "2026-11-26T03:22:05.416Z",
+      "sha256": "600727f25b57e27f505715843eaf436157165a4159720ede9b4c726a795d89f8",
+      "pulledSha256": "23808b13bced993b864ff0e18049163deae12c9f212ab2fe59f7d2f4cb36e792",
+      "pulledAt": "2026-11-26T03:34:50.780Z",
       "remotePath": "project/academy-projects.dc.html"
     },
     "account-my-events.dc.html": {

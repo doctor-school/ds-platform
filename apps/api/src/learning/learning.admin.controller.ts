@@ -32,9 +32,14 @@ import {
   SetLearningScopeRulesRequestSchema,
   UpdateLearningPresetRequestSchema,
   parseIfMatchVersion,
+  ReorderLearningCoursesRequestSchema,
+  ReorderLearningModulesRequestSchema,
   ReorderLearningStepsRequestSchema,
   SetLearningStepSourceRequestSchema,
+  UpdateLearningCourseRequestSchema,
   UpdateLearningLessonRequestSchema,
+  UpdateLearningModuleRequestSchema,
+  UpdateLearningSchoolRequestSchema,
   UpdateLearningStepRequestSchema,
   type LearningScopeKind,
 } from "@ds/schemas";
@@ -160,9 +165,116 @@ export class LearningAdminController {
   @Get("schools/:id")
   @Authz({ ...READ, tests: ["EARS-7", "EARS-26"] })
   @ApiOkResponse({ type: LearningSchoolAdminDetailDto })
-  async school(@Param("id") id: string): Promise<unknown> {
+  async school(
+    @Param("id") id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
     requireUuid(id);
-    return adminCommand(() => this.admin.school(id));
+    const { body, etag } = await adminCommand(() =>
+      this.admin.schoolWithVersion(id),
+    );
+    void reply.header("etag", etag);
+    return body;
+  }
+
+  /** 023 EARS-26, EARS-28 — the school's EARS-1 data, under the school's `If-Match`. */
+  @Patch("schools/:id")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-26", "EARS-28"] })
+  @ApiOkResponse({ type: LearningSchoolAdminDto })
+  updateSchool(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(UpdateLearningSchoolRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      {
+        method: "PATCH",
+        route: `${BASE}/schools/:id`,
+        path: `${BASE}/schools/${id}`,
+        payload,
+        versioned: true,
+      },
+      (v, complete) => this.admin.updateSchool(id, payload, v, complete),
+    );
+  }
+
+  /** 023 EARS-26 — a published school reaches doctors (EARS-3). */
+  @Post("schools/:id/publish")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-26", "EARS-28"] })
+  @ApiOkResponse({ type: LearningSchoolAdminDto })
+  publishSchool(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.schoolState(id, "published", req, reply);
+  }
+
+  @Post("schools/:id/unpublish")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-26", "EARS-28"] })
+  @ApiOkResponse({ type: LearningSchoolAdminDto })
+  unpublishSchool(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.schoolState(id, "draft", req, reply);
+  }
+
+  private schoolState(
+    id: string,
+    state: "draft" | "published",
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const verb = state === "published" ? "publish" : "unpublish";
+    return this.run(
+      req,
+      reply,
+      {
+        method: "POST",
+        route: `${BASE}/schools/:id/${verb}`,
+        path: `${BASE}/schools/${id}/${verb}`,
+        payload: {},
+        versioned: true,
+      },
+      (v, complete) => this.admin.setSchoolState(id, state, v, complete),
+    );
+  }
+
+  /** 023 EARS-27 — the school's courses in a new order, under the school's `If-Match`. */
+  @Put("schools/:id/course-order")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-27", "EARS-28"] })
+  @ApiOkResponse({ type: LearningSchoolAdminDto })
+  reorderCourses(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(ReorderLearningCoursesRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      {
+        method: "PUT",
+        route: `${BASE}/schools/:id/course-order`,
+        path: `${BASE}/schools/${id}/course-order`,
+        payload,
+        versioned: true,
+      },
+      (v, complete) =>
+        this.admin.reorderCourses(id, payload.courseIds, v, complete),
+    );
   }
 
   @Post("schools")
@@ -234,6 +346,59 @@ export class LearningAdminController {
     return body;
   }
 
+  /** 023 EARS-27, EARS-28 — the course's EARS-1 data, under the course's `If-Match`. */
+  @Patch("courses/:id")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-27", "EARS-28"] })
+  @ApiOkResponse({ type: LearningCourseAdminDto })
+  updateCourse(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(UpdateLearningCourseRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      {
+        method: "PATCH",
+        route: `${BASE}/courses/:id`,
+        path: `${BASE}/courses/${id}`,
+        payload,
+        versioned: true,
+      },
+      (v, complete) => this.admin.updateCourse(id, payload, v, complete),
+    );
+  }
+
+  /** 023 EARS-27 — the course's modules in a new order, under the course's `If-Match`. */
+  @Put("courses/:id/module-order")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-27", "EARS-28"] })
+  @ApiOkResponse({ type: LearningCourseAdminDto })
+  reorderModules(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(ReorderLearningModulesRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      {
+        method: "PUT",
+        route: `${BASE}/courses/:id/module-order`,
+        path: `${BASE}/courses/${id}/module-order`,
+        payload,
+        versioned: true,
+      },
+      (v, complete) =>
+        this.admin.reorderModules(id, payload.moduleIds, v, complete),
+    );
+  }
+
   @Post("courses/:id/publish")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4"] })
@@ -302,6 +467,32 @@ export class LearningAdminController {
         versioned: false,
       },
       (_v, complete) => this.admin.createModule(payload, complete),
+    );
+  }
+
+  /** 023 EARS-27 — rename a module, under the module's `If-Match`. */
+  @Patch("modules/:id")
+  @HttpCode(200)
+  @Authz({ ...WRITE, tests: ["EARS-27", "EARS-28"] })
+  @ApiOkResponse({ type: LearningModuleAdminDto })
+  updateModule(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(UpdateLearningModuleRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      {
+        method: "PATCH",
+        route: `${BASE}/modules/:id`,
+        path: `${BASE}/modules/${id}`,
+        payload,
+        versioned: true,
+      },
+      (v, complete) => this.admin.updateModule(id, payload, v, complete),
     );
   }
 

@@ -217,6 +217,67 @@ export type CreateLearningCourseRequest = z.infer<
   typeof CreateLearningCourseRequestSchema
 >;
 
+const nonEmptyChange = { message: "nothing to change" };
+
+/**
+ * 023 EARS-26 — edit a school's EARS-1 data (under the school's `If-Match`).
+ * An optional text set to `null` clears it; the direction, the leading expert,
+ * the project and the slug stay as created.
+ */
+export const UpdateLearningSchoolRequestSchema = z
+  .strictObject({
+    title: title.optional(),
+    description: text.optional(),
+    facts: LearningSchoolFactsSchema.optional(),
+    soonNote: text.min(1).nullable().optional(),
+    communityUrl: httpsUrl.nullable().optional(),
+    mentoringOffer: text.min(1).nullable().optional(),
+    internshipOffer: text.min(1).nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, nonEmptyChange);
+export type UpdateLearningSchoolRequest = z.infer<
+  typeof UpdateLearningSchoolRequestSchema
+>;
+
+/** 023 EARS-27 — edit a course's EARS-1 data (under the course's `If-Match`). */
+export const UpdateLearningCourseRequestSchema = z
+  .strictObject({
+    title: title.optional(),
+    description: text.optional(),
+    academicHours: z.number().int().min(0).max(10_000).optional(),
+    documentKind: LearningDocumentKindSchema.optional(),
+    documentPrerequisites: text.optional(),
+    partnerOrganisationId: z.uuid().nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, nonEmptyChange);
+export type UpdateLearningCourseRequest = z.infer<
+  typeof UpdateLearningCourseRequestSchema
+>;
+
+/** 023 EARS-27 — the school's courses in their new order (every course exactly once). */
+export const ReorderLearningCoursesRequestSchema = z.strictObject({
+  courseIds: z.array(z.uuid()).min(1).max(500),
+});
+export type ReorderLearningCoursesRequest = z.infer<
+  typeof ReorderLearningCoursesRequestSchema
+>;
+
+/** 023 EARS-27 — the course's modules in their new order (every module exactly once). */
+export const ReorderLearningModulesRequestSchema = z.strictObject({
+  moduleIds: z.array(z.uuid()).min(1).max(200),
+});
+export type ReorderLearningModulesRequest = z.infer<
+  typeof ReorderLearningModulesRequestSchema
+>;
+
+/** 023 EARS-27 — rename a module (under the module's `If-Match`). */
+export const UpdateLearningModuleRequestSchema = z.strictObject({
+  title,
+});
+export type UpdateLearningModuleRequest = z.infer<
+  typeof UpdateLearningModuleRequestSchema
+>;
+
 export const CreateLearningModuleRequestSchema = z.strictObject({
   courseId: z.uuid(),
   title,

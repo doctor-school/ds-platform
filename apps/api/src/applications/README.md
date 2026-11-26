@@ -11,8 +11,9 @@ the contract in `packages/schemas/src/applications/`, and this module.
 | `applications.service.ts`                      | the author intake and read; `eraseApplication` (EARS-20); `eraseApplicationsOfAccount` (EARS-24); the purge steps |
 | `applications.purge.ts`                        | the daily retention pass: expiry (EARS-23), then erasure one year after closing (EARS-20)                         |
 | `applications.me.controller.ts`                | `POST /v1/me/applications/author` (EARS-6, EARS-7); `GET /v1/me/applications?kind=author` (EARS-10)               |
-| `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); 034's investor intake joins it                              |
+| `applications.public.controller.ts`            | `POST /v1/public/applications/partnership` (EARS-18); `POST /v1/public/applications/investor` (034 EARS-6)        |
 | `applications.partnership.service.ts`          | the partnership intake: replay lookup, fixed consent tag, one row with its contact                                |
+| `applications.investor.service.ts`             | the investor intake (034): replay lookup, current consent tag, one row with its contact, both notices             |
 | `import-partnership-records.ts` (+ `.main.ts`) | the one-off import of the interim form's stored records (EARS-19)                                                 |
 | `applications.admin.controller.ts`             | the admin «Заявки» routes `/v1/admin/applications*` (EARS-13…EARS-17, EARS-20)                                    |
 | `applications.admin.service.ts`                | the admin list, detail, status move, notes and erasure on request                                                 |
@@ -42,6 +43,18 @@ otherwise). The row carries `payload { name, companyOrClinic?, role }`,
 purpose `academy_partnership_contact` with that tag and no `consent_records`
 row, and `receipt_notice = not_applicable` (the form promises no letter). The
 answer and the replay's is `201 { id }`.
+
+`POST /v1/public/applications/investor` — 034's «Инвесторам» form (EARS-4,
+EARS-6), no account, `@BotProtected("investor-request")`, the same
+`Idempotency-Key` rules. Body `{ contact: { organisation, fullName, role?,
+email, phone? }, payload: { task? }, consent: { accepted: true, versionTag } }`
+(bounds in `@ds/schemas` `investor.schema.ts`; an empty optional field is stored
+absent); a missing or unticked consent is `400` on `consent`, and so is a
+`versionTag` other than `INVESTOR_REQUEST_CONSENT_VERSION_TAG`. The row carries
+that contact and payload, the organisation as the subject line, consent purpose
+`investor-request-personal-data` with the current tag and no `consent_records`
+row; both notices follow the commit, the receipt to `contact.email`. The answer
+and the replay's is `201 { id }`.
 
 ## Import of the interim records (EARS-19)
 
@@ -144,7 +157,7 @@ intake's answer. It sends, once each through the mailer chain's failover:
   `skipped` when nobody holds the role;
 - the **receipt** «Заявка получена» (`applicationReceiptMessage`, the owner's
   Stage-A copy on #4029) to the kind's `receiptTo` recipient — the account
-  email for `author`, the contact's `email` for a later `contact-email` kind.
+  email for `author`, the contact's `email` for `investor` (`contact-email`).
   Outcome `receipt_notice`: `sent`, `failed`, or `not_applicable` for a kind
   without a receipt (`partnership`).
 

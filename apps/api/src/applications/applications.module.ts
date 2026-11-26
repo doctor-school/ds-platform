@@ -7,6 +7,7 @@ import { ApplicationsAdminController } from "./applications.admin.controller.js"
 import { ApplicationAdminProblemFilter } from "./applications.admin.errors.js";
 import { ApplicationsAdminService } from "./applications.admin.service.js";
 import { ApplicationsMeController } from "./applications.me.controller.js";
+import { ApplicationsInvestorService } from "./applications.investor.service.js";
 import { ApplicationsPartnershipService } from "./applications.partnership.service.js";
 import { ApplicationsPublicController } from "./applications.public.controller.js";
 import { ApplicationsPurge } from "./applications.purge.js";
@@ -37,6 +38,7 @@ import {
     ApplicationNotices,
     ApplicationsService,
     ApplicationsPartnershipService,
+    ApplicationsInvestorService,
     PartnershipRecordsImport,
     ApplicationsPurge,
     {

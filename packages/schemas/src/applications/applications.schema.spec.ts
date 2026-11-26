@@ -40,7 +40,7 @@ describe("033 EARS-6, EARS-7, EARS-20, EARS-23 — application queue contract", 
     });
     expect(parsed.topic).toBe("Ведение пациентов с гонартрозом");
     expect(parsed.about).toBe("Практикующий кардиолог");
-    expect(APPLICATION_KINDS).toEqual(["author", "partnership"]);
+    expect(APPLICATION_KINDS).toEqual(["author", "partnership", "investor"]);
     for (const format of ["course_series", "single_lesson", "podcast", "talk"])
       expect(
         AuthorApplicationIntakeSchema.safeParse({ ...body, format }).success,

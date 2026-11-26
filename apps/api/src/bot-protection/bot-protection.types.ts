@@ -42,7 +42,11 @@ export type BotProtectionAction =
   // 033 EARS-18 (#4032): the Academy home's partnership form — a guest intake
   // into the same queue, its own action so a later action-scoped provider can
   // tell the no-account door from the signed-in one.
-  | "partnership";
+  | "partnership"
+  // 034 EARS-6 (#4236): the Academy «Инвесторам» form — the queue's second
+  // guest intake, its own action so an action-scoped provider can tell the
+  // investor door from the partnership one.
+  | "investor-request";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

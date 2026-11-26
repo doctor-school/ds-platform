@@ -2964,6 +2964,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/applications/investor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ApplicationsPublicController_submitInvestor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/applications/partnership": {
         parameters: {
             query?: never;
@@ -3865,7 +3881,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "author" | "partnership";
+            kind: "author" | "partnership" | "investor";
             kindLabel: string;
             notes: {
                 /** Format: uuid */
@@ -3882,7 +3898,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                kind: "author" | "partnership";
+                kind: "author" | "partnership" | "investor";
                 outcome: ("accepted" | "declined" | "expired") | null;
                 /** @enum {string} */
                 status: "new" | "in_review" | "closed";
@@ -3911,7 +3927,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                kind: "author" | "partnership";
+                kind: "author" | "partnership" | "investor";
                 kindLabel: string;
                 outcome: ("accepted" | "declined" | "expired") | null;
                 /** @enum {string} */
@@ -3923,7 +3939,7 @@ export interface components {
             }[];
             kinds: {
                 /** @enum {string} */
-                kind: "author" | "partnership";
+                kind: "author" | "partnership" | "investor";
                 label: string;
             }[];
             nextCursor: string | null;
@@ -4752,6 +4768,28 @@ export interface components {
                 state: "normal" | "registered" | "soldOut" | "live" | "recorded";
                 title: string;
             }[];
+        };
+        InvestorRequestIntakeDto: {
+            consent: {
+                /** @constant */
+                accepted: true;
+                versionTag: string;
+            };
+            contact: {
+                /** Format: email */
+                email: string;
+                fullName: string;
+                organisation: string;
+                phone?: string;
+                role?: string;
+            };
+            payload: {
+                task?: string;
+            };
+        };
+        InvestorRequestIntakeResultDto: {
+            /** Format: uuid */
+            id: string;
         };
         LearningAttemptDto: {
             /** Format: uuid */
@@ -11126,6 +11164,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    ApplicationsPublicController_submitInvestor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvestorRequestIntakeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestorRequestIntakeResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRefusalDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRefusalDto"];
+                };
             };
         };
     };

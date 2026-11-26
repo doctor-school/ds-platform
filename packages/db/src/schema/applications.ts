@@ -17,8 +17,8 @@ import { users } from "./users.js";
 /**
  * 033 — the shared application queue (033-design «Data model»).
  *
- * One row per submitted request of any kind (`author`, `partnership`; 034's
- * investor kind extends `applications_kind_check`). The row is
+ * One row per submitted request of any kind (`author`, `partnership`, 034's
+ * `investor`). The row is
  * the record of truth AND the intake's idempotent result: the key lives here,
  * unique per kind, so a replay is one lookup inside the intake transaction.
  *
@@ -70,7 +70,10 @@ export const applications = pgTable(
     version: integer("version").notNull().default(1),
   },
   (t) => [
-    check("applications_kind_check", sql`${t.kind} IN ('author', 'partnership')`),
+    check(
+      "applications_kind_check",
+      sql`${t.kind} IN ('author', 'partnership', 'investor')`,
+    ),
     check(
       "applications_status_check",
       sql`${t.status} IN ('new', 'in_review', 'closed')`,

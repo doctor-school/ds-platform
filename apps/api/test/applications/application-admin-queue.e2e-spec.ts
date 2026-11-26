@@ -290,6 +290,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(page.kinds).toEqual([
         { kind: "author", label: "Автор" },
         { kind: "partnership", label: "Партнёрство" },
+        { kind: "investor", label: "Инвестор" },
       ]);
       const ids = page.items.map((i) => i.id);
       expect(ids.indexOf(newer)).toBeLessThan(ids.indexOf(older));

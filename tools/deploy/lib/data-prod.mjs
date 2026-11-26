@@ -59,6 +59,8 @@ export const DATA_READ_VERBS = [
   "recovery-latest",
   // #4144: the data box's half of `host-state` (spec §5 «Data verbs of the read path»).
   "read-host-state",
+  // #4280: the data-secret unit's journal, ds-data-prod's part of `release-journal`.
+  "read-secret-journal",
 ];
 
 /**

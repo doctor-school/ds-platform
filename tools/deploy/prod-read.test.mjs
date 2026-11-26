@@ -232,6 +232,10 @@ describe("4144: host-state — the operator reads both boxes' host state", () =>
       disk: { root: vol("/", 40, 10), postgresData: vol("/", 40, 10) },
       archiver: { archivedCount: 42, failedCount: 1, lastArchivedTime: "2026-11-17T18:59:01Z", lastFailedTime: "2026-11-17T10:20:00Z", lastFailedWal: "00000001000000000000002A" },
       pgbackrest: { version: "pgBackRest 2.60.0" },
+      offsite: [
+        { repo: 2, host: "s3.ap-southeast-2.idrivee2.com", state: "tcp-refused", http: null },
+        { repo: 3, host: "s3.onidel.test", state: "reachable", http: 403 },
+      ],
     }),
   };
   it("prints each box's fields, one line per probe", () => {
@@ -252,7 +256,19 @@ describe("4144: host-state — the operator reads both boxes' host state", () =>
       "disk postgres data: 10.0 GiB used of 40.0 GiB (25%), 30.0 GiB free; inodes 250 used of 1000, 750 free (mount /)",
       "pg_stat_archiver: archived 42, last 2026-11-17T18:59:01Z; failed 1, last 2026-11-17T10:20:00Z (00000001000000000000002A)",
       "pgbackrest: pgBackRest 2.60.0",
+      "offsite repo2 s3.ap-southeast-2.idrivee2.com: tcp-refused http=-",
+      "offsite repo3 s3.onidel.test: reachable http=403",
     ]);
+  });
+  it("4280: prints a failed offsite probe and no endpoint by their fixed lines; rejects an unlisted repo field", () => {
+    const withOffsite = (offsite) => hostStateLines({ ...answer, data: { ...answer.data, offsite } });
+    assert.equal(withOffsite({ error: "probe failed" }).at(-1), "offsite: error — probe failed");
+    assert.equal(withOffsite([]).at(-1), "offsite: no repo endpoint set");
+    assert.throws(
+      () => withOffsite([{ ...answer.data.offsite[0], key: "x" }]),
+      /unlisted or missing field/,
+    );
+    assert.throws(() => withOffsite("reachable"), /unlisted or missing field/);
   });
   it("prints a probe's error and an unreachable data box by their fixed reasons", () => {
     const lines = hostStateLines({

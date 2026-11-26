@@ -721,7 +721,9 @@ The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-dri
 the runner sees status lines only. The operator reads it with no break-glass key (#4067):
 `gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<sha>`, then
 `pnpm prod:read <run-id>` prints the driver's journal tail, the tails of ds-api-prod's
-failed step units and the failure note (spec §5 «Prod read verbs.»). The driver's tail is
+failed step units, the SHA's `api-secret` and `data-secret` rotation units (#4280; the
+data box's over the hop, as the data verb `read-secret-journal`) and the failure note
+(spec §5 «Prod read verbs.»). The driver's tail is
 read by its `release-driver` identifier (`journalctl -u ds-prod-<sha12>-driver -t release-driver`,
 #4124): the driver's sudo calls journal an audit line each under `sudo`, and those lines
 would otherwise fill the 400-line window and push out the data-prod phases' status lines.
@@ -735,6 +737,11 @@ check (#4144): `gh workflow run prod-observe.yml --ref main -f verb=host-state`,
 `pg_stat_archiver` and the `pgbackrest version` line. The answer is a closed field list
 (`lib/prod-read.mjs` `HOST_STATE_FIELDS`); an unreachable data box answers a fixed reason
 for its half while ds-api-prod's still answers (spec §5 «Prod read verbs.»).
+On ds-data-prod it also prints one line per offsite repo with an endpoint (#4280):
+`offsite repo<n> <host>: <reachable|tcp-refused|timeout|dns-fail|tls-fail> http=<code|->`,
+from one anonymous `curl -q` HTTPS request capped at 8 s. The endpoint is data.env's
+`PGBACKREST_REPO<n>_S3_ENDPOINT` (only that name is read), else a committed
+`repo<n>-s3-endpoint=` line of `pgbackrest.conf`; no credential is sent.
 
 ## Docker Hub login on the boxes (#2240)
 

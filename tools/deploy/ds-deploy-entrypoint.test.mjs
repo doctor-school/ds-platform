@@ -30,7 +30,7 @@ import { gzipSync } from "node:zlib";
 import { BOXES, SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
-import { HOST_STATE_FIELDS } from "./lib/prod-read.mjs";
+import { HOST_STATE_FIELDS, hostStateLines } from "./lib/prod-read.mjs";
 import { REPORT_ATTEMPT_RE } from "../staging/e2e-stage.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -2848,7 +2848,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.deepEqual(answer.failure, note);
     assert.deepEqual(
       answer.units.map((u) => u.unit),
-      [`ds-prod-${sha12}-driver`, `ds-prod-${sha12}-migrate`, `ds-prod-${sha12}-prune`],
+      [
+        `ds-prod-${sha12}-driver`,
+        `ds-prod-${sha12}-migrate`,
+        `ds-prod-${sha12}-prune`,
+        `ds-prod-${sha12}-api-secret`,
+        `ds-prod-${sha12}-data-secret`,
+      ],
     );
     assert.deepEqual(answer.units[0].lines.map((l) => l.split(": ").at(-1)), [
       `ds-prod-${sha12}-driver line 1`,
@@ -2862,11 +2868,51 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         ["driver", " -t release-driver"],
         ["migrate", ""],
         ["prune", ""],
+        ["api-secret", ""],
+        ["data-secret", ""],
       ]
         .map(([u, match]) => `-u ds-prod-${sha12}-${u}${match} -n 400 -o short-iso -q --no-pager\n`)
         .join(""),
     );
-    assert.equal(log("ds-release") + log("ssh") + log("docker"), "", "no release check, no hop");
+    assert.equal(log("ds-release") + log("docker"), "", "no release check");
+    assert.match(log("ssh"), new RegExp(`read-secret-journal ${SHA}\\n$`), "one hop: read-secret-journal <sha>");
+  });
+
+  it("4280: release-journal answers the SHA's data-secret and api-secret unit journals, never a value line", () => {
+    const sha12 = journalBox({});
+    // A planted data.env with secret-looking values; the secret units' stub journal
+    // carries pgBackRest's error line and a line that would print a value.
+    mkdirSync(join(dataRoot(), "etc/ds-platform"), { recursive: true });
+    writeFileSync(
+      join(dataRoot(), "etc/ds-platform/data.env"),
+      "PGBACKREST_REPO3_S3_KEY_SECRET=planted-secret-4280\nPGBACKREST_REPO3_S3_ENDPOINT=s3.example.test\n",
+    );
+    writeFileSync(
+      join(stubs, "journalctl"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/journalctl.log"',
+        'echo "2026-11-26T10:00:00+00:00 ds-data-prod bash[1]: $2 line 1"',
+        'case $2 in *-secret)',
+        '  echo "2026-11-26T10:00:01+00:00 ds-data-prod bash[1]: P00 ERROR: [039]: HTTP request failed with 403 (Forbidden) ?list-type=2"',
+        `  echo "2026-11-26T10:00:02+00:00 ds-data-prod bash[1]: PGBACKREST_REPO3_S3_KEY_SECRET=$(grep -o 'planted-[a-z0-9-]*' '${join(dataRoot(), "etc/ds-platform/data.env")}')" ;;`,
+        "esac",
+      ].join("\n") + "\n",
+    );
+    const r = readRun(`release-journal ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    const byName = Object.fromEntries(answer.units.map((u) => [u.unit.slice(`ds-prod-${sha12}-`.length), u]));
+    for (const unit of ["api-secret", "data-secret"]) {
+      assert.deepEqual(byName[unit].lines.map((l) => l.split("]: ").slice(1).join("]: ")), [
+        `ds-prod-${sha12}-${unit} line 1`,
+        "P00 ERROR: [039]: HTTP request failed with 403 (Forbidden) ?list-type=2",
+      ]);
+      assert.equal(byName[unit].truncated, false);
+    }
+    assert.doesNotMatch(JSON.stringify(answer), /planted-secret-4280/);
+    assert.doesNotMatch(r.stdout.toString("latin1") + r.stderr, /planted-secret-4280/);
+    assert.equal(byName.driver.lines.length, 1, "the release units read as before");
   });
 
   it("4067: release-journal bounds each unit's tail and answers the driver's alone with no status file or note", () => {
@@ -2875,8 +2921,11 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(r.status, 0, r.stderr);
     const answer = decrypt(r.stdout);
     assert.equal(answer.failure, null);
-    assert.equal(answer.units.length, 1);
-    assert.equal(answer.units[0].unit, `ds-prod-${sha12}-driver`);
+    assert.deepEqual(
+      answer.units.map((u) => u.unit),
+      [`ds-prod-${sha12}-driver`, `ds-prod-${sha12}-api-secret`, `ds-prod-${sha12}-data-secret`],
+    );
+    for (const u of answer.units) assert.ok(Buffer.byteLength(u.lines.join("\n")) <= 256 * 1024, u.unit);
     // the stub ignores -n: the byte bound holds the answer
     assert.ok(Buffer.byteLength(answer.units[0].lines.join("\n")) <= 256 * 1024);
     assert.equal(answer.units[0].truncated, true);
@@ -2936,7 +2985,9 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(
       log("journalctl"),
       `-u ds-prod-${sha12}-driver -t release-driver -n 400 -o short-iso -q --no-pager\n` +
-        `-u ds-prod-${sha12}-migrate -n 400 -o short-iso -q --no-pager\n`,
+        `-u ds-prod-${sha12}-migrate -n 400 -o short-iso -q --no-pager\n` +
+        `-u ds-prod-${sha12}-api-secret -n 400 -o short-iso -q --no-pager\n` +
+        `-u ds-prod-${sha12}-data-secret -n 400 -o short-iso -q --no-pager\n`,
     );
   });
 
@@ -2994,6 +3045,17 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       "  *) exit 7 ;;",
       "esac",
     ]);
+    // #4280: curl as it answers each offsite host — "<exit> <-w output>" in curl.<host>.
+    stub("curl", [
+      `[[ $box == data-root ]] || exit 9`,
+      'host=${*: -1}; host=${host#https://}; host=${host%/}',
+      'read -r rc out < "$STUB_DIR/curl.$host" || { rc=7 out="000 0.000000 0.000000"; }',
+      'printf "%s" "$out"',
+      'exit "$rc"',
+    ]);
+  };
+  const curlAnswers = (answers) => {
+    for (const [host, reply] of Object.entries(answers)) writeFileSync(join(dir, `curl.${host}`), `${reply}\n`);
   };
   const KEYS = (o) => Object.keys(o).sort();
   // The closed list: every object of the answer carries exactly HOST_STATE_FIELDS' keys.
@@ -3008,6 +3070,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.deepEqual(KEYS(b), [...HOST_STATE_FIELDS.box[role]].sort(), role);
       for (const [field, value] of Object.entries(b)) {
         if (field === "role" || field === "takenAt") continue;
+        if (field === "offsite" && Array.isArray(value)) {
+          for (const repo of value) assert.deepEqual(KEYS(repo), [...HOST_STATE_FIELDS.offsiteRepo].sort());
+          continue;
+        }
         if ("error" in value) {
           assert.deepEqual(KEYS(value), ["error"], `${role}.${field}`);
           continue;
@@ -3064,7 +3130,62 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(log("docker"), /^volume inspect --format \{\{\.Mountpoint\}\} ds-data-prod_pgdata$/m);
     assert.match(log("docker"), /^compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c SELECT .* FROM pg_stat_archiver$/m);
     assert.match(log("docker"), /^compose exec -T postgres pgbackrest version$/m);
+    assert.deepEqual(data.offsite, [], "no offsite endpoint set: no probe");
+    assert.equal(log("curl"), "");
   });
+
+  // --- 4280: each offsite repo's reachability from ds-data-prod ------------------------
+  const offsiteBox = () => {
+    hostBox();
+    writeFileSync(
+      join(dataRoot(), "etc/ds-platform/data.env"),
+      "PGBACKREST_REPO2_S3_KEY=planted-key-4280\nPGBACKREST_REPO2_S3_ENDPOINT=https://e2.example.test\n" +
+        "PGBACKREST_REPO2_S3_KEY_SECRET=planted-secret-4280\nPGBACKREST_REPO3_S3_KEY_SECRET=planted-secret3-4280\n",
+    );
+    const conf = join(dataRoot(), "home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest");
+    mkdirSync(conf, { recursive: true });
+    writeFileSync(join(conf, "pgbackrest.conf"), "#repo3: repo3-type=s3\n#repo3: repo3-s3-endpoint=s3.onidel.test\n");
+  };
+
+  it("4280: host-state answers one line per offsite repo, from data.env's endpoint or the committed one, and never a data.env value", () => {
+    offsiteBox();
+    curlAnswers({ "e2.example.test": "0 403 0.051 0.123", "s3.onidel.test": "35 000 0.040 0.000000" });
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.deepEqual(answer.data.offsite, [
+      { repo: 2, host: "e2.example.test", state: "reachable", http: 403 },
+      { repo: 3, host: "s3.onidel.test", state: "tls-fail", http: null },
+    ]);
+    assert.deepEqual(hostStateLines(answer).filter((l) => l.startsWith("offsite")), [
+      "offsite repo2 e2.example.test: reachable http=403",
+      "offsite repo3 s3.onidel.test: tls-fail http=-",
+    ]);
+    const everything = JSON.stringify(answer) + r.stdout.toString("latin1") + r.stderr + log("curl") + log("ssh");
+    assert.doesNotMatch(everything, /planted-/);
+    // anonymous: no curlrc, no netrc, no user, no header; capped at 8 s
+    for (const line of log("curl").trim().split("\n")) {
+      assert.match(line, /^-q -s -o \/dev\/null --max-time 8 --proto =https -w .* https:\/\/[a-z0-9.]+\/$/);
+      assert.doesNotMatch(line, /(^| )(-u|--user|-H|--header|-n|--netrc|-K|--config)( |$)/);
+    }
+  });
+
+  for (const [what, reply, state, http] of [
+    ["refused TCP", "7 000 0.000000 0.000000", "tcp-refused", null],
+    ["a TCP timeout", "28 000 0.000000 0.000000", "timeout", null],
+    ["a TLS handshake timeout", "28 000 0.050000 0.000000", "timeout", null],
+    ["an unresolved name", "6 000 0.000000 0.000000", "dns-fail", null],
+    ["a failed TLS handshake", "35 000 0.050000 0.000000", "tls-fail", null],
+    ["an HTTP answer", "0 200 0.050000 0.120000", "reachable", 200],
+    ["an HTTP error status", "22 404 0.050000 0.120000", "reachable", 404],
+  ])
+    it(`4280: host-state classifies ${what} as ${state}`, () => {
+      offsiteBox();
+      curlAnswers({ "e2.example.test": reply });
+      const answer = decrypt(readRun("host-state").stdout);
+      assert.deepEqual(answer.data.offsite[0], { repo: 2, host: "e2.example.test", state, http });
+    });
 
   it("4144: host-state reports a dead resolver as measured values, never an aborted answer", () => {
     hostBox({ resolves: { root: [], "data-root": [] }, upstream: { root: "Global: 1.1.1.1\n", "data-root": null } });

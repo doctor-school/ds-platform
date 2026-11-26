@@ -610,6 +610,25 @@
         "https://github.com/doctor-school/ds-platform/issues/3956#issuecomment-6793447410"
       ]
     },
+    "feature-023-structure-editor-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/learning/",
+        "apps/admin/components/learning-relation-picker.tsx",
+        "packages/learning/src/admin/",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "schools-list",
+        "school-new",
+        "school-editor",
+        "course-structure",
+        "course-publish-refused"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/4018#issuecomment-7182710836"
+      ]
+    },
     "feature-024-learning-rules-admin-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

@@ -19,7 +19,7 @@
     },
     "academy-home.dc.html": {
       "untagged": 7,
-      "offToken": 8
+      "offToken": 0
     },
     "academy-index-demo.dc.html": {
       "untagged": 9,
@@ -131,7 +131,7 @@
     },
     "unit-project-card.dc.html": {
       "untagged": 1,
-      "offToken": 2
+      "offToken": 1
     },
     "unit-room-frame.dc.html": {
       "untagged": 7,

@@ -376,11 +376,15 @@ export function isNonRuntimePath(path: string): boolean {
  *   IdP / captcha — any `idp` / `zitadel` / `captcha` path
  *             (`tools/staging/idp.mjs`, `tools/deploy/idp-policy.mjs`) and the
  *             captcha enforcement `apps/api/src/bot-protection/**`.
+ * The auth rules read deployed code only (`isRuntimeAuthPath`): under
+ * `tools/**` the members are the `idp` / `zitadel` / `captcha` paths alone.
  */
-const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
+const ENVIRONMENT_SENSITIVE_AUTH_RES: readonly RegExp[] = [
   LIB_AUTH_RE,
   AUTH_PAGE_RE,
   MIDDLEWARE_RE,
+];
+const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
   /^apps\/api\/drizzle\//,
   /^packages\/db\/src\/schema\//,
   /^infra\//,
@@ -389,13 +393,24 @@ const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
   IDP_CAPTCHA_RE,
 ];
 
-const hasAuthSegment = (path: string) =>
-  path.split("/").some((segment) => /auth/i.test(segment));
+/** #4304: `tools/**` is operator / CI tooling that is never deployed, so the
+ * runtime-app auth rules (an `auth` segment, the `lib` auth / session modules,
+ * the auth pages, `middleware.*` / `proxy.*`) do not read it; its class
+ * members are named by the explicit `IDP_CAPTCHA_RE` / `sms` rules. */
+const NON_DEPLOYED_TOOLING_RE = /^tools\//;
+
+function isRuntimeAuthPath(path: string, authRes: readonly RegExp[]): boolean {
+  if (NON_DEPLOYED_TOOLING_RE.test(path)) return false;
+  return (
+    path.split("/").some((segment) => /auth/i.test(segment)) ||
+    authRes.some((re) => re.test(path))
+  );
+}
 
 export function isEnvironmentSensitivePath(path: string): boolean {
   if (isNonRuntimePath(path) || isE2eExecutionControl(path)) return false;
   return (
-    hasAuthSegment(path) ||
+    isRuntimeAuthPath(path, ENVIRONMENT_SENSITIVE_AUTH_RES) ||
     ENVIRONMENT_SENSITIVE_RES.some((re) => re.test(path))
   );
 }
@@ -408,12 +423,17 @@ export function isEnvironmentSensitivePath(path: string): boolean {
  * `tools/staging/idp*.mjs`), email / SMS code delivery and captcha. Docs and
  * templates (`*.md(x)`, `*.example`) and the rest of `infra/**` (terraform,
  * release driver, non-IdP dev stand) and migrations are not in them.
+ * The auth / session rules read deployed code only (`isRuntimeAuthPath`):
+ * under `tools/**` the members are the `idp` / `zitadel` / `captcha` / `sms`
+ * paths alone.
  */
-const STAGE_CHECK_RES: readonly RegExp[] = [
+const STAGE_CHECK_AUTH_RES: readonly RegExp[] = [
   LIB_AUTH_RE,
   LIB_SESSION_RE,
   AUTH_PAGE_RE,
   MIDDLEWARE_RE,
+];
+const STAGE_CHECK_RES: readonly RegExp[] = [
   MAILER_RE,
   /(?:^|[/._-])sms(?:[/._-]|$)/i,
   BOT_PROTECTION_RE,
@@ -427,7 +447,10 @@ export function requiresStageCheck(path: string): boolean {
     /\.(?:mdx?|example)$/i.test(path)
   )
     return false;
-  return hasAuthSegment(path) || STAGE_CHECK_RES.some((re) => re.test(path));
+  return (
+    isRuntimeAuthPath(path, STAGE_CHECK_AUTH_RES) ||
+    STAGE_CHECK_RES.some((re) => re.test(path))
+  );
 }
 
 function isStructuralAskPath(path: string): boolean {

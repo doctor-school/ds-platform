@@ -1777,10 +1777,15 @@ def offsite():
     out = []
     for arg in sys.argv[4:]:
         n, _, endpoint = arg.partition("=")
+        if n not in ("2", "3"):
+            continue
         m = ENDPOINT_RE.fullmatch(endpoint)
-        if n in ("2", "3") and m:
-            state, http = reach(m.group(1))
-            out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
+        if not m:
+            # not an https host[:port]: a fixed entry, the value never echoed
+            out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+            continue
+        state, http = reach(m.group(1))
+        out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
     return out
 
 def safe(probe):

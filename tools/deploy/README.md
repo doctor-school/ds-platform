@@ -722,7 +722,8 @@ the runner sees status lines only. The operator reads it with no break-glass key
 `gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<sha>`, then
 `pnpm prod:read <run-id>` prints the driver's journal tail, the tails of ds-api-prod's
 failed step units, the SHA's `api-secret` and `data-secret` rotation units (#4280; the
-data box's over the hop, as the data verb `read-secret-journal`) and the failure note
+data box's over the hop, as the data verb `read-secret-journal`; a hop that fails answers that
+unit as `not read — <reason>`, never as an empty journal) and the failure note
 (spec §5 «Prod read verbs.»). The driver's tail is
 read by its `release-driver` identifier (`journalctl -u ds-prod-<sha12>-driver -t release-driver`,
 #4124): the driver's sudo calls journal an audit line each under `sudo`, and those lines
@@ -739,9 +740,12 @@ check (#4144): `gh workflow run prod-observe.yml --ref main -f verb=host-state`,
 for its half while ds-api-prod's still answers (spec §5 «Prod read verbs.»).
 On ds-data-prod it also prints one line per offsite repo with an endpoint (#4280):
 `offsite repo<n> <host>: <reachable|tcp-refused|timeout|dns-fail|tls-fail> http=<code|->`,
-from one anonymous `curl -q` HTTPS request capped at 8 s. The endpoint is data.env's
-`PGBACKREST_REPO<n>_S3_ENDPOINT` (only that name is read), else a committed
-`repo<n>-s3-endpoint=` line of `pgbackrest.conf`; no credential is sent.
+from one anonymous `curl -q` HTTPS request capped at 8 s; an endpoint that is not an https
+`host[:port]` prints `offsite repo<n>: endpoint-unparsed` with no probe and no value. The
+endpoint is data.env's `PGBACKREST_REPO<n>_S3_ENDPOINT` (only that name is read). A
+committed `repo<n>-s3-endpoint=` line of `pgbackrest.conf` is the fallback, but the
+committed conf carries none for repo2/3 today: the data.env line is the live source; no
+credential is sent.
 
 ## Docker Hub login on the boxes (#2240)
 

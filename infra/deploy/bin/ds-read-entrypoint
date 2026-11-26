@@ -34,9 +34,11 @@
 # (#4067) answers the bounded journal tail of the release's driver unit and of every
 # step unit this box's status file records as not succeeded, of the SHA's api-secret
 # and (over the hop) data-secret rotation units (#4280), with the failure note: a
-# failed release or rotation is read without the break-glass key. `host-state` (#4144) answers
-# both prod boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's WAL
-# archiver and pgBackRest version: a closed field list, without the break-glass key.
+# failed release or rotation is read without the break-glass key; a data-secret unit the
+# hop could not read carries one fixed reason. `host-state` (#4144) answers both prod
+# boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's WAL archiver,
+# pgBackRest version and each offsite repo's reachability (#4280): a closed field list,
+# without the break-glass key.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -358,12 +360,22 @@ PY
 # The answer (argv: sha, the work dir, the line and byte bounds, the units): each unit's
 # tail, and the failure note as the driver recorded it (null when absent or not JSON).
 # #4280: the secret units print fixed status lines and pgBackRest's own errors, never a
-# value; a line that still reads as a NAME=value assignment is dropped all the same.
+# value; a line that still reads as a NAME=value assignment, or a docker compose
+# interpolation warning (it quotes the text after a "$" of an .env value), is dropped all
+# the same. The data-secret unit comes over the hop: a failed hop (its exit code in
+# hop.rc) answers one fixed reason beside the unit, so «not read» never reads as «no journal».
 read -r -d '' RELEASE_JOURNAL_PY <<'PY' || true
 import datetime, json, os, re, sys
 sha, work, max_lines, max_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
 SECRET_UNIT = re.compile(r"ds-prod-[0-9a-f]{12}-(data|api)-secret")
 ASSIGNMENT = re.compile(r"(?<![A-Za-z0-9_-])[A-Z][A-Z0-9_]{2,}=")
+COMPOSE_UNSET = re.compile(r"variable is not set")
+NOT_SERVED = "ds-data-prod does not serve read-secret-journal (the next release installs it)"
+HOP_REASONS = {2: NOT_SERVED, 3: NOT_SERVED, 124: "the read timed out", 255: "ds-data-prod is unreachable"}
+try:
+    hop_rc = int(open(os.path.join(work, "hop.rc"), "rb").read(16))
+except (OSError, ValueError):
+    hop_rc = -1
 units = []
 for i, unit in enumerate(sys.argv[5:]):
     try:
@@ -376,8 +388,11 @@ for i, unit in enumerate(sys.argv[5:]):
         lines = lines[1:]  # the byte bound cut the first line
     cut = cut or len(lines) >= max_lines
     if SECRET_UNIT.fullmatch(unit):
-        lines = [l for l in lines if not ASSIGNMENT.search(l)]
-    units.append({"unit": unit, "lines": lines, "truncated": cut})
+        lines = [l for l in lines if not ASSIGNMENT.search(l) and not COMPOSE_UNSET.search(l)]
+    entry = {"unit": unit, "lines": lines, "truncated": cut}
+    if unit.endswith("-data-secret") and hop_rc != 0:
+        entry["reason"] = HOP_REASONS.get(hop_rc, "the read failed")
+    units.append(entry)
 try:
     with open(os.path.join(work, "failure"), "rb") as f:
         failure = json.load(f)
@@ -418,7 +433,7 @@ release_journal() {
     python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
   i=$((i + 1))
   units+=("ds-prod-${sha:0:12}-data-secret")
-  { data_prod_hop "read-secret-journal $sha" 2>/dev/null || true; } |
+  { rc=0; data_prod_hop "read-secret-journal $sha" 2>/dev/null || rc=$?; printf '%s' "$rc" >"$read_work/hop.rc"; } |
     python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
   { sudo cat "$RELEASE_FAILURE_DIR/$sha.failure" 2>/dev/null || true; } | head -c 4096 >"$read_work/failure"
   python3 -I -X utf8 -c "$RELEASE_JOURNAL_PY" "$sha" "$read_work" "$JOURNAL_LINES" "$JOURNAL_MAX_BYTES" \
@@ -576,10 +591,15 @@ def offsite():
     out = []
     for arg in sys.argv[4:]:
         n, _, endpoint = arg.partition("=")
+        if n not in ("2", "3"):
+            continue
         m = ENDPOINT_RE.fullmatch(endpoint)
-        if n in ("2", "3") and m:
-            state, http = reach(m.group(1))
-            out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
+        if not m:
+            # not an https host[:port]: a fixed entry, the value never echoed
+            out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+            continue
+        state, http = reach(m.group(1))
+        out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
     return out
 
 def safe(probe):
@@ -646,8 +666,8 @@ SCHEMA = {
 }
 # #4280: one offsite repo's reachability (HOST_STATE_PY offsite()).
 OFFSITE_REPO = {"repo": lambda v: v in (2, 3) and not isinstance(v, bool),
-                "host": pattern(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[0-9]{1,5})?"),
-                "state": lambda v: v in ("reachable", "tcp-refused", "timeout", "dns-fail", "tls-fail"),
+                "host": opt(pattern(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[0-9]{1,5})?")),
+                "state": lambda v: v in ("reachable", "tcp-refused", "timeout", "dns-fail", "tls-fail", "endpoint-unparsed"),
                 "http": opt(lambda v: nat(v) and 100 <= v <= 599)}
 def ok(value, spec):
     if isinstance(value, dict) and set(value) == {"error"} and value["error"] in ERRORS:

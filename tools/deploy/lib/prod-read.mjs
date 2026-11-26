@@ -338,11 +338,13 @@ export function releaseJournalLines(answer) {
   );
   for (const unit of answer.units) {
     const lines = Array.isArray(unit?.lines) ? unit.lines : [];
-    out.push(
-      "",
-      `== ${unit?.unit} (${lines.length} lines${unit?.truncated ? ", the tail only" : ""})`,
-      ...lines,
-    );
+    // #4280: a unit the read could not reach (the data-secret unit over the hop) carries
+    // one fixed reason, so it never prints as an empty journal
+    const head =
+      typeof unit?.reason === "string"
+        ? `not read — ${unit.reason}`
+        : `${lines.length} lines${unit?.truncated ? ", the tail only" : ""}`;
+    out.push("", `== ${unit?.unit} (${head})`, ...lines);
   }
   // every box-sourced text passes one filter: an escape sequence never reaches the terminal
   return out.map(printable);
@@ -367,7 +369,8 @@ export const HOST_STATE_FIELDS = Object.freeze({
   volume: ["mount", "bytesTotal", "bytesUsed", "bytesFree", "inodesTotal", "inodesUsed", "inodesFree"],
   archiver: ["archivedCount", "failedCount", "lastArchivedTime", "lastFailedTime", "lastFailedWal"],
   pgbackrest: ["version"],
-  // #4280: `offsite` is a list of these, one per offsite repo with an endpoint.
+  // #4280: `offsite` is a list of these, one per offsite repo with an endpoint (an
+  // endpoint that is not an https host[:port]: state `endpoint-unparsed`, host null).
   offsiteRepo: ["repo", "host", "state", "http"],
 });
 
@@ -462,7 +465,12 @@ export function hostStateLines(answer) {
       if (isError(b.offsite)) out.push(`offsite: error — ${b.offsite.error}`);
       else if (b.offsite.length === 0) out.push("offsite: no repo endpoint set");
       else
-        for (const r of b.offsite) out.push(`offsite repo${r.repo} ${r.host}: ${r.state} http=${r.http ?? "-"}`);
+        for (const r of b.offsite)
+          out.push(
+            r.state === "endpoint-unparsed"
+              ? `offsite repo${r.repo}: endpoint-unparsed (not an https host[:port])`
+              : `offsite repo${r.repo} ${r.host}: ${r.state} http=${r.http ?? "-"}`,
+          );
     }
   }
   // every box-sourced text passes one filter: an escape sequence never reaches the terminal

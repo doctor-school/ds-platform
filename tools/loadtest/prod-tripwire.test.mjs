@@ -105,7 +105,9 @@ test("room-fanout refuses a production target without the explicit run confirmat
     // Any value other than the exact "1" is not a confirmation.
     assert.throws(
       () =>
-        assertRoomFanoutAllowed(origin, { LOADTEST_ROOM_PROD_CONFIRMED: "true" }),
+        assertRoomFanoutAllowed(origin, {
+          LOADTEST_ROOM_PROD_CONFIRMED: "true",
+        }),
       /REFUSING/,
       origin,
     );
@@ -127,7 +129,10 @@ test("room-fanout runs against a non-production target with no confirmation", ()
 });
 
 test("auth-burst refuses a trailing-dot or IP-literal production target without its confirmation", () => {
-  for (const origin of ["https://api.doctor.school.", `http://${PROD_BOX_IP}`]) {
+  for (const origin of [
+    "https://api.doctor.school.",
+    `http://${PROD_BOX_IP}`,
+  ]) {
     assert.throws(
       () => assertAuthBurstAllowed(origin, {}),
       /REFUSING to run auth-burst against production.*LOADTEST_SUPPRESSION_CONFIRMED=1/s,
@@ -137,5 +142,7 @@ test("auth-burst refuses a trailing-dot or IP-literal production target without 
       assertAuthBurstAllowed(origin, { LOADTEST_SUPPRESSION_CONFIRMED: "1" }),
     );
   }
-  assert.doesNotThrow(() => assertAuthBurstAllowed("http://localhost:3000", {}));
+  assert.doesNotThrow(() =>
+    assertAuthBurstAllowed("http://localhost:3000", {}),
+  );
 });

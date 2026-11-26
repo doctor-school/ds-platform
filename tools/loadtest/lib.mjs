@@ -128,7 +128,10 @@ function nonProdIps(env) {
   const raw = (env.LOADTEST_NON_PROD_IPS ?? "").trim();
   if (!raw) return new Set();
   const ips = new Set();
-  for (const entry of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+  for (const entry of raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     // The bare entry itself must be an address: parsing it as a URL first would
     // quietly turn a range like "192.168.1.0/24" into the one host 192.168.1.0.
     if (isIP(entry.replace(/^\[(.*)\]$/, "$1")) === 0) {
@@ -305,7 +308,9 @@ export function report(name, samples, { p95Ms, errorRate } = {}) {
     failures.push(`p95 ${p95}ms > threshold ${p95Ms}ms`);
   }
   if (errorRate != null && samples.errorRate > errorRate) {
-    failures.push(`error-rate ${er}% > threshold ${(errorRate * 100).toFixed(1)}%`);
+    failures.push(
+      `error-rate ${er}% > threshold ${(errorRate * 100).toFixed(1)}%`,
+    );
   }
   if (samples.count === 0) failures.push("zero requests issued");
 

@@ -76,7 +76,10 @@ function normalizedUrlHost(parsed) {
  * `isProdTarget`: any doctor.school name, any IP literal the operator has not
  * listed in LOADTEST_NON_PROD_IPS).
  */
-export function deriveExpectedCentrifugoWebSocketUrl(origin, env = process.env) {
+export function deriveExpectedCentrifugoWebSocketUrl(
+  origin,
+  env = process.env,
+) {
   let parsed;
   try {
     parsed = new URL(origin);

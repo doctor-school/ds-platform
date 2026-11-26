@@ -2,7 +2,8 @@
 // DS Platform — `room-fanout` load scenario (#873 phase 1).
 //
 // Models N doctors in a live webinar room (feature 006, recon fact 1):
-//   login → GET /v1/events/:id/room (grant: chat {url,token,channel}, stream,
+//   login → POST /v1/events/:id/registration (once per account, idempotent) →
+//   GET /v1/events/:id/room (grant: chat {url,token,channel}, stream,
 //   heartbeatIntervalSeconds) → Centrifugo WS connect (server-side subscribe to
 //   room:event:<id> via the connection token's channels claim) → hold the socket
 //   for one reported cadence N → send exactly one sampled
@@ -13,11 +14,12 @@
 //   behavior. `room-behavior` separately verifies server-side count timing and
 //   reconnect continuity.
 //
-// FIXTURE (phase-2 / smoke doc): the grant gate is authenticated AND registered
+// FIXTURE (smoke + run protocol): the grant gate is authenticated AND registered
 // (005 roster) AND live — so a real run needs LOADTEST_EVENT_ID pointing at a
-// LIVE event whose roster includes the synthetic users (provision + a roster-join
-// step). Absent that, GET /room returns the gate's 401/403/409; the scenario
-// records it and reports the fixture gap rather than faking a grant.
+// LIVE event and the provisioned synthetic users (LOADTEST_USE_PROVISIONED=1);
+// each account joins the roster itself through the registration command. Absent
+// that, GET /room returns the gate's 401/403/409; the scenario records it and
+// reports the fixture gap rather than faking a grant.
 //
 // HARD PROD GUARD (fail-closed): this scenario REFUSES to run against a
 // production target (lib.mjs `isProdTarget`) until
@@ -45,6 +47,7 @@ import {
 } from "./lib.mjs";
 import {
   centrifugoHold,
+  ensureRoomRegistration,
   fetchRoomGrant,
   loadManifestCredentials,
   loginCookie,
@@ -81,6 +84,10 @@ async function main() {
   const roomPath = `/v1/events/${encodeURIComponent(eventId)}`;
 
   let gateReported = false;
+  /** Manifest indexes whose account is already on the event's roster. */
+  const rostered = new Set();
+  /** Manifest index → the account's live session Cookie header. */
+  const sessions = new Map();
   const opts = {
     vus: intEnv("LOADTEST_VUS", 10),
     durationSeconds: intEnv("LOADTEST_DURATION_SECONDS", 20),
@@ -90,10 +97,31 @@ async function main() {
 
   const samples = await runVUs(async ({ vu, samples }) => {
     // 1. auth → cookie
+    // A doctor signs in once and stays in the room: the session is minted on
+    // an account's first iteration and reused, re-minted only after the gate
+    // answers 401. Signing in on every iteration would model no real doctor and
+    // would spend the fixed per-IP sign-in entry windows (README «Rate limits»).
     let cookie = null;
-    if (pool.length > 0) {
-      const cred = pool[vu % pool.length];
-      cookie = await loginCookie(origin, cred.email, cred.password);
+    const account = pool.length > 0 ? vu % pool.length : -1;
+    if (account >= 0) {
+      cookie = sessions.get(account) ?? null;
+      if (!cookie) {
+        const cred = pool[account];
+        cookie = await loginCookie(origin, cred.email, cred.password);
+        if (cookie) sessions.set(account, cookie);
+      }
+    }
+    // 1b. roster: the grant gate admits registered doctors only (005), so each
+    // signed-in account joins the roster once through the real, idempotent
+    // product command — the same seam the room-behavior verifier uses.
+    if (cookie && !rostered.has(account)) {
+      const reg = await ensureRoomRegistration(origin, eventId, cookie);
+      samples.record({
+        status: reg.status,
+        ms: reg.ms,
+        isError: reg.status >= 500 || reg.status === 0,
+      });
+      if (reg.ok) rostered.add(account);
     }
     // 2. room grant
     const grantRes = await fetchRoomGrant(origin, eventId, cookie);
@@ -102,6 +130,7 @@ async function main() {
       ms: grantRes.ms,
       isError: grantRes.status >= 500 || grantRes.status === 0,
     });
+    if (grantRes.status === 401 && account >= 0) sessions.delete(account);
     let grant;
     try {
       grant = JSON.parse(grantRes.body);

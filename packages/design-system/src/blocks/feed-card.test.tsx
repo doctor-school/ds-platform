@@ -709,6 +709,22 @@ describe("FeedCard — canvas token parity (unit-feed-card.dc.html)", () => {
     expect(classesOf(date)).toContain("leading-label");
   });
 
+  it("048 EARS-49: the network date row sets the canvas label type with proportional figures", () => {
+    for (const c of [post(), vkPost(), vkVideo()]) {
+      const { container, unmount } = render(<FeedCard card={c} now={NOW} />);
+      const row = classesOf(
+        container.querySelector("[data-feed-card-external]")?.parentElement ??
+          null,
+      );
+      expect(row).toContain("text-sm");
+      expect(row).toContain("leading-label");
+      expect(row).toContain("font-semibold");
+      expect(row).toContain("text-muted-foreground");
+      expect(row).not.toContain("tabular-nums");
+      unmount();
+    }
+  });
+
   it("048 EARS-14: the video play plate is the space-12 square with the lead glyph size", () => {
     const { container } = render(
       <FeedCard card={post({ duration: 72 })} now={NOW} />,

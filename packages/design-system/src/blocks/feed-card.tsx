@@ -542,7 +542,7 @@ function FeedNetworkCardView({
             </div>
           ) : null}
 
-          <div className="mt-auto flex items-center justify-between gap-2 text-sm leading-label font-semibold text-muted-foreground tabular-nums">
+          <div className="mt-auto flex items-center justify-between gap-2 text-sm leading-label font-semibold text-muted-foreground">
             <span>{formatFeedCardDate(card.publishedAt, now)}</span>
             <span
               data-feed-card-external=""

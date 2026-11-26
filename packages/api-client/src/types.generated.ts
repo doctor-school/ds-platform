@@ -4851,6 +4851,14 @@ export interface components {
             /** Format: uuid */
             id: string;
             modules: {
+                clubEvent: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: date-time */
+                    startsAt: string;
+                    title: string;
+                } | null;
+                clubEventId: string | null;
                 /** Format: uuid */
                 courseId: string;
                 /** Format: uuid */
@@ -5089,7 +5097,7 @@ export interface components {
                             after: unknown;
                             before: unknown;
                             /** @enum {string} */
-                            key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                            key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion" | "module.reward";
                         }[];
                         needed: {
                             completionSentence: string;
@@ -5299,7 +5307,7 @@ export interface components {
                         after: unknown;
                         before: unknown;
                         /** @enum {string} */
-                        key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                        key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion" | "module.reward";
                     }[];
                     needed: {
                         completionSentence: string;
@@ -5369,6 +5377,14 @@ export interface components {
             }[];
         };
         LearningModuleAdminDto: {
+            clubEvent: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                startsAt: string;
+                title: string;
+            } | null;
+            clubEventId: string | null;
             /** Format: uuid */
             courseId: string;
             /** Format: uuid */
@@ -5393,6 +5409,8 @@ export interface components {
                 "course.moduleSize"?: number;
                 /** @enum {string} */
                 lockedVisibility?: "hidden" | "locked";
+                /** @enum {string} */
+                "module.reward"?: "points" | "document" | "both";
                 /** @enum {string} */
                 order?: "strict" | "free";
                 "progress.maxPlaybackRate"?: number;
@@ -5463,6 +5481,8 @@ export interface components {
                     "course.moduleSize"?: number;
                     /** @enum {string} */
                     lockedVisibility?: "hidden" | "locked";
+                    /** @enum {string} */
+                    "module.reward"?: "points" | "document" | "both";
                     /** @enum {string} */
                     order?: "strict" | "free";
                     "progress.maxPlaybackRate"?: number;
@@ -5666,7 +5686,7 @@ export interface components {
             authority: "rules-editor" | "course-editor";
             effective: {
                 /** @enum {string} */
-                key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion" | "module.reward";
                 /** @enum {string} */
                 level: "platform" | "school" | "course" | "module" | "lesson" | "step";
                 preset: string | null;
@@ -5688,6 +5708,8 @@ export interface components {
                 "course.moduleSize"?: number;
                 /** @enum {string} */
                 lockedVisibility?: "hidden" | "locked";
+                /** @enum {string} */
+                "module.reward"?: "points" | "document" | "both";
                 /** @enum {string} */
                 order?: "strict" | "free";
                 "progress.maxPlaybackRate"?: number;

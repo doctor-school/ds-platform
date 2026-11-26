@@ -131,6 +131,8 @@ export const LEARNING_SETTING_SCHEMAS = {
   "course.moduleSize": z.number().int().min(1).max(50),
   "course.closingClub": z.boolean(),
   "course.clubInCompletion": z.boolean(),
+  /** 023 EARS-2 — what a module's done gives: points, a document, or both. */
+  "module.reward": z.enum(["points", "document", "both"]),
 } as const;
 
 export type LearningSettingKey = keyof typeof LEARNING_SETTING_SCHEMAS;

@@ -161,6 +161,8 @@ export function course(
         courseId: AID.course,
         position: 1,
         title: "Ритм",
+        clubEventId: null,
+        clubEvent: null,
         version: 1,
         lessons: [l1],
       },

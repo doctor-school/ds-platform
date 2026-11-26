@@ -36,6 +36,7 @@ export const SETTING_LABEL: Record<LearningSettingKey, string> = {
   "course.moduleSize": "Уроков в модуле",
   "course.closingClub": "Закрывающий клуб",
   "course.clubInCompletion": "Клуб входит в прохождение",
+  "module.reward": "Награда за модуль",
 };
 
 export const CONDITION_LABEL: Record<LearningConditionType, string> = {
@@ -66,6 +67,11 @@ const ENUM_WORDS: Record<string, Record<string, string>> = {
     online: "онлайн",
     offline: "очно",
     open: "открытый",
+  },
+  "module.reward": {
+    points: "Баллы",
+    document: "Документ",
+    both: "Баллы и документ",
   },
 };
 
@@ -300,6 +306,7 @@ export const SETTING_SECTIONS: readonly {
       "course.moduleSize",
       "course.closingClub",
       "course.clubInCompletion",
+      "module.reward",
     ],
   },
 ];

@@ -5062,6 +5062,45 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "clubEvent": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "startsAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "startsAt"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "clubEventId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "courseId": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -5155,6 +5194,8 @@
                 "courseId",
                 "position",
                 "title",
+                "clubEventId",
+                "clubEvent",
                 "version",
                 "lessons"
               ],
@@ -6043,7 +6084,8 @@
                                     "course.deliveryMode",
                                     "course.moduleSize",
                                     "course.closingClub",
-                                    "course.clubInCompletion"
+                                    "course.clubInCompletion",
+                                    "module.reward"
                                   ],
                                   "type": "string"
                                 }
@@ -6918,7 +6960,8 @@
                             "course.deliveryMode",
                             "course.moduleSize",
                             "course.closingClub",
-                            "course.clubInCompletion"
+                            "course.clubInCompletion",
+                            "module.reward"
                           ],
                           "type": "string"
                         }
@@ -7218,6 +7261,45 @@
       "LearningModuleAdminDto": {
         "additionalProperties": false,
         "properties": {
+          "clubEvent": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "startsAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "title", "startsAt"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clubEventId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "courseId": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -7242,7 +7324,15 @@
             "type": "integer"
           }
         },
-        "required": ["id", "courseId", "position", "title", "version"],
+        "required": [
+          "id",
+          "courseId",
+          "position",
+          "title",
+          "clubEventId",
+          "clubEvent",
+          "version"
+        ],
         "type": "object"
       },
       "LearningPresetDto": {
@@ -7288,6 +7378,10 @@
               },
               "lockedVisibility": {
                 "enum": ["hidden", "locked"],
+                "type": "string"
+              },
+              "module.reward": {
+                "enum": ["points", "document", "both"],
                 "type": "string"
               },
               "order": {
@@ -7578,6 +7672,10 @@
                     },
                     "lockedVisibility": {
                       "enum": ["hidden", "locked"],
+                      "type": "string"
+                    },
+                    "module.reward": {
+                      "enum": ["points", "document", "both"],
                       "type": "string"
                     },
                     "order": {
@@ -8626,7 +8724,8 @@
                     "course.deliveryMode",
                     "course.moduleSize",
                     "course.closingClub",
-                    "course.clubInCompletion"
+                    "course.clubInCompletion",
+                    "module.reward"
                   ],
                   "type": "string"
                 },
@@ -8709,6 +8808,10 @@
               },
               "lockedVisibility": {
                 "enum": ["hidden", "locked"],
+                "type": "string"
+              },
+              "module.reward": {
+                "enum": ["points", "document", "both"],
                 "type": "string"
               },
               "order": {

@@ -39,6 +39,7 @@ export const LEARNING_PLATFORM_SEED: LearningSettings = {
   "course.moduleSize": 6,
   "course.closingClub": true,
   "course.clubInCompletion": false,
+  "module.reward": "points",
 };
 
 export const LEARNING_PRESET_NAMES = {

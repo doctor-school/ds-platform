@@ -13,7 +13,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { streamProvider } from "./events.js";
+import { events, streamProvider } from "./events.js";
 import { directions, experts, organisations, projects } from "./taxonomy.js";
 import { users } from "./users.js";
 
@@ -181,6 +181,10 @@ export const learningModules = pgTable(
       .references(() => learningCourses.id),
     position: integer("position").notNull(),
     title: text("title").notNull(),
+    /** 023 EARS-1 — the module's club: an optional 020 event (ownership `doctor`). */
+    clubEventId: uuid("club_event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
     ...versioned,
   },
   (t) => [index("learning_modules_course_idx").on(t.courseId, t.position)],

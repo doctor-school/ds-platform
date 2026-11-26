@@ -345,6 +345,8 @@ describe("CourseCompositionScreen", () => {
       courseId: AID.course,
       position: 2,
       title: "Блокады",
+      clubEventId: null,
+      clubEvent: null,
       version: 1,
       lessons: [],
     });

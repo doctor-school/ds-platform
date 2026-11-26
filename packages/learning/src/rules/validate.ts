@@ -138,6 +138,8 @@ const KEY_LEVELS: Partial<
   "course.closingClub": ["platform", "school", "course"],
   "course.clubInCompletion": ["platform", "school", "course"],
   order: ["platform", "school", "course", "module"],
+  // 023 EARS-2 — the platform holds only the seed; staff set it per course and module.
+  "module.reward": ["platform", "course", "module"],
 };
 
 export type LearningValuesValidation =

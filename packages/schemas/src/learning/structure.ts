@@ -278,9 +278,14 @@ export type ReorderLearningModulesRequest = z.infer<
   typeof ReorderLearningModulesRequestSchema
 >;
 
-/** 023 EARS-27 — rename a module (under the module's `If-Match`). */
+/**
+ * 023 EARS-27 — rename a module and set its club on or off (under the module's
+ * `If-Match`): `clubEventId` is a live 020 event, `null` turns the club off; an
+ * absent field is left as it is.
+ */
 export const UpdateLearningModuleRequestSchema = z.strictObject({
-  title,
+  title: title.optional(),
+  clubEventId: z.uuid().nullable().optional(),
 });
 export type UpdateLearningModuleRequest = z.infer<
   typeof UpdateLearningModuleRequestSchema
@@ -470,11 +475,24 @@ export const LearningCourseAdminSchema = z.strictObject({
 });
 export type LearningCourseAdmin = z.infer<typeof LearningCourseAdminSchema>;
 
+/** 023 EARS-1 — the module club's 020 event, for display. */
+export const LearningModuleClubEventSchema = z.strictObject({
+  id: z.uuid(),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+});
+export type LearningModuleClubEvent = z.infer<
+  typeof LearningModuleClubEventSchema
+>;
+
 export const LearningModuleAdminSchema = z.strictObject({
   id: z.uuid(),
   courseId: z.uuid(),
   position: z.number().int(),
   title: z.string(),
+  /** 023 EARS-1 — the module's club event; null = no club. */
+  clubEventId: z.uuid().nullable(),
+  clubEvent: LearningModuleClubEventSchema.nullable(),
   version: z.number().int(),
 });
 export type LearningModuleAdmin = z.infer<typeof LearningModuleAdminSchema>;

@@ -226,7 +226,7 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
 
           <div
             className={cn(
-              "text-lg leading-title font-bold tracking-tight wrap-break-word text-pretty text-foreground",
+              "text-lg leading-title font-bold tracking-title wrap-break-word text-pretty text-foreground",
               clamp,
             )}
           >
@@ -235,11 +235,11 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
 
           <div className="mt-auto flex flex-col gap-2">
             {card.partner ? (
-              <div className="border-t border-hairline pt-2 text-xs font-semibold text-muted-foreground">
+              <div className="border-t border-hairline pt-2 text-xs leading-label font-semibold text-muted-foreground">
                 {FEED_CARD_COPY.partner(card.partner.name)}
               </div>
             ) : null}
-            <div className="text-sm font-semibold text-muted-foreground tabular-nums">
+            <div className="text-sm leading-label font-semibold text-muted-foreground tabular-nums">
               <span>{formatFeedCardDate(card.publishedAt, now)}</span>
             </div>
           </div>
@@ -376,7 +376,7 @@ function FeedCardFieldMark({ mark }: { mark: string }) {
       data-feed-card-media="none"
       className="absolute inset-0 flex items-end p-4"
     >
-      <span className="text-3xl leading-none font-extrabold tracking-tight text-balance text-primary-action">
+      <span className="text-3xl leading-none font-extrabold tracking-display text-balance text-primary-action">
         {mark}
       </span>
     </div>
@@ -431,7 +431,7 @@ function FeedPostCardView({
                   <span
                     aria-hidden="true"
                     data-feed-card-play=""
-                    className="absolute top-1/2 left-1/2 flex size-13 -translate-1/2 items-center justify-center bg-foreground text-lg text-background shadow-btn"
+                    className="absolute top-1/2 left-1/2 flex size-12 -translate-1/2 items-center justify-center bg-foreground text-lead text-background shadow-btn"
                   >
                     {`▶${TEXT_GLYPH}`}
                   </span>
@@ -459,7 +459,7 @@ function FeedPostCardView({
               role="img"
               aria-label={copy.net}
               title={copy.net}
-              className="shrink-0 border-2 border-border px-1 text-xs leading-4 font-extrabold tracking-wide text-foreground"
+              className="shrink-0 border-2 border-border px-1 py-px text-eyebrow leading-label font-extrabold tracking-wide text-foreground"
             >
               {copy.chip}
             </span>
@@ -474,7 +474,7 @@ function FeedPostCardView({
             </div>
           ) : null}
 
-          <div className="mt-auto flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground tabular-nums">
+          <div className="mt-auto flex items-center justify-between gap-2 text-sm leading-label font-semibold text-muted-foreground tabular-nums">
             <span>{formatFeedCardDate(card.publishedAt, now)}</span>
             <span
               data-feed-card-external=""
@@ -505,13 +505,13 @@ export function FeedCardSkeleton({ className }: { className?: string }) {
         <div className={BODY}>
           <div className="flex items-center gap-2">
             <Skeleton className="size-10 shrink-0" />
-            <Skeleton className="h-3.5 w-7/12" />
+            <Skeleton className="h-4 w-7/12" />
           </div>
-          <Skeleton className="h-5.5 w-2/5" />
-          <Skeleton className="h-4.5" />
-          <Skeleton className="h-4.5 w-4/5" />
-          <Skeleton className="h-4.5 w-3/5" />
-          <Skeleton className="mt-auto h-3.5 w-1/3" />
+          <Skeleton className="h-6 w-2/5" />
+          <Skeleton className="h-5" />
+          <Skeleton className="h-5 w-4/5" />
+          <Skeleton className="h-5 w-3/5" />
+          <Skeleton className="mt-auto h-4 w-1/3" />
         </div>
       </FeedCardFrame>
     </div>

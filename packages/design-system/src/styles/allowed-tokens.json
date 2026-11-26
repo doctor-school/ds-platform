@@ -410,7 +410,9 @@
     "--tracking-eyebrow",
     "--tracking-micro",
     "--tracking-numeric",
-    "--tracking-topbar"
+    "--tracking-title",
+    "--tracking-topbar",
+    "--tracking-wide"
   ],
   "tokenPaths": [
     "border-width.0",

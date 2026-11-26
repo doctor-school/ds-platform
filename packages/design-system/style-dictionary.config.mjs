@@ -338,6 +338,14 @@ async function build() {
     { name: "--tracking-eyebrow", ref: "var(--font-letter-spacing-eyebrow)" },
     { name: "--tracking-display", ref: "var(--font-letter-spacing-display)" },
   );
+  // The feed card title / network-chip rungs (#4277, unit-feed-card.dc.html
+  // 72/81): title −.01em has no default Tailwind rung, and `wide` +.025em is
+  // bound to its token so the chip resolves `--font-letter-spacing-wide`
+  // rather than Tailwind's default ladder.
+  themeEntries.push(
+    { name: "--tracking-title", ref: "var(--font-letter-spacing-title)" },
+    { name: "--tracking-wide", ref: "var(--font-letter-spacing-wide)" },
+  );
   // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
   // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
   // same way the §09 role keys drive gap/padding; the value lives in the component

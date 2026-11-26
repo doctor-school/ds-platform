@@ -536,5 +536,7 @@
   --tracking-topbar: var(--font-letter-spacing-topbar);
   --tracking-eyebrow: var(--font-letter-spacing-eyebrow);
   --tracking-display: var(--font-letter-spacing-display);
+  --tracking-title: var(--font-letter-spacing-title);
+  --tracking-wide: var(--font-letter-spacing-wide);
   --spacing-time-plate: var(--webinar-card-time-plate);
 }

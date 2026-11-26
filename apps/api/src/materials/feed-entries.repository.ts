@@ -42,13 +42,15 @@ type Db = DrizzleHandle["db"];
 /**
  * The platforms whose entries the public feed read serves: those the card
  * contract has a member for (048-design §Delivery slices (slice 2)) — the own
- * materials (`news`, `column`) and Telegram (`post`, EARS-33). A network
+ * materials (`news`, `column`), Telegram (`post`, EARS-33) and VK (`post`,
+ * `video`, EARS-48). A network
  * platform joins this list in the same change that ships its card member, so
  * a stored network entry is never served before it can render.
  */
 export const FEED_CARD_PLATFORMS = [
   "academy",
   "telegram",
+  "vk",
 ] as const satisfies readonly (typeof feedEntries.sourcePlatform.enumValues)[number][];
 
 /** One card as a source writes it; the card date is kept on a rewrite. */

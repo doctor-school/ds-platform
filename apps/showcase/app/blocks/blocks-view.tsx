@@ -8,6 +8,7 @@ import type {
   MaterialBodyText,
   FeedCard as FeedCardData,
   FeedPostCard,
+  FeedVideoCard,
   PublicFeedPage,
 } from "@ds/schemas";
 import { RichTextContent } from "@ds/design-system/rich-text-content";
@@ -4790,7 +4791,7 @@ const FEED_CARD_PROPS: PropRow[] = [
     type: "FeedCard (@ds/schemas)",
     required: true,
     description:
-      "One feed card; the variant follows card.kind (news | column), the partner mark follows card.partner.",
+      "One feed card; the variant follows card.kind (news | column | post | video) and, for a post, card.source.platform (telegram | vk); the partner mark follows card.partner.",
   },
   {
     name: "now",
@@ -4817,6 +4818,34 @@ function feedPostSample(over: Partial<FeedPostCard> = {}): FeedPostCard {
     source: { platform: "telegram", name: "BBM Academy · Telegram" },
     partner: null,
     href: "https://t.me/bbmacademy/1201",
+    external: true,
+    ...over,
+  };
+}
+
+/** A preview that never loads, so the specimen shows the EARS-49 fallback. */
+const FEED_SAMPLE_BROKEN = "data:image/png;base64,AA==";
+
+function feedVkPostSample(over: Partial<FeedPostCard> = {}): FeedPostCard {
+  return feedPostSample({
+    text: "Записали первый выпуск второго сезона подкаста «Кто стоит за брендом». Спасибо гостям и команде производства — премьера в ноябре, а пока делимся кадрами со съёмочной площадки.",
+    source: { platform: "vk", name: "BBM Academy · VK" },
+    href: "https://vk.com/wall-123456_789",
+    ...over,
+  });
+}
+
+function feedVideoSample(over: Partial<FeedVideoCard> = {}): FeedVideoCard {
+  return {
+    id: "3a1c6d2f-8b5e-4d4c-9f30-7b8c9d0e1f2a",
+    kind: "video",
+    title: "Как устроен проект «Ортобиология» — за минуту",
+    publishedAt: "2026-11-09T10:00:00Z",
+    image: { url: FEED_SAMPLE_COVER },
+    duration: 72,
+    source: { platform: "vk", name: "BBM Academy · VK Видео" },
+    partner: null,
+    href: "https://vk.com/video-123456_456239017",
     external: true,
     ...over,
   };
@@ -4853,6 +4882,19 @@ function FeedCardSection() {
     ],
     ["post · video preview", feedPostSample({ duration: 72 })],
     ["post · no image", feedPostSample({ image: null })],
+    ["vk post · image", feedVkPostSample()],
+    ["vk post · video preview", feedVkPostSample({ duration: 72 })],
+    ["vk post · no image", feedVkPostSample({ image: null })],
+    [
+      "vk post · preview fails to load",
+      feedVkPostSample({ image: { url: FEED_SAMPLE_BROKEN } }),
+    ],
+    ["vk-видео · cover", feedVideoSample()],
+    ["vk-видео · no cover", feedVideoSample({ image: null })],
+    [
+      "vk-видео · cover fails to load",
+      feedVideoSample({ image: { url: FEED_SAMPLE_BROKEN } }),
+    ],
   ];
   return (
     <BlockSection

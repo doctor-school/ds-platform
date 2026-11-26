@@ -4,10 +4,13 @@ import {
   FEED_PAGE_SIZE_DEFAULT,
   FEED_PAGE_SIZE_MAX,
   FEED_TELEGRAM_SOURCE_NAME,
+  FEED_VK_POST_SOURCE_NAME,
+  FEED_VK_VIDEO_SOURCE_NAME,
   FeedCardSchema,
   FeedColumnCardSchema,
   FeedNewsCardSchema,
   FeedPostCardSchema,
+  FeedVideoCardSchema,
   PublicFeedPageSchema,
   PublicFeedQuerySchema,
 } from "./feed.js";
@@ -228,5 +231,120 @@ describe("048 public read contracts", () => {
     expect(FeedCardSchema.safeParse({ ...news, external: true }).success).toBe(
       false,
     );
+  });
+
+  const vkPost = {
+    id: "2f0b5c1e-7a4d-4c3b-8e2f-6a7b8c9d0e1f",
+    kind: "post",
+    text: "Разбор клинического случая",
+    publishedAt: "2026-11-20T09:00:00.000Z",
+    image: { url: "https://sun9-1.userapi.com/impg/preview.jpg" },
+    duration: null,
+    source: { platform: "vk", name: "BBM Academy · VK" },
+    partner: null,
+    href: "https://vk.com/wall-123456_789",
+    external: true,
+  };
+  const vkVideo = {
+    id: "3a1c6d2f-8b5e-4d4c-9f30-7b8c9d0e1f2a",
+    kind: "video",
+    title: "Вебинар: антибиотики в практике",
+    publishedAt: "2026-11-19T09:00:00.000Z",
+    image: { url: "https://sun9-2.userapi.com/impg/cover.jpg" },
+    duration: 3725,
+    source: { platform: "vk", name: "BBM Academy · VK Видео" },
+    partner: null,
+    href: "https://vk.com/video-123456_456239017",
+    external: true,
+  };
+
+  it("048 EARS-48: a VK post is a post card with the VK source, the referenced VK image and the vk.com/wall permalink", () => {
+    expect(FEED_VK_POST_SOURCE_NAME).toBe("BBM Academy · VK");
+    expect(FeedCardSchema.parse(vkPost)).toEqual(vkPost);
+    expect(
+      FeedCardSchema.safeParse({ ...vkPost, image: null, duration: 95 })
+        .success,
+    ).toBe(true);
+    const refused: Record<string, unknown>[] = [
+      { source: { platform: "vk", name: "BBM Academy · Telegram" } },
+      { source: { platform: "vk", name: "BBM Academy · VK Видео" } },
+      { source: { platform: "telegram", name: "BBM Academy · VK" } },
+      // A post's href belongs to its own platform.
+      { href: "https://t.me/bbm_academy/1201" },
+      { href: "https://vk.com/video-123456_789" },
+      { href: "http://vk.com/wall-123456_789" },
+      { href: "https://vk.com/wall123456_789" },
+      { partner: { name: "Партнёр" } },
+      { external: false },
+    ];
+    for (const patch of refused) {
+      expect(
+        FeedCardSchema.safeParse({ ...vkPost, ...patch }).success,
+        JSON.stringify(patch),
+      ).toBe(false);
+    }
+    // And a Telegram post never takes a VK permalink.
+    expect(
+      FeedCardSchema.safeParse({ ...post, href: "https://vk.com/wall-1_2" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("048 EARS-48: a video card carries id, kind, title, publishedAt, image, duration, the VK Видео source, partner null, the vk.com/video href and external true", () => {
+    expect(Object.keys(FeedVideoCardSchema.shape).sort()).toEqual([
+      "duration",
+      "external",
+      "href",
+      "id",
+      "image",
+      "kind",
+      "partner",
+      "publishedAt",
+      "source",
+      "title",
+    ]);
+    expect(FEED_VK_VIDEO_SOURCE_NAME).toBe("BBM Academy · VK Видео");
+    expect(FeedCardSchema.parse(vkVideo)).toEqual(vkVideo);
+    expect(FeedCardSchema.safeParse({ ...vkVideo, image: null }).success).toBe(
+      true,
+    );
+    expect(
+      PublicFeedPageSchema.parse({
+        data: [news, post, vkPost, vkVideo],
+        nextCursor: null,
+      }).data,
+    ).toHaveLength(4);
+    const refused: Record<string, unknown>[] = [
+      { duration: null },
+      { duration: -1 },
+      { duration: 1.5 },
+      { title: "" },
+      { text: "Текст" },
+      { source: { platform: "vk", name: "BBM Academy · VK" } },
+      { source: { platform: "telegram", name: "BBM Academy · VK Видео" } },
+      { href: "https://vk.com/wall-123456_789" },
+      { href: "/materials/x" },
+      { partner: { name: "Партнёр" } },
+      { external: false },
+    ];
+    for (const patch of refused) {
+      expect(
+        FeedCardSchema.safeParse({ ...vkVideo, ...patch }).success,
+        JSON.stringify(patch),
+      ).toBe(false);
+    }
+  });
+
+  it("048 EARS-48: the news, column and Telegram post members stay as they were", () => {
+    expect(FeedCardSchema.parse(post)).toEqual(post);
+    for (const card of [news, { ...news, kind: "column" }]) {
+      expect(FeedCardSchema.parse(card)).toEqual(card);
+      expect(
+        FeedCardSchema.safeParse({
+          ...card,
+          source: { platform: "vk", name: "BBM Academy · VK" },
+        }).success,
+      ).toBe(false);
+    }
   });
 });

@@ -1,5 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import type { FeedCard as FeedCardData, FeedPostCard } from "@ds/schemas";
+import { fireEvent, render, screen } from "@testing-library/react";
+import type {
+  FeedCard as FeedCardData,
+  FeedPostCard,
+  FeedVideoCard,
+} from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -137,9 +141,13 @@ describe("FeedCard", () => {
     // the partner line needs more than the fixed body leaves, and the last
     // line's descenders were clipped. The canvas line is 23px
     // (`unit-feed-card.dc.html`), the `leading-title` token (1.15 × 20px).
-    const title = "Клинические рекомендации по ведению артериальной гипертензии";
+    const title =
+      "Клинические рекомендации по ведению артериальной гипертензии";
     render(
-      <FeedCard card={card({ title, partner: { name: "Партнёр А" } })} now={NOW} />,
+      <FeedCard
+        card={card({ title, partner: { name: "Партнёр А" } })}
+        now={NOW}
+      />,
     );
     const el = screen.getByText(title);
     expect(el.className).toContain("leading-title");
@@ -174,7 +182,9 @@ describe("FeedCard", () => {
  * partner mark and the call to action — one same-tab link.
  */
 describe("FeedCard — doctor content card (variant Б)", () => {
-  const content = (over: Partial<FeedContentCardData> = {}): FeedContentCardData => ({
+  const content = (
+    over: Partial<FeedContentCardData> = {},
+  ): FeedContentCardData => ({
     kind: "content",
     href: "/courses/osnovy",
     kicker: "Курс",
@@ -196,7 +206,9 @@ describe("FeedCard — doctor content card (variant Б)", () => {
     expect(links[0]?.getAttribute("href")).toBe("/courses/osnovy");
     expect(links[0]?.textContent).toContain("18");
     expect(links[0]?.textContent).toContain("уроков");
-    expect(links[0]?.textContent).toContain("36 академических часов · Сертификат НМО");
+    expect(links[0]?.textContent).toContain(
+      "36 академических часов · Сертификат НМО",
+    );
     expect(links[0]?.textContent).toContain("Открыть путь курса →");
     expect(screen.queryByText(FEED_CARD_COPY.done)).toBeNull();
   });
@@ -207,7 +219,9 @@ describe("FeedCard — doctor content card (variant Б)", () => {
   });
 
   it("023 EARS-5: a done card is not dimmed — its texts keep WCAG AA contrast (axe color-contrast)", () => {
-    const { container } = render(<FeedCard card={content({ state: "done" })} />);
+    const { container } = render(
+      <FeedCard card={content({ state: "done" })} />,
+    );
     const card = container.querySelector('[data-feed-card="content"]');
     expect(card?.className).not.toMatch(/\bopacity-/);
   });
@@ -256,12 +270,16 @@ describe("FeedCard — doctor content row (variant В)", () => {
     expect(links[0]?.textContent).toContain("Тендинопатии");
     expect(links[0]?.textContent).toContain("6 уроков");
     expect(links[0]?.textContent).toContain("→");
-    expect(container.querySelector('[data-feed-card="content-row"]')).toBe(links[0]);
+    expect(container.querySelector('[data-feed-card="content-row"]')).toBe(
+      links[0],
+    );
   });
 
   it("023 EARS-5: on a phone a row is separated by a hairline; from the layout breakpoint it is framed", () => {
     const { container } = render(<FeedCard card={row()} />);
-    const classes = (container.querySelector('[data-feed-card="content-row"]')?.className ?? "").split(/\s+/);
+    const classes = (
+      container.querySelector('[data-feed-card="content-row"]')?.className ?? ""
+    ).split(/\s+/);
     expect(classes).toContain("border-b");
     expect(classes).toContain("border-hairline");
     expect(classes).toContain("layout:border-2");
@@ -424,6 +442,237 @@ describe("FeedCard post (Telegram)", () => {
   });
 });
 
+// 048 V-32 — the VK `post` and the `video` variants (EARS-49), canvas
+// `unit-feed-card.dc.html` `source` = «vk» / «vk-видео».
+
+function vkPost(overrides: Partial<FeedPostCard> = {}): FeedPostCard {
+  return post({
+    text: "Записали первый выпуск второго сезона подкаста «Кто стоит за брендом».",
+    image: { url: "https://sun9-1.userapi.com/impg/wall.jpg" },
+    source: { platform: "vk", name: "BBM Academy · VK" },
+    href: "https://vk.com/wall-123456_789",
+    ...overrides,
+  });
+}
+
+function vkVideo(overrides: Partial<FeedVideoCard> = {}): FeedVideoCard {
+  return {
+    id: "3a1c6d2f-8b5e-4d4c-9f30-7b8c9d0e1f2a",
+    kind: "video",
+    title: "Как устроен проект «Ортобиология» — за минуту",
+    publishedAt: "2026-11-12T10:00:00Z",
+    image: { url: "https://sun9-2.userapi.com/impg/cover.jpg" },
+    duration: 72,
+    source: { platform: "vk", name: "BBM Academy · VK Видео" },
+    partner: null,
+    href: "https://vk.com/video-123456_456239017",
+    external: true,
+    ...overrides,
+  };
+}
+
+describe("FeedCard post (VK)", () => {
+  it("048 EARS-49: a VK post shall show the referenced image sent with no referrer", () => {
+    const { container } = render(<FeedCard card={vkPost()} now={NOW} />);
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(
+      "https://sun9-1.userapi.com/impg/wall.jpg",
+    );
+    expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+  });
+
+  it("048 EARS-49: a VK video post shall show the play mark and the duration, and nothing plays inside the card", () => {
+    const { container } = render(
+      <FeedCard card={vkPost({ duration: 3725 })} now={NOW} />,
+    );
+    expect(container.querySelector("[data-feed-card-play]")).not.toBeNull();
+    expect(
+      container.querySelector("[data-feed-card-duration]")?.textContent,
+    ).toBe("1:02:05");
+    expect(container.querySelector("video, iframe, audio")).toBeNull();
+  });
+
+  it("048 EARS-49: a VK post without an image shall use the no-image layout with the field mark «VK»", () => {
+    const { container } = render(
+      <FeedCard card={vkPost({ image: null, duration: 72 })} now={NOW} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('[data-feed-card-media="none"]')?.textContent,
+    ).toBe("VK");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+  });
+
+  it("048 EARS-49: when the referenced preview fails to load, the VK post shall show its no-image layout", () => {
+    const { container } = render(
+      <FeedCard card={vkPost({ duration: 72 })} now={NOW} />,
+    );
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('[data-feed-card-media="none"]')?.textContent,
+    ).toBe("VK");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+  });
+
+  it("048 EARS-49: the source shall read «BBM Academy · VK» with the Academy logo and the chip «VK» named «VK»; no kind badge", () => {
+    render(
+      <FeedCard
+        card={vkPost()}
+        now={NOW}
+        logo={<svg data-testid="academy-logo" />}
+      />,
+    );
+    expect(screen.getByText("BBM Academy · VK")).toBeTruthy();
+    expect(screen.getByTestId("academy-logo")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "VK" }).textContent).toBe("VK");
+    expect(screen.queryByText("Новость")).toBeNull();
+    expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
+  });
+
+  it("048 EARS-49: the VK post shall be one link to its vk.com href in a new tab, marked «VK ↗» with the hidden new-tab text", () => {
+    const { container } = render(<FeedCard card={vkPost()} now={NOW} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe(
+      "https://vk.com/wall-123456_789",
+    );
+    expect(links[0]?.getAttribute("target")).toBe("_blank");
+    expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
+    const mark = container.querySelector("[data-feed-card-external]");
+    expect(mark?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      `VK ↗${TEXT_GLYPH}`,
+    );
+    expect(mark?.querySelector(".sr-only")?.textContent).toBe(
+      ", откроется в новой вкладке на площадке VK",
+    );
+  });
+
+  it("048 EARS-49: a preview that already failed before the card mounted (a server-rendered page) shall show the no-image layout", () => {
+    const proto = HTMLImageElement.prototype;
+    const complete = Object.getOwnPropertyDescriptor(proto, "complete");
+    const naturalWidth = Object.getOwnPropertyDescriptor(proto, "naturalWidth");
+    Object.defineProperty(proto, "complete", {
+      configurable: true,
+      get: () => true,
+    });
+    Object.defineProperty(proto, "naturalWidth", {
+      configurable: true,
+      get: () => 0,
+    });
+    try {
+      const { container } = render(<FeedCard card={vkVideo()} now={NOW} />);
+      expect(container.querySelector("img")).toBeNull();
+      expect(
+        container.querySelector('[data-feed-card-media="none"]')?.textContent,
+      ).toBe("VK Видео");
+    } finally {
+      if (complete) Object.defineProperty(proto, "complete", complete);
+      if (naturalWidth)
+        Object.defineProperty(proto, "naturalWidth", naturalWidth);
+    }
+  });
+
+  it("048 EARS-49: a Telegram post keeps its image as it was — no referrer policy", () => {
+    const { container } = render(<FeedCard card={post()} now={NOW} />);
+    expect(container.querySelector("img")?.hasAttribute("referrerpolicy")).toBe(
+      false,
+    );
+  });
+});
+
+describe("FeedCard video (VK Видео)", () => {
+  it("048 EARS-49: a video shall show the cover with the play mark and the duration, sent with no referrer", () => {
+    const { container } = render(<FeedCard card={vkVideo()} now={NOW} />);
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(
+      "https://sun9-2.userapi.com/impg/cover.jpg",
+    );
+    expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    const play = container.querySelector("[data-feed-card-play]");
+    expect(play?.getAttribute("aria-hidden")).toBe("true");
+    expect(play?.textContent).toBe(`▶${TEXT_GLYPH}`);
+    expect(
+      container.querySelector("[data-feed-card-duration]")?.textContent,
+    ).toBe("1:12");
+    expect(container.querySelector("video, iframe, audio")).toBeNull();
+  });
+
+  it("048 EARS-49: a video without a cover shall use the no-image layout with the field mark «VK Видео» and no play mark", () => {
+    const { container } = render(
+      <FeedCard card={vkVideo({ image: null })} now={NOW} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('[data-feed-card-media="none"]')?.textContent,
+    ).toBe("VK Видео");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+    expect(container.querySelector("[data-feed-card-duration]")).toBeNull();
+  });
+
+  it("048 EARS-49: when the cover fails to load, the video shall show its no-image layout", () => {
+    const { container } = render(<FeedCard card={vkVideo()} now={NOW} />);
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('[data-feed-card-media="none"]')?.textContent,
+    ).toBe("VK Видео");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+  });
+
+  it("048 EARS-49: the source shall read «BBM Academy · VK Видео» with the Academy logo and the chip «VK▶» named «VK Видео»; no kind badge, no partner", () => {
+    const { container } = render(
+      <FeedCard
+        card={vkVideo()}
+        now={NOW}
+        logo={<svg data-testid="academy-logo" />}
+      />,
+    );
+    const source = screen.getByText("BBM Academy · VK Видео");
+    expect(source.className).toContain("wrap-break-word");
+    expect(screen.getByTestId("academy-logo")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "VK Видео" }).textContent).toBe(
+      `VK▶${TEXT_GLYPH}`,
+    );
+    expect(
+      container.querySelector('[data-feed-card-avatar="initials"]'),
+    ).toBeNull();
+    expect(screen.queryByText("Новость")).toBeNull();
+    expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
+  });
+
+  it("048 EARS-49: the title shall be clamped to the six title lines the card holds, and the date follow EARS-13", () => {
+    render(<FeedCard card={vkVideo()} now={NOW} />);
+    const title = screen.getByText(
+      "Как устроен проект «Ортобиология» — за минуту",
+    );
+    expect(title.className).toContain("line-clamp-6");
+    expect(title.className).toContain("text-lg");
+    expect(title.className).toContain("wrap-break-word");
+    expect(screen.getByText("12 ноября")).toBeTruthy();
+  });
+
+  it("048 EARS-49: the video shall be one link to its vk.com href in a new tab, marked «VK Видео ↗» with the hidden new-tab text", () => {
+    const { container } = render(<FeedCard card={vkVideo()} now={NOW} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe(
+      "https://vk.com/video-123456_456239017",
+    );
+    expect(links[0]?.getAttribute("target")).toBe("_blank");
+    expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(container.querySelectorAll("button, input, select")).toHaveLength(0);
+    const mark = container.querySelector("[data-feed-card-external]");
+    expect(mark?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      `VK Видео ↗${TEXT_GLYPH}`,
+    );
+    expect(mark?.querySelector(".sr-only")?.textContent).toBe(
+      ", откроется в новой вкладке на площадке VK Видео",
+    );
+  });
+});
+
 /**
  * 048 EARS-14 — the card and its placeholder draw the token values of the
  * re-vendored `design-source/unit-feed-card.dc.html` (#4273, #4277): every
@@ -460,6 +709,22 @@ describe("FeedCard — canvas token parity (unit-feed-card.dc.html)", () => {
     expect(classesOf(date)).toContain("leading-label");
   });
 
+  it("048 EARS-49: the network date row sets the canvas label type with proportional figures", () => {
+    for (const c of [post(), vkPost(), vkVideo()]) {
+      const { container, unmount } = render(<FeedCard card={c} now={NOW} />);
+      const row = classesOf(
+        container.querySelector("[data-feed-card-external]")?.parentElement ??
+          null,
+      );
+      expect(row).toContain("text-sm");
+      expect(row).toContain("leading-label");
+      expect(row).toContain("font-semibold");
+      expect(row).toContain("text-muted-foreground");
+      expect(row).not.toContain("tabular-nums");
+      unmount();
+    }
+  });
+
   it("048 EARS-14: the video play plate is the space-12 square with the lead glyph size", () => {
     const { container } = render(
       <FeedCard card={post({ duration: 72 })} now={NOW} />,
@@ -473,7 +738,13 @@ describe("FeedCard — canvas token parity (unit-feed-card.dc.html)", () => {
   it("048 EARS-14: the network chip is eyebrow type, wide tracking, label leading, space-px/space-1 padding", () => {
     render(<FeedCard card={post()} now={NOW} />);
     const chip = classesOf(screen.getByRole("img", { name: "Telegram" }));
-    for (const c of ["text-eyebrow", "tracking-wide", "leading-label", "px-1", "py-px"]) {
+    for (const c of [
+      "text-eyebrow",
+      "tracking-wide",
+      "leading-label",
+      "px-1",
+      "py-px",
+    ]) {
       expect(chip).toContain(c);
     }
     expect(chip).not.toContain("text-xs");
@@ -482,14 +753,18 @@ describe("FeedCard — canvas token parity (unit-feed-card.dc.html)", () => {
 
   it("048 EARS-14: the post date row sets the label leading", () => {
     const { container } = render(<FeedCard card={post()} now={NOW} />);
-    const row = container.querySelector("[data-feed-card-external]")?.parentElement;
+    const row = container.querySelector(
+      "[data-feed-card-external]",
+    )?.parentElement;
     expect(classesOf(row)).toContain("leading-label");
   });
 
   it("048 EARS-14: the placeholder bars are the space-4 / space-6 / space-5 heights", () => {
     const { container } = render(<FeedCardSkeleton />);
     const heights = Array.from(
-      container.querySelectorAll('[data-slot="skeleton"], .animate-skeleton-pulse'),
+      container.querySelectorAll(
+        '[data-slot="skeleton"], .animate-skeleton-pulse',
+      ),
     )
       .map((el) => classesOf(el).find((c) => /^h-/.test(c)))
       .filter(Boolean);

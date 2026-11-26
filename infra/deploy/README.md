@@ -1008,7 +1008,9 @@ create-access-key` on the operator's workstation, as above. The values never ent
 
    The release gate reads repo1 only (`postgres-artifact-probe.py`: `info --repo=1`),
    and so does the migration rehearsal's archive check. An offsite repo's state is a
-   stderr line of the probe (`offsite repo<N>: <status>`), never a refusal. WAL reaches
+   stderr line of the probe (`offsite repo<N>: <status>`), never a refusal; the probe
+   and the `backup-info` verb read each offsite repo that is on under its own config
+   (`pgbackrest-repo.sh <N> info`), as repo1's config names repo1 alone. WAL reaches
    an offsite repo through its spool and the sidecar's pusher, never through the
    `archive_command` (RECOVERY.md §1.4, #4298): while an offsite repo is down repo1
    keeps every segment and `pg_wal` does not grow; that repo's spool grows up to its

@@ -64,11 +64,22 @@ def offsite_lines(info):
 
 def report_offsite(backup_name):
     # stderr, so the evidence JSON on stdout is unchanged; any failure is a line too.
+    # repo1's config names repo1 alone (#4298): each offsite repo that is on (its
+    # derived config exists) answers under its own config, pgbackrest-repo.sh <N>.
+    def sidecar(*args):
+        return run("sudo", "docker", "exec", backup_name, *args)
     try:
-        info = json.loads(run("sudo", "docker", "exec", backup_name, "gosu", "postgres", "pgbackrest", "--stanza=ds", "--output=json", "info"))
-        lines = offsite_lines(info)
+        on = sidecar("sh", "-c", "for n in 2 3; do [ -f /etc/pgbackrest/offsite/repo$n/pgbackrest.conf ] && echo $n; done; true").split()
     except Exception:
-        lines = ["offsite repos: status unavailable"]
+        on, lines = [], ["offsite repos: status unavailable"]
+    else:
+        lines = []
+    for n in on:
+        try:
+            repo = offsite_lines(json.loads(sidecar("gosu", "postgres", "/usr/local/bin/pgbackrest-repo.sh", n, "--output=json", "info")))
+        except Exception:
+            repo = []
+        lines += repo or ["offsite repo%s: status unavailable" % n]
     for line in lines:
         print(line, file=sys.stderr)
 

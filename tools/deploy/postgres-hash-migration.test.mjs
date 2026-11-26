@@ -483,7 +483,7 @@ test("4298: the probe reads each offsite repo that is on through its repo-only c
     { encoding: "utf8" },
   );
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stderr, "offsite repo2: no valid backups\noffsite repo3: status unavailable\n");
+  assert.equal(r.stderr.replace(/\r\n/g, "\n"), "offsite repo2: no valid backups\noffsite repo3: status unavailable\n");
   const calls = JSON.parse(r.stdout);
   for (const n of ["2", "3"]) {
     assert.ok(

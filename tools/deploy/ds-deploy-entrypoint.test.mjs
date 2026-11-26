@@ -30,7 +30,7 @@ import { gzipSync } from "node:zlib";
 import { BOXES, SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
-import { HOST_STATE_FIELDS, hostStateLines } from "./lib/prod-read.mjs";
+import { HOST_STATE_FIELDS, hostStateLines, releaseJournalLines } from "./lib/prod-read.mjs";
 import { REPORT_ATTEMPT_RE } from "../staging/e2e-stage.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -2915,6 +2915,56 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(byName.driver.lines.length, 1, "the release units read as before");
   });
 
+  it("4280: release-journal drops a secret unit's docker compose interpolation warning, which can quote a value fragment", () => {
+    const sha12 = journalBox({});
+    writeFileSync(
+      join(stubs, "journalctl"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/journalctl.log"',
+        'echo "2026-11-26T10:00:00+00:00 ds-api-prod bash[1]: $2 line 1"',
+        // compose quotes the text after a "$" of a .env value as the variable's name
+        `echo '2026-11-26T10:00:01+00:00 ds-api-prod bash[1]: time="2026-11-26T10:00:01Z" level=warning msg="The \\"fragOf4280value\\" variable is not set. Defaulting to a blank string."'`,
+        `echo '2026-11-26T10:00:02+00:00 ds-api-prod bash[1]: WARN[0000] The "fragOf4280value" variable is not set. Defaulting to a blank string.'`,
+      ].join("\n") + "\n",
+    );
+    const answer = decrypt(readRun(`release-journal ${SHA}`).stdout);
+    const byName = Object.fromEntries(answer.units.map((u) => [u.unit.slice(`ds-prod-${sha12}-`.length), u]));
+    for (const unit of ["api-secret", "data-secret"])
+      assert.deepEqual(byName[unit].lines.map((l) => l.split("]: ").at(-1)), [`ds-prod-${sha12}-${unit} line 1`], unit);
+    assert.equal(byName.driver.lines.length, 3, "the release units keep their lines");
+  });
+
+  it("4280: release-journal answers an empty data-secret journal with no reason — no rotation ran", () => {
+    const sha12 = journalBox({});
+    writeFileSync(join(stubs, "journalctl"), '#!/usr/bin/env bash\necho "$*" >> "$STUB_DIR/journalctl.log"\n');
+    const answer = decrypt(readRun(`release-journal ${SHA}`).stdout);
+    assert.deepEqual(answer.units.at(-1), { unit: `ds-prod-${sha12}-data-secret`, lines: [], truncated: false });
+  });
+
+  for (const [what, body, reason] of [
+    ["an unreachable data box", 'echo "ssh: connect to host: secret detail" >&2\nexit 255', "ds-data-prod is unreachable"],
+    ["a hop that times out", "exit 124", "the read timed out"],
+    ["a data box that predates the verb", 'echo "ds-deploy-entrypoint: rejected: unknown command" >&2\nexit 2', "ds-data-prod does not serve read-secret-journal (the next release installs it)"],
+    ["a refused hop", 'echo "refused: secret detail" >&2\nexit 3', "ds-data-prod does not serve read-secret-journal (the next release installs it)"],
+    ["any other hop failure", 'echo "secret detail"\nexit 1', "the read failed"],
+  ]) {
+    it(`4280: release-journal with ${what} answers the data-secret unit with a fixed reason, not as an empty journal`, () => {
+      const sha12 = journalBox({});
+      writeFileSync(join(stubs, "ssh"), `#!/usr/bin/env bash\n${body}\n`);
+      const r = readRun(`release-journal ${SHA}`);
+      assert.equal(r.status, 0, r.stderr);
+      const answer = decrypt(r.stdout);
+      const data = answer.units.at(-1);
+      assert.equal(data.unit, `ds-prod-${sha12}-data-secret`);
+      assert.equal(data.reason, reason);
+      assert.equal(answer.units[0].lines.length, 3, "the api box's units still answer");
+      assert.ok(!("reason" in answer.units[0]), "a readable unit carries no reason");
+      assert.doesNotMatch(JSON.stringify(answer) + r.stderr, /secret detail/);
+      assert.equal(releaseJournalLines(answer).find((l) => l.startsWith(`== ${data.unit}`)), `== ${data.unit} (not read — ${reason})`);
+    });
+  }
+
   it("4067: release-journal bounds each unit's tail and answers the driver's alone with no status file or note", () => {
     const sha12 = journalBox({ lines: 4000, failure: "not json" });
     const r = readRun(`release-journal ${SHA}`);
@@ -3169,6 +3219,28 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.match(line, /^-q -s -o \/dev\/null --max-time 8 --proto =https -w .* https:\/\/[a-z0-9.]+\/$/);
       assert.doesNotMatch(line, /(^| )(-u|--user|-H|--header|-n|--netrc|-K|--config)( |$)/);
     }
+  });
+
+  it("4280: host-state answers an endpoint it cannot parse as host[:port] by a fixed entry — the repo is never dropped, the value never echoed", () => {
+    offsiteBox();
+    writeFileSync(
+      join(dataRoot(), "etc/ds-platform/data.env"),
+      "PGBACKREST_REPO2_S3_ENDPOINT=http://e2.example.test/planted-path\nPGBACKREST_REPO3_S3_ENDPOINT=s3.onidel.test # planted-comment\n",
+    );
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.deepEqual(answer.data.offsite, [
+      { repo: 2, host: null, state: "endpoint-unparsed", http: null },
+      { repo: 3, host: null, state: "endpoint-unparsed", http: null },
+    ]);
+    assert.deepEqual(hostStateLines(answer).filter((l) => l.startsWith("offsite")), [
+      "offsite repo2: endpoint-unparsed (not an https host[:port])",
+      "offsite repo3: endpoint-unparsed (not an https host[:port])",
+    ]);
+    assert.equal(log("curl"), "", "no probe of an unparsed endpoint");
+    assert.doesNotMatch(JSON.stringify(answer) + r.stdout.toString("latin1") + r.stderr, /planted-|example\.test|onidel/);
   });
 
   for (const [what, reply, state, http] of [

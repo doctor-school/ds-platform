@@ -200,6 +200,24 @@ describe("4067: release-journal — the job prints status lines only, the operat
     ]);
     assert.throws(() => releaseJournalLines({ verb: "schema" }), /not a release-journal answer/);
   });
+  it("4280: a unit the read could not reach prints its fixed reason, never as an empty journal", () => {
+    const lines = releaseJournalLines({
+      verb: "release-journal",
+      sha: SHA,
+      takenAt: "2026-11-26T00:00:00Z",
+      failure: null,
+      units: [
+        { unit: "ds-prod-aaaaaaaaaaaa-api-secret", lines: [], truncated: false },
+        { unit: "ds-prod-aaaaaaaaaaaa-data-secret", lines: [], truncated: false, reason: "ds-data-prod is unreachable[2J" },
+      ],
+    });
+    assert.deepEqual(lines.slice(2), [
+      "",
+      "== ds-prod-aaaaaaaaaaaa-api-secret (0 lines)",
+      "",
+      "== ds-prod-aaaaaaaaaaaa-data-secret (not read — ds-data-prod is unreachable[2J)",
+    ]);
+  });
 });
 
 describe("4144: host-state — the operator reads both boxes' host state", () => {
@@ -269,6 +287,10 @@ describe("4144: host-state — the operator reads both boxes' host state", () =>
       /unlisted or missing field/,
     );
     assert.throws(() => withOffsite("reachable"), /unlisted or missing field/);
+    assert.equal(
+      withOffsite([{ repo: 3, host: null, state: "endpoint-unparsed", http: null }]).at(-1),
+      "offsite repo3: endpoint-unparsed (not an https host[:port])",
+    );
   });
   it("prints a probe's error and an unreachable data box by their fixed reasons", () => {
     const lines = hostStateLines({

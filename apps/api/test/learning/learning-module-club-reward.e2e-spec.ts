@@ -126,6 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         id: eventId,
         title: "Клуб: разбор ЭКГ",
         startsAt: "2027-02-01T15:00:00.000Z",
+        removed: false,
       });
       // The title is left as it was when the patch names only the club.
       expect(set.body.title).toBe(m0.title);
@@ -154,6 +155,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const after = await moduleOf(c.courseId, c.moduleId);
       expect(after.version).toBe(m0.version);
       expect(after.clubEventId).toBeNull();
+    });
+
+    it("023 EARS-1: a club event removed after it was set reads as removed, so staff re-pick it", async () => {
+      const c = await buildCourse(h, { publish: false });
+      const eventId = await seedEvent("Клуб, который снимут");
+      const m0 = await moduleOf(c.courseId, c.moduleId);
+      expect(
+        (await patchModule(c.moduleId, m0.version, { clubEventId: eventId }))
+          .status,
+      ).toBe(200);
+      await h.pool.query(
+        "UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1",
+        [eventId],
+      );
+      const after = await moduleOf(c.courseId, c.moduleId);
+      expect(after.clubEventId).toBe(eventId);
+      expect(after.clubEvent).toEqual({
+        id: eventId,
+        title: "Клуб, который снимут",
+        startsAt: "2027-02-01T15:00:00.000Z",
+        removed: true,
+      });
     });
 
     it("023 EARS-27: the course composition reads each module's club with its event's title; a club-less module reads none", async () => {

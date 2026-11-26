@@ -4854,6 +4854,7 @@ export interface components {
                 clubEvent: {
                     /** Format: uuid */
                     id: string;
+                    removed: boolean;
                     /** Format: date-time */
                     startsAt: string;
                     title: string;
@@ -5380,6 +5381,7 @@ export interface components {
             clubEvent: {
                 /** Format: uuid */
                 id: string;
+                removed: boolean;
                 /** Format: date-time */
                 startsAt: string;
                 title: string;

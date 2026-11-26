@@ -475,11 +475,15 @@ export const LearningCourseAdminSchema = z.strictObject({
 });
 export type LearningCourseAdmin = z.infer<typeof LearningCourseAdminSchema>;
 
-/** 023 EARS-1 — the module club's 020 event, for display. */
+/**
+ * 023 EARS-1 — the module club's 020 event, for display; `removed` = the event
+ * was removed after it was set, so staff re-pick the club.
+ */
 export const LearningModuleClubEventSchema = z.strictObject({
   id: z.uuid(),
   title: z.string(),
   startsAt: z.iso.datetime(),
+  removed: z.boolean(),
 });
 export type LearningModuleClubEvent = z.infer<
   typeof LearningModuleClubEventSchema

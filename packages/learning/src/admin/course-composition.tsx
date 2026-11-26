@@ -556,6 +556,7 @@ function ModuleClubForm({
             onChange: setPicked,
           })}
           <ClubNow clubEvent={clubEvent} />
+          <ClubRemoved clubEvent={clubEvent} />
           <FormActions>
             <Button
               type="submit"
@@ -580,6 +581,7 @@ function ModuleClubForm({
         <>
           <p className="text-sm font-bold text-foreground">{S.moduleClub}</p>
           <ClubNow clubEvent={clubEvent} />
+          <ClubRemoved clubEvent={clubEvent} />
         </>
       )}
     </div>
@@ -597,6 +599,20 @@ function ClubNow({
         ? S.moduleClubEvent(clubEvent.title, clubEvent.startsAt)
         : S.moduleClubNone}
     </p>
+  );
+}
+
+/** 023 EARS-1 — the club's event was removed after it was set: staff re-pick it. */
+function ClubRemoved({
+  clubEvent,
+}: {
+  clubEvent: LearningModuleClubEvent | null;
+}) {
+  if (!clubEvent?.removed) return null;
+  return (
+    <Alert variant="warn" data-testid="module-club-removed">
+      {S.moduleClubRemoved}
+    </Alert>
   );
 }
 

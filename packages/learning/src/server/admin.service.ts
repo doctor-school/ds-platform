@@ -235,7 +235,7 @@ const toModule = (
   version: r.version,
 });
 
-/** 023 EARS-1 — the modules' club events (title + start) for the admin read. */
+/** 023 EARS-1 — the modules' club events (title, start, removed) for the admin read. */
 async function clubEventsOf(
   tx: LearningTx | LearningDb,
   modules: readonly LearningModuleRow[],
@@ -245,13 +245,23 @@ async function clubEventsOf(
   ];
   if (ids.length === 0) return new Map();
   const rows = await tx
-    .select({ id: events.id, title: events.title, startsAt: events.startsAt })
+    .select({
+      id: events.id,
+      title: events.title,
+      startsAt: events.startsAt,
+      deletedAt: events.deletedAt,
+    })
     .from(events)
     .where(inArray(events.id, ids));
   return new Map(
     rows.map((e) => [
       e.id,
-      { id: e.id, title: e.title, startsAt: e.startsAt.toISOString() },
+      {
+        id: e.id,
+        title: e.title,
+        startsAt: e.startsAt.toISOString(),
+        removed: e.deletedAt !== null,
+      },
     ]),
   );
 }

@@ -421,7 +421,7 @@ describe("CourseCompositionScreen", () => {
   // the module's version; a refused event names the field in staff words.
   const EVENT = "50000000-0000-4000-8000-000000000001";
   const EVENT2 = "50000000-0000-4000-8000-000000000002";
-  function withClub() {
+  function withClub(removed = false) {
     const c = course();
     return {
       ...c,
@@ -433,6 +433,7 @@ describe("CourseCompositionScreen", () => {
             id: EVENT,
             title: "Клуб по ритму",
             startsAt: "2026-12-03T15:00:00.000Z",
+            removed,
           },
         },
       ],
@@ -474,6 +475,30 @@ describe("CourseCompositionScreen", () => {
     );
     expect(club).toHaveTextContent("Клуб по ритму");
     expect(club).toHaveTextContent("3 декабря 2026, 18:00 МСК");
+  });
+
+  it("023 EARS-1: a club event removed after it was set says so, and the club can be re-picked", async () => {
+    const t = mountClub(fakeTransport({ course: async () => withClub(true) }));
+    const module = await screen.findByTestId("module-1");
+    expect(within(module).getByTestId("module-club-now")).toHaveTextContent(
+      "Клуб по ритму",
+    );
+    expect(within(module).getByTestId("module-club-removed")).toHaveTextContent(
+      "Событие клуба удалено — выберите другое",
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Выбрать другое событие" }),
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Сохранить клуб" }),
+    );
+    await waitFor(() =>
+      expect(t.updateModule).toHaveBeenCalledWith(
+        AID.module,
+        { clubEventId: EVENT2 },
+        1,
+      ),
+    );
   });
 
   it("023 EARS-27: picks a module's club event and saves it under the module's version", async () => {

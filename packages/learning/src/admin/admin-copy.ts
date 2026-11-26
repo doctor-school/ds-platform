@@ -430,11 +430,6 @@ const DOCTORS: Partial<Record<Intl.LDMLPluralRule, string>> & { many: string } =
     many: "врачей",
   };
 
-/**
- * 023 EARS-26, EARS-27 — the school and course structure editor in staff
- * words. Never a price, a preset name or «бесплатно» (EARS-23 holds for the
- * doctor screens; the editor follows the same vocabulary).
- */
 /** A club event's start in Moscow time (the platform's event clock, 020): «3 декабря 2026, 18:00». */
 const CLUB_START = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow",
@@ -451,6 +446,11 @@ function clubStart(startsAt: string): string {
   return `${part.day} ${part.month} ${part.year}, ${part.hour}:${part.minute}`;
 }
 
+/**
+ * 023 EARS-26, EARS-27 — the school and course structure editor in staff
+ * words. Never a price, a preset name or «бесплатно» (EARS-23 holds for the
+ * doctor screens; the editor follows the same vocabulary).
+ */
 export const STRUCTURE_COPY = {
   // School editor
   schoolState: { draft: "Черновик", published: "Опубликована" },
@@ -509,6 +509,7 @@ export const STRUCTURE_COPY = {
   moduleClubNone: "Клуб не выбран",
   moduleClubEvent: (title: string, startsAt: string) =>
     `${title} · ${clubStart(startsAt)} МСК`,
+  moduleClubRemoved: "Событие клуба удалено — выберите другое",
   pickClub: "Выберите событие",
   saveClub: "Сохранить клуб",
   clearClub: "Убрать клуб",

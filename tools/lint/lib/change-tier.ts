@@ -376,8 +376,9 @@ export function isNonRuntimePath(path: string): boolean {
  *   IdP / captcha — any `idp` / `zitadel` / `captcha` path
  *             (`tools/staging/idp.mjs`, `tools/deploy/idp-policy.mjs`) and the
  *             captcha enforcement `apps/api/src/bot-protection/**`.
- * The auth rules read deployed code only (`isRuntimeAuthPath`): under
- * `tools/**` the members are the `idp` / `zitadel` / `captcha` paths alone.
+ * The auth rules skip workstation / CI tooling (`isRuntimeAuthPath`): under
+ * `tools/**` outside `tools/{staging,deploy}/**` the members are the `idp` /
+ * `zitadel` / `captcha` paths alone.
  */
 const ENVIRONMENT_SENSITIVE_AUTH_RES: readonly RegExp[] = [
   LIB_AUTH_RE,
@@ -393,14 +394,18 @@ const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
   IDP_CAPTCHA_RE,
 ];
 
-/** #4304: `tools/**` is operator / CI tooling that is never deployed, so the
- * runtime-app auth rules (an `auth` segment, the `lib` auth / session modules,
- * the auth pages, `middleware.*` / `proxy.*`) do not read it; its class
- * members are named by the explicit `IDP_CAPTCHA_RE` / `sms` rules. */
-const NON_DEPLOYED_TOOLING_RE = /^tools\//;
+/** #4304: `tools/staging/**` runs on the stage box and `tools/deploy/**` on
+ * the prod box (`tools/deploy/prod.mjs` ships the committed tree and runs the
+ * release driver from it there), so the runtime-app auth rules (an `auth`
+ * segment, the `lib` auth / session modules, the auth pages, `middleware.*` /
+ * `proxy.*`) read them. Every other `tools/**` path is operator / CI tooling
+ * run from a workstation or a CI runner (lint, loadtest, ops, gh, dev,
+ * hooks, …), whose class members are named by the explicit `IDP_CAPTCHA_RE` /
+ * `sms` rules alone. */
+const WORKSTATION_TOOLING_RE = /^tools\/(?!staging\/|deploy\/)/;
 
 function isRuntimeAuthPath(path: string, authRes: readonly RegExp[]): boolean {
-  if (NON_DEPLOYED_TOOLING_RE.test(path)) return false;
+  if (WORKSTATION_TOOLING_RE.test(path)) return false;
   return (
     path.split("/").some((segment) => /auth/i.test(segment)) ||
     authRes.some((re) => re.test(path))
@@ -423,9 +428,9 @@ export function isEnvironmentSensitivePath(path: string): boolean {
  * `tools/staging/idp*.mjs`), email / SMS code delivery and captcha. Docs and
  * templates (`*.md(x)`, `*.example`) and the rest of `infra/**` (terraform,
  * release driver, non-IdP dev stand) and migrations are not in them.
- * The auth / session rules read deployed code only (`isRuntimeAuthPath`):
- * under `tools/**` the members are the `idp` / `zitadel` / `captcha` / `sms`
- * paths alone.
+ * The auth / session rules skip workstation / CI tooling (`isRuntimeAuthPath`):
+ * under `tools/**` outside `tools/{staging,deploy}/**` the members are the
+ * `idp` / `zitadel` / `captcha` / `sms` paths alone.
  */
 const STAGE_CHECK_AUTH_RES: readonly RegExp[] = [
   LIB_AUTH_RE,

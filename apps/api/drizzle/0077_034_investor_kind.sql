@@ -1,0 +1,2 @@
+ALTER TABLE "applications" DROP CONSTRAINT "applications_kind_check";--> statement-breakpoint
+ALTER TABLE "applications" ADD CONSTRAINT "applications_kind_check" CHECK ("applications"."kind" IN ('author', 'partnership', 'investor'));

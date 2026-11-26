@@ -227,7 +227,7 @@
             "type": "string"
           },
           "kind": {
-            "enum": ["author", "partnership"],
+            "enum": ["author", "partnership", "investor"],
             "type": "string"
           },
           "kindLabel": {
@@ -290,7 +290,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "enum": ["author", "partnership"],
+                  "enum": ["author", "partnership", "investor"],
                   "type": "string"
                 },
                 "outcome": {
@@ -456,7 +456,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "enum": ["author", "partnership"],
+                  "enum": ["author", "partnership", "investor"],
                   "type": "string"
                 },
                 "kindLabel": {
@@ -517,7 +517,7 @@
               "additionalProperties": false,
               "properties": {
                 "kind": {
-                  "enum": ["author", "partnership"],
+                  "enum": ["author", "partnership", "investor"],
                   "type": "string"
                 },
                 "label": {
@@ -4734,6 +4734,82 @@
           }
         },
         "required": ["items", "allEventsHref"],
+        "type": "object"
+      },
+      "InvestorRequestIntakeDto": {
+        "additionalProperties": false,
+        "properties": {
+          "consent": {
+            "additionalProperties": false,
+            "properties": {
+              "accepted": {
+                "const": true,
+                "type": "boolean"
+              },
+              "versionTag": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["accepted", "versionTag"],
+            "type": "object"
+          },
+          "contact": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "format": "email",
+                "maxLength": 254,
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                "type": "string"
+              },
+              "fullName": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "organisation": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "phone": {
+                "maxLength": 32,
+                "type": "string"
+              },
+              "role": {
+                "maxLength": 120,
+                "type": "string"
+              }
+            },
+            "required": ["organisation", "fullName", "email"],
+            "type": "object"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "properties": {
+              "task": {
+                "maxLength": 2000,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": ["contact", "payload", "consent"],
+        "type": "object"
+      },
+      "InvestorRequestIntakeResultDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": ["id"],
         "type": "object"
       },
       "LearningAttemptDto": {
@@ -17679,6 +17755,55 @@
           }
         },
         "tags": ["SpecialtyChoiceMe"]
+      }
+    },
+    "/v1/public/applications/investor": {
+      "post": {
+        "operationId": "ApplicationsPublicController_submitInvestor",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvestorRequestIntakeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvestorRequestIntakeResultDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationRefusalDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["ApplicationsPublic"]
       }
     },
     "/v1/public/applications/partnership": {

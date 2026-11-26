@@ -2,6 +2,8 @@ import type {
   AdminApplicationField,
   ApplicationKind,
   AuthorApplicationPayload,
+  InvestorRequestContact,
+  InvestorRequestPayload,
   PartnershipRequestContact,
   PartnershipRequestPayload,
 } from "@ds/schemas";
@@ -90,6 +92,31 @@ function partnershipContactFields(
   ];
 }
 
+/** 034 EARS-10 — the «Инвесторам» form's task, with the form's label. */
+function investorFields(
+  payload: InvestorRequestPayload,
+): AdminApplicationField[] {
+  return payload.task === undefined
+    ? []
+    : [{ key: "task", label: "Задача", value: payload.task }];
+}
+
+/** 034 EARS-10 — the investor contact as sent, optional fields only when sent. */
+function investorContactFields(
+  contact: InvestorRequestContact,
+): AdminApplicationField[] {
+  const out: AdminApplicationField[] = [
+    { key: "organisation", label: "Организация", value: contact.organisation },
+    { key: "fullName", label: "ФИО", value: contact.fullName },
+  ];
+  if (contact.role !== undefined)
+    out.push({ key: "role", label: "Роль в организации", value: contact.role });
+  out.push({ key: "email", label: "Рабочая почта", value: contact.email });
+  if (contact.phone !== undefined)
+    out.push({ key: "phone", label: "Телефон", value: contact.phone });
+  return out;
+}
+
 export const APPLICATION_ADMIN_VIEWS = {
   author: {
     fields: authorFields as ApplicationAdminView["fields"],
@@ -102,6 +129,13 @@ export const APPLICATION_ADMIN_VIEWS = {
       partnershipContactFields as ApplicationAdminView["contactFields"],
     contactName: ((contact: PartnershipRequestContact) =>
       contact.emailOrTelegram) as ApplicationAdminView["contactName"],
+  },
+  investor: {
+    fields: investorFields as ApplicationAdminView["fields"],
+    contactFields:
+      investorContactFields as ApplicationAdminView["contactFields"],
+    contactName: ((contact: InvestorRequestContact) =>
+      contact.fullName) as ApplicationAdminView["contactName"],
   },
 } satisfies Record<ApplicationKind, ApplicationAdminView>;
 

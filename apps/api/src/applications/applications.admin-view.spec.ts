@@ -57,3 +57,46 @@ describe("033 — the partnership kind's admin view", () => {
     ).toBe("name@company.ru");
   });
 });
+
+/**
+ * 034 EARS-10 — the `investor` kind (#4236) reads in the admin «Заявки» like
+ * every kind: the «Инвесторам» form's fields with its labels, the optional ones
+ * only when sent, and the full name as the list's applicant.
+ */
+describe("034 — the investor kind's admin view", () => {
+  const view = adminViewOf("investor");
+  const resolved = { specialtyName: null };
+
+  it("EARS-10: the detail lists organisation, full name, role, work email, phone and task with the form's labels, optional fields only when sent", () => {
+    expect(view).toBeDefined();
+    expect(
+      view!.contactFields({
+        organisation: "ООО «Партнёр А»",
+        fullName: "Анна Петрова",
+        role: "Директор",
+        email: "anna@partner-a.test",
+        phone: "+7 900 000-00-00",
+      } as never),
+    ).toEqual([
+      { key: "organisation", label: "Организация", value: "ООО «Партнёр А»" },
+      { key: "fullName", label: "ФИО", value: "Анна Петрова" },
+      { key: "role", label: "Роль в организации", value: "Директор" },
+      { key: "email", label: "Рабочая почта", value: "anna@partner-a.test" },
+      { key: "phone", label: "Телефон", value: "+7 900 000-00-00" },
+    ]);
+    expect(
+      view!.contactFields({
+        organisation: "ООО «Партнёр А»",
+        fullName: "Анна Петрова",
+        email: "anna@partner-a.test",
+      } as never),
+    ).toHaveLength(3);
+    expect(view!.fields({ task: "Обсудить школу" } as never, resolved)).toEqual(
+      [{ key: "task", label: "Задача", value: "Обсудить школу" }],
+    );
+    expect(view!.fields({} as never, resolved)).toEqual([]);
+    expect(view!.contactName({ fullName: "Анна Петрова" } as never)).toBe(
+      "Анна Петрова",
+    );
+  });
+});

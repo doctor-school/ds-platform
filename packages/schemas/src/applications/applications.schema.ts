@@ -6,11 +6,12 @@ import { z } from "zod";
  *
  * `ApplicationKind` is CLOSED: a kind exists only once its payload schema, its
  * intake and its entry in the api's `APPLICATION_KINDS` table exist: `author`
- * (EARS-6, EARS-7) and `partnership` (the Academy home form, EARS-18). 034's
- * investor intake (#1824) extends this enum, the api table and the
- * `applications_kind_check` constraint in its own migration.
+ * (EARS-6, EARS-7), `partnership` (the Academy home form, EARS-18) and
+ * `investor` (the Academy «Инвесторам» form, 034 EARS-6). A new kind extends
+ * this enum, the api table and the `applications_kind_check` constraint in its
+ * own migration.
  */
-export const APPLICATION_KINDS = ["author", "partnership"] as const;
+export const APPLICATION_KINDS = ["author", "partnership", "investor"] as const;
 export const ApplicationKindSchema = z.enum(APPLICATION_KINDS);
 export type ApplicationKind = z.infer<typeof ApplicationKindSchema>;
 

@@ -5,6 +5,12 @@ import {
   AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
   type AuthorApplicationPayload,
   AuthorApplicationPayloadSchema,
+  INVESTOR_REQUEST_CONSENT_PURPOSE,
+  INVESTOR_REQUEST_CONSENT_VERSION_TAG,
+  type InvestorRequestContact,
+  InvestorRequestContactSchema,
+  type InvestorRequestPayload,
+  InvestorRequestPayloadSchema,
   PARTNERSHIP_CONSENT_PURPOSE,
   PARTNERSHIP_CONSENT_VERSION_TAG,
   type PartnershipRequestContact,
@@ -16,8 +22,8 @@ import {
 /**
  * 033-design «Request kinds (the 034 seam)» — one entry per closed
  * `ApplicationKind`. A new kind (034's investor) extends the enum in
- * `@ds/schemas`, adds its entry here and widens `applications_kind_check`; the queue's storage, retention, erasure and audit
- * work unchanged, and the notifications slice (#4029) resolves the receipt
+ * `@ds/schemas`, adds its entry here and widens `applications_kind_check`;
+ * the queue's storage, retention, erasure and audit work unchanged, and the notifications slice (#4029) resolves the receipt
  * recipient from `receiptTo`.
  */
 export interface ApplicationKindDefinition<P = unknown, C = unknown> {
@@ -70,5 +76,20 @@ export const APPLICATION_KIND_TABLE = {
   } satisfies ApplicationKindDefinition<
     PartnershipRequestPayload,
     PartnershipRequestContact
+  >,
+  investor: {
+    payloadSchema: InvestorRequestPayloadSchema,
+    contactSchema: InvestorRequestContactSchema,
+    subjectLine: (_payload, contact) => contact.organisation,
+    intake: "public",
+    consentPurpose: INVESTOR_REQUEST_CONSENT_PURPOSE,
+    consentDocumentSlug: null,
+    consentVersionTag: INVESTOR_REQUEST_CONSENT_VERSION_TAG,
+    // 034 EARS-9: «Заявка получена» to the request's work email.
+    receiptTo: "contact-email",
+    label: "Инвестор",
+  } satisfies ApplicationKindDefinition<
+    InvestorRequestPayload,
+    InvestorRequestContact
   >,
 } satisfies Record<ApplicationKind, object>;

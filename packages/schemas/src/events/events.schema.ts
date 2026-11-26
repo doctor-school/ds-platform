@@ -727,8 +727,10 @@ export type PublicSpeaker = z.infer<typeof PublicSpeakerSchema>;
  * non-retired) expert linked to the event through an active `event_experts`
  * row. `photoUrl` is PRESENT and nullable (an expert without a photo renders
  * the initials fallback of EARS-2, never a broken image); `role` is the
- * event-specific role authored on the link, not the expert's standing
- * professional role.
+ * optional per-event caption authored on the link, not the expert's standing
+ * professional role — PRESENT and null when the link carries none (EARS-31),
+ * so the card renders without a kicker. The link's programme role is not part
+ * of this public item.
  */
 export const PublicExpertSpeakerSchema = z.object({
   source: z.literal("expert"),
@@ -737,7 +739,7 @@ export const PublicExpertSpeakerSchema = z.object({
   name: z.string(),
   credentials: z.string(),
   photoUrl: z.string().nullable(),
-  role: z.string(),
+  role: z.string().nullable(),
 });
 export type PublicExpertSpeaker = z.infer<typeof PublicExpertSpeakerSchema>;
 

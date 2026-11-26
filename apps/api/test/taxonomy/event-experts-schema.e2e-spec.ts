@@ -204,10 +204,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-7: role shall be nullable at rest so #1306 can clear it without deleting the link", async () => {
-      // The Zod write contract REQUIRES a role — an operator never authors a
-      // link without one. Nullability exists for exactly one writer:
-      // `RemoveExpertContent` (§2.4), which clears the editorial text of a
-      // person who asked to be taken off the site while the link itself, and
+      // Since EARS-31 the caption is optional on write too; nullability also
+      // serves `RemoveExpertContent` (§2.4), which clears the editorial text of
+      // a person who asked to be taken off the site while the link itself, and
       // the historical fact it records, survive.
       const eventId = await insertEvent();
       const expertId = await insertExpert();
@@ -217,6 +216,46 @@ describe.skipIf(!process.env.DATABASE_URL)(
         role: null,
       });
       expect(id).toBeTypeOf("string");
+    });
+
+    it("012 EARS-31: program_role shall be a NOT NULL closed enum that a writer omitting it gets as speaker, independent of the caption", async () => {
+      const eventId = await insertEvent();
+      const omitted = await insertLink({
+        event_id: eventId,
+        expert_id: await insertExpert(),
+        role: "к.м.н.",
+      });
+      const moderator = await insertLink({
+        event_id: eventId,
+        expert_id: await insertExpert(),
+        program_role: "moderator",
+        role: null,
+        position: 1,
+      });
+      const { rows } = await pool.query<{
+        id: string;
+        program_role: string;
+        role: string | null;
+      }>(
+        `SELECT id, program_role::text, role FROM event_experts
+          WHERE id = ANY($1::uuid[]) ORDER BY position`,
+        [[omitted, moderator]],
+      );
+      expect(rows).toEqual([
+        { id: omitted, program_role: "speaker", role: "к.м.н." },
+        { id: moderator, program_role: "moderator", role: null },
+      ]);
+      for (const program_role of ["host", null]) {
+        await expect(
+          insertLink({
+            event_id: eventId,
+            expert_id: await insertExpert(),
+            program_role,
+            position: 2,
+          }),
+          String(program_role),
+        ).rejects.toThrow(/event_expert_program_role|program_role/);
+      }
     });
 
     it("012 EARS-7: when the version counter would drop below one, the system shall reject the row", async () => {

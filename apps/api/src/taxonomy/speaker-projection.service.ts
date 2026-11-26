@@ -112,12 +112,14 @@ export class SpeakerProjectionService {
    * The expert item. `photoUrl` is signed at read time (the bucket is private, an
    * unsigned URL is dead — #842) and stays PRESENT and nullable so the client
    * renders the initials fallback rather than a broken image. Returns `null`
-   * when the row cannot form a complete public item.
+   * when the row cannot form a complete public item. The caption (`role`) is
+   * optional since 012 EARS-31: a link without one is a complete item whose
+   * `role` is null, so the card renders without a kicker.
    */
   private async expertItem(
     link: ExpertSpeakerProjectionRow,
   ): Promise<PublicEventPageSpeaker | null> {
-    if (!link.expertName || !link.role) return null;
+    if (!link.expertName) return null;
     return {
       source: "expert",
       expertId: link.expertId,

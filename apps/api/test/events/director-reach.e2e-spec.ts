@@ -431,7 +431,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         method: "POST",
         url: "/v1/admin/event-experts",
         headers: json(director),
-        payload: { eventId, expertId, role: "Спикер", position: 0 },
+        payload: {
+          eventId,
+          expertId,
+          programRole: "speaker",
+          role: "Спикер",
+          position: 0,
+        },
       });
       expect(linked.statusCode).toBe(201);
       const linkId = (linked.json() as { id: string }).id;
@@ -563,7 +569,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         method: "POST",
         url: "/v1/admin/event-experts",
         headers: json(director),
-        payload: { eventId, expertId, role: "Спикер", position: 0 },
+        payload: {
+          eventId,
+          expertId,
+          programRole: "speaker",
+          role: "Спикер",
+          position: 0,
+        },
       });
       expect(refused.statusCode).toBe(403);
       expect((refused.json() as { errorCode: string }).errorCode).toBe(

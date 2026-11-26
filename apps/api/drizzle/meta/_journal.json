@@ -540,6 +540,13 @@
       "when": 1795703307438,
       "tag": "0077_034_investor_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1795752008467,
+      "tag": "0078_012_event_expert_program_role",
+      "breakpoints": true
     }
   ]
 }

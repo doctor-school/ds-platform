@@ -136,6 +136,7 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
   await admin("POST", "/v1/admin/event-experts", {
     eventId: draft,
     expertId: expert.id,
+    programRole: "speaker",
     role: "Спикер",
     position: 0,
   });

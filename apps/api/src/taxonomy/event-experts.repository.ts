@@ -2,7 +2,10 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, EventExpert } from "@ds/db";
 import { eventExperts, events, experts } from "@ds/db";
-import type { AdminEventExpertListQuery } from "@ds/schemas";
+import type {
+  AdminEventExpertListQuery,
+  EventExpertProgramRole,
+} from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withSlotConflictMapping } from "./taxonomy.errors.js";
@@ -38,13 +41,17 @@ export interface ExpertLifecycle {
 export interface EventExpertInsert {
   eventId: string;
   expertId: string;
-  role: string;
+  programRole: EventExpertProgramRole;
+  /** The optional caption (EARS-31); null when none was written. */
+  role: string | null;
   position: number;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface EventExpertPatch {
-  role?: string;
+  programRole?: EventExpertProgramRole;
+  /** `null` clears the caption (EARS-31). */
+  role?: string | null;
   position?: number;
   status?: "active" | "retired";
   deletedAt?: Date | null;

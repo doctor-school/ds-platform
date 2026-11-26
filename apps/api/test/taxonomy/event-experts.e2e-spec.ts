@@ -197,6 +197,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       id: string;
       eventId: string;
       expertId: string;
+      programRole: "speaker" | "moderator";
       role: string | null;
       position: number;
       status: "active" | "retired";
@@ -229,6 +230,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId,
+          programRole: "speaker",
           role: "Спикер",
           position: 0,
           ...overrides,
@@ -300,13 +302,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const eventId = await insertEvent();
       const expertId = await insertExpert();
       const res = await createLink({
-        payload: { eventId, expertId, role: "Модератор", position: 2 },
+        payload: {
+          eventId,
+          expertId,
+          programRole: "speaker",
+          role: "Модератор",
+          position: 2,
+        },
       });
       expect(res.statusCode).toBe(201);
       const detail = body(res);
       expect(detail).toMatchObject({
         eventId,
         expertId,
+        programRole: "speaker",
         role: "Модератор",
         position: 2,
         status: "active",
@@ -353,6 +362,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "expertId",
         "id",
         "position",
+        "programRole",
         "role",
         "status",
         "updatedAt",
@@ -437,6 +447,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId: await insertDraftExpert(),
+          programRole: "speaker",
           role: "Докладчик",
           position: 1,
         },
@@ -447,6 +458,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId: await insertDraftExpert(),
+          programRole: "speaker",
           role: "Докладчик",
           position: 1,
         },
@@ -460,6 +472,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId: await insertDraftExpert(),
+          programRole: "speaker",
           role: "Докладчик",
           position: 2,
         },
@@ -534,7 +547,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-7: when the same expert is already linked to the event, the system shall refuse a second link and point at the restore instead", async () => {
       const { detail, eventId, expertId, etag } = await seedLink();
       const duplicate = await createLink({
-        payload: { eventId, expertId, role: "Спикер", position: 9 },
+        payload: {
+          eventId,
+          expertId,
+          programRole: "speaker",
+          role: "Спикер",
+          position: 9,
+        },
       });
       expect(duplicate.statusCode).toBe(409);
       expect(problem(duplicate).errorCode).toBe("RELATIONSHIP_CONFLICT");
@@ -543,7 +562,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // history, and a second row would fork it.
       await transitionLink(detail.id, "retire", { ifMatch: etag });
       const afterRetire = await createLink({
-        payload: { eventId, expertId, role: "Спикер", position: 9 },
+        payload: {
+          eventId,
+          expertId,
+          programRole: "speaker",
+          role: "Спикер",
+          position: 9,
+        },
       });
       expect(afterRetire.statusCode).toBe(409);
       expect(problem(afterRetire).errorCode).toBe("RELATIONSHIP_CONFLICT");
@@ -553,7 +578,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const eventId = await insertEvent();
       const expertId = await insertExpert();
       const bad: Array<Record<string, unknown>> = [
-        { role: "" },
         { role: "x".repeat(81) },
         { position: -1 },
         { position: 32768 },
@@ -568,6 +592,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           payload: {
             eventId,
             expertId,
+            programRole: "speaker",
             role: "Спикер",
             position: 0,
             ...override,
@@ -629,7 +654,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const eventId = await insertEvent();
       const expertId = await insertExpert();
       const k = key();
-      const payload = { eventId, expertId, role: "Спикер", position: 0 };
+      const payload = {
+        eventId,
+        expertId,
+        programRole: "speaker",
+        role: "Спикер",
+        position: 0,
+      };
       const first = await createLink({ payload, idempotencyKey: k });
       expect(first.statusCode).toBe(201);
       const replay = await createLink({ payload, idempotencyKey: k });
@@ -720,6 +751,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId: firstExpert,
+          programRole: "speaker",
           role: "Спикер",
           position: 0,
         },
@@ -731,6 +763,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           eventId,
           expertId: secondExpert,
+          programRole: "speaker",
           role: "Модератор",
           position: 1,
         },
@@ -809,6 +842,131 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(fresh.statusCode, fresh.payload).toBe(200);
       expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
+    });
+
+    // ── 012 EARS-31 (#4306) — programme role + optional caption ────────────
+
+    it("012 EARS-31: when a link is created without a programme role or with a value outside speaker | moderator, the system shall refuse it before any write", async () => {
+      const eventId = await insertEvent();
+      const expertId = await insertExpert();
+      const bad: Array<Record<string, unknown>> = [
+        {},
+        { programRole: null },
+        { programRole: "host" },
+        { programRole: "Докладчик" },
+        { programRole: "SPEAKER" },
+      ];
+      for (const override of bad) {
+        const res = await createLink({
+          payload: {
+            eventId,
+            expertId,
+            role: "к.м.н.",
+            position: 0,
+            ...override,
+          },
+        });
+        expect(res.statusCode, JSON.stringify(override)).toBe(400);
+        expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+      }
+      const { rows } = await pool.query(
+        "SELECT id FROM event_experts WHERE event_id = $1",
+        [eventId],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("012 EARS-31: when a link is created with a programme role and no caption — absent, null or blank — the system shall store the role and a null caption", async () => {
+      const eventId = await insertEvent();
+      const cases: Array<[Record<string, unknown>, string | null]> = [
+        [{ programRole: "moderator" }, null],
+        [{ programRole: "speaker", role: null }, null],
+        [{ programRole: "moderator", role: "   " }, null],
+        [
+          { programRole: "speaker", role: "  к.м.н., доцент  " },
+          "к.м.н., доцент",
+        ],
+      ];
+      for (const [i, [payload, caption]] of cases.entries()) {
+        const res = await createLink({
+          payload: {
+            eventId,
+            expertId: await insertExpert(),
+            position: i,
+            ...payload,
+          },
+        });
+        expect(res.statusCode, res.payload).toBe(201);
+        const detail = body(res);
+        expect(detail).toMatchObject({
+          programRole: payload.programRole,
+          role: caption,
+        });
+        const { rows } = await pool.query<{
+          program_role: string;
+          role: string | null;
+        }>("SELECT program_role, role FROM event_experts WHERE id = $1", [
+          detail.id,
+        ]);
+        expect(rows[0]).toEqual({
+          program_role: payload.programRole,
+          role: caption,
+        });
+        expect(body(await readLink(detail.id))).toEqual(detail);
+      }
+    });
+
+    it("012 EARS-31: an edit shall change the programme role, clear the caption with null or blank, keep omitted fields, and refuse a role outside the set", async () => {
+      const seeded = await seedLink({ role: "к.м.н." });
+      expect(seeded.detail).toMatchObject({
+        programRole: "speaker",
+        role: "к.м.н.",
+      });
+      let etag = seeded.etag;
+      const steps: Array<[Record<string, unknown>, Partial<LinkDetail>]> = [
+        [
+          { programRole: "moderator" },
+          { programRole: "moderator", role: "к.м.н." },
+        ],
+        [{ role: null }, { programRole: "moderator", role: null }],
+        [{ role: "доцент" }, { programRole: "moderator", role: "доцент" }],
+        [{ role: "  " }, { programRole: "moderator", role: null }],
+        [
+          { programRole: "speaker", role: "д.м.н." },
+          { programRole: "speaker", role: "д.м.н." },
+        ],
+      ];
+      for (const [payload, expected] of steps) {
+        const res = await patchLink(seeded.detail.id, {
+          payload,
+          ifMatch: etag,
+        });
+        expect(
+          res.statusCode,
+          `${JSON.stringify(payload)} ${res.payload}`,
+        ).toBe(200);
+        expect(body(res)).toMatchObject(expected);
+        etag = res.headers.etag as string;
+      }
+      for (const programRole of ["chair", null, ""]) {
+        const res = await patchLink(seeded.detail.id, {
+          payload: { programRole },
+          ifMatch: etag,
+        });
+        expect(res.statusCode, JSON.stringify(programRole)).toBe(400);
+        expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+      }
+      const list = await app.inject({
+        method: "GET",
+        url: `/v1/admin/event-experts?eventId=${seeded.eventId}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(list.statusCode).toBe(200);
+      expect(
+        (JSON.parse(list.payload) as { data: LinkDetail[] }).data,
+      ).toMatchObject([
+        { id: seeded.detail.id, programRole: "speaker", role: "д.м.н." },
+      ]);
     });
   },
 );

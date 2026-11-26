@@ -122,6 +122,7 @@ export class EventExpertsService {
         id: row.id,
         eventId: row.eventId,
         expertId: row.expertId,
+        programRole: row.programRole,
         role: row.role,
         position: row.position,
         status: row.status,
@@ -153,7 +154,7 @@ export class EventExpertsService {
   private async createCommand(
     input: CreateEventExpertInput,
   ): Promise<EventExpertCommandResult> {
-    const { eventId, expertId, role, position } = input.payload;
+    const { eventId, expertId, programRole, role, position } = input.payload;
 
     const row = await this.repo.transaction(async (tx) => {
       // §2.3 step 1–2: experts (ascending id), then the parent event.
@@ -189,7 +190,9 @@ export class EventExpertsService {
       const created = await this.repo.insert(tx, {
         eventId,
         expertId,
-        role,
+        programRole,
+        // An absent caption is no caption (EARS-31).
+        role: role ?? null,
         position,
       });
       await this.idempotency.complete(tx, input.lease, {
@@ -253,6 +256,9 @@ export class EventExpertsService {
         current.id,
         input.expectedVersion,
         {
+          ...(input.payload.programRole !== undefined
+            ? { programRole: input.payload.programRole }
+            : {}),
           ...(input.payload.role !== undefined ? { role: input.payload.role } : {}),
           ...(input.payload.position !== undefined
             ? { position: input.payload.position }
@@ -406,6 +412,7 @@ function toDetail(row: EventExpert): EventExpertAdminDetail {
     id: row.id,
     eventId: row.eventId,
     expertId: row.expertId,
+    programRole: row.programRole,
     role: row.role,
     position: row.position,
     status: row.status,

@@ -37,19 +37,25 @@ RUN apt-get update \
     && { [ "$v" = "pgBackRest ${PGBACKREST_PACKAGE%%-*}" ] \
          || { echo "pgbackrest on PATH is '$v', pinned ${PGBACKREST_PACKAGE}" >&2; exit 1; }; } \
     && mkdir -p /var/log/pgbackrest /var/spool/pgbackrest /etc/pgbackrest/conf.d \
-    && chown -R postgres:postgres /var/log/pgbackrest /var/spool/pgbackrest /etc/pgbackrest/conf.d
+       /etc/pgbackrest/offsite \
+    && chown -R postgres:postgres /var/log/pgbackrest /var/spool/pgbackrest \
+       /etc/pgbackrest/conf.d /etc/pgbackrest/offsite
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY backup.sh /usr/local/bin/backup.sh
-# #3670: the offsite include (pgbackrest.conf) and the data-secret rotation's verdict.
+# #3670 / #4298: each offsite repo's own config and WAL spool, pgBackRest under that
+# config, the spool's pusher, and the data-secret rotation's verdict.
 COPY pgbackrest-offsite.sh /usr/local/bin/pgbackrest-offsite.sh
+COPY pgbackrest-repo.sh /usr/local/bin/pgbackrest-repo.sh
+COPY wal-offsite-push.sh /usr/local/bin/wal-offsite-push.sh
 COPY repo-check.sh /usr/local/bin/repo-check.sh
 # User-crontab format (no user column) — installed into ROOT's crontab, which the
 # `cron -f` daemon (entrypoint) reads. Not placed in /etc/cron.d (that needs a user
 # column + would be double-processed).
 COPY crontab /etc/pgbackrest.crontab
 RUN chmod 0755 /usr/local/bin/entrypoint.sh /usr/local/bin/backup.sh \
-       /usr/local/bin/pgbackrest-offsite.sh /usr/local/bin/repo-check.sh \
+       /usr/local/bin/pgbackrest-offsite.sh /usr/local/bin/pgbackrest-repo.sh \
+       /usr/local/bin/wal-offsite-push.sh /usr/local/bin/repo-check.sh \
     && crontab /etc/pgbackrest.crontab
 
 # cron must run as root (it drops to `postgres` via gosu per job — see backup.sh).

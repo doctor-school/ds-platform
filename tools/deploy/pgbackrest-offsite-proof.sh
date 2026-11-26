@@ -50,7 +50,7 @@ diagnose() {
   psql_ -c "select archived_count, failed_count, last_archived_wal, last_failed_wal from pg_stat_archiver"
   echo "--- .ready backlog: $(ready_count)"
   echo "--- repo2 spool: $(spool_count)"
-  dc exec -T pgbackrest sh -c 'ls -la /var/spool/ds-offsite 2>&1; cat /var/spool/ds-offsite/*.gap 2>/dev/null'
+  dc exec -T pgbackrest sh -c 'ls -la /var/log/pgbackrest/offsite-spool 2>&1; cat /var/log/pgbackrest/offsite-spool/*.gap 2>/dev/null'
   echo "--- postgres log (tail)"
   dc logs --no-color --tail 60 postgres
   echo "--- pgbackrest sidecar log (tail)"
@@ -145,7 +145,7 @@ ready_count() {
   dc exec -T postgres sh -c 'ls /var/lib/postgresql/data/pg_wal/archive_status' | grep -c '\.ready$' || true
 }
 spool_count() {
-  dc exec -T pgbackrest sh -c 'ls /var/spool/ds-offsite/repo2 2>/dev/null' | grep -c . || true
+  dc exec -T pgbackrest sh -c 'ls /var/log/pgbackrest/offsite-spool/repo2 2>/dev/null' | grep -c . || true
 }
 repo1_ls() { dc exec -T pgbackrest gosu postgres pgbackrest --stanza=ds --repo=1 repo-ls --recurse archive/ds; }
 repo2_ls() { dc exec -T -u postgres pgbackrest /usr/local/bin/pgbackrest-repo.sh 2 repo-ls --recurse archive/ds; }
@@ -214,9 +214,15 @@ for _ in $(seq 1 60); do all_in_repo1 && break; sleep 1; done
 [[ $(psql_ -c "select failed_count from pg_stat_archiver") == 0 ]] || fail "archive_command failed on spool overflow"
 spooled=$(spool_count)
 [[ $spooled == "$SPOOL_MAX" ]] || fail "repo2 spool holds $spooled after overflow, expected the cap $SPOOL_MAX"
-DROPPED=("${SEGS[@]:0:$((${#SEGS[@]} - SPOOL_MAX))}")
-KEPT=("${SEGS[@]:${#DROPPED[@]}}")
-gap=$(dc exec -T pgbackrest cat /var/spool/ds-offsite/repo2.gap) || fail "no gap marker after overflow"
+# archive_timeout or a checkpoint may add a segment of its own: read the spool itself.
+dc exec -T pgbackrest sh -c 'ls /var/log/pgbackrest/offsite-spool/repo2' >"$WORK/spool.ls"
+DROPPED=() KEPT=()
+for seg in "${SEGS[@]}"; do
+  if grep -qx "$seg" "$WORK/spool.ls"; then KEPT+=("$seg"); else DROPPED+=("$seg"); fi
+done
+((${#DROPPED[@]} >= ${#SEGS[@]} - SPOOL_MAX)) || fail "only ${#DROPPED[@]} segments left the spool past its cap"
+[[ ${DROPPED[-1]} < ${KEPT[0]} ]] || fail "the spool dropped a newer segment than one it kept"
+gap=$(dc exec -T pgbackrest cat /var/log/pgbackrest/offsite-spool/repo2.gap) || fail "no gap marker after overflow"
 for seg in "${DROPPED[@]}"; do grep -q "dropped $seg" <<<"$gap" || fail "gap marker does not name dropped $seg"; done
 log "2. spool at the cap, ${#DROPPED[@]} oldest dropped and recorded"
 
@@ -234,7 +240,7 @@ log "3. repo2 holds all ${#KEPT[@]} spooled segments, none of the ${#DROPPED[@]}
 # --- 4. offsite backup + PITR from repo2 alone ----------------------------------------
 log "4. full backup to repo2 (archive-check=y)"
 dc exec -T pgbackrest /usr/local/bin/backup.sh full offsite 2 || fail "backup.sh full offsite 2 failed"
-dc exec -T pgbackrest test ! -e /var/spool/ds-offsite/repo2.gap || fail "the gap marker survived a successful repo2 backup"
+dc exec -T pgbackrest test ! -e /var/log/pgbackrest/offsite-spool/repo2.gap || fail "the gap marker survived a successful repo2 backup"
 psql_ -c "insert into proof_marker values ('before-target')"
 sleep 2
 target=$(psql_ -c "select to_char(now() at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') || '+00'")

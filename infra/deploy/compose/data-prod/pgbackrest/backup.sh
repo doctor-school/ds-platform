@@ -7,10 +7,14 @@
 # PGDATA volume and connect over the shared unix socket.
 #
 # Usage: backup.sh <full|incr> [offsite [<repo>...]]
-# `offsite` (#3670) backs up to each offsite repo the include enables
-# (pgbackrest-offsite.sh), or only the named ones, instead of repo1; one failing repo
-# does not skip the next. repo1's own backup and each offsite one take only their own
-# repo's backup lock, so they never collide.
+# `offsite` (#3670) backs up to each offsite repo pgbackrest-offsite.sh turned on, or
+# only the named ones, instead of repo1, each under its own repo-only config
+# (pgbackrest-repo.sh, #4298) with archive-check: the backup's WAL reaches that repo
+# through the offsite spool and pusher. One failing repo does not skip the next. A
+# successful backup clears the repo's spool gap marker (pgbackrest-archive.sh) if no
+# segment was dropped after it started: PITR on that repo works again from it.
+# repo1's own backup and each offsite one take only their own repo's backup lock, so
+# they never collide.
 set -euo pipefail
 
 TYPE="${1:?usage: backup.sh <full|incr> [offsite [<repo>...]]}"
@@ -26,11 +30,12 @@ if [[ -f "$DS_PGBACKREST_ENV_FILE" ]]; then
 fi
 
 if [[ $TARGET == offsite ]]; then
-  include="${DS_PGBACKREST_OFFSITE_INCLUDE:-/etc/pgbackrest/conf.d/offsite.conf}"
+  offsite="${DS_PGBACKREST_OFFSITE_DIR:-/etc/pgbackrest/offsite}"
+  spool="${DS_OFFSITE_SPOOL:-/var/log/pgbackrest/offsite-spool}"
   repos=()
-  if [[ -f $include ]]; then
-    mapfile -t repos < <(sed -n 's/^repo\([0-9]\)-type=.*/\1/p' "$include")
-  fi
+  for n in 2 3; do
+    if [[ -f $offsite/repo$n/pgbackrest.conf ]]; then repos+=("$n"); fi
+  done
   # Named repos (the rotation unit's first full of a repo it turned on): those only.
   if (($# > 2)); then
     for n in "${@:3}"; do
@@ -45,7 +50,13 @@ if [[ $TARGET == offsite ]]; then
   rc=0
   for n in "${repos[@]}"; do
     echo "[$(date -u +%FT%TZ)] pgbackrest ${TYPE} backup to repo${n} starting"
-    "${BASH_SOURCE[0]%/*}/gosu" postgres pgbackrest --stanza=ds --repo="$n" --type="${TYPE}" backup || rc=1
+    started=$(mktemp)
+    if "${BASH_SOURCE[0]%/*}/gosu" postgres "${BASH_SOURCE[0]%/*}/pgbackrest-repo.sh" "$n" --type="${TYPE}" backup; then
+      find "$spool" -maxdepth 1 -name "repo$n.gap" ! -newer "$started" -delete 2>/dev/null || true
+    else
+      rc=1
+    fi
+    rm -f -- "$started"
   done
   exit "$rc"
 fi

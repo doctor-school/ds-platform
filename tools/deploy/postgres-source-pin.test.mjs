@@ -23,12 +23,12 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
 /**
  * The accepted v2 source hash: the v2 of the data-prod images that pin pgBackRest 2.60.0,
- * pg_partman and both bases by digest (#3992) and carry the offsite-repo include and
- * async WAL spool (#3670), certified by postgres-artifact.yml before the release that
+ * pg_partman and both bases by digest (#3992), archive to repo1 alone and spool WAL for
+ * each offsite repo (#4298), certified by postgres-artifact.yml before the release that
  * ships them.
  */
 const ACCEPTED_SOURCE_HASH =
-  "9331f8e4518c2fd0d459f1c00c90870d87f57be6317eaed7b10f419031dcc66f";
+  "701f0d04819410966c6997edbe23945b749e86a609f4236b025ecce0d654627e";
 
 test("3418: the committed data-prod postgres source hash is the accepted one", () => {
   const { sourceHash } = readPostgresTarget("HEAD", REPO_ROOT);

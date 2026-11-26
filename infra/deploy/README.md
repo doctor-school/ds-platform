@@ -922,7 +922,8 @@ create-access-key` on the operator's workstation, as above. The values never ent
       lines replaced or appended (root:root 0600), postgres + pgbackrest recreated with data-up's
       command on the recorded image overlay (`.postgres-artifacts.json`, so the guard
       reads the recorded images and the next release passes `postgres-verify`), then
-      `repo-check.sh` (`stanza-create` + `check` on every configured repo). A failed check puts the backup back, recreates
+      `repo-check.sh` (`stanza-create` + `check` on repo1 under the default config, and on each
+      offsite repo it is given by number under that repo's own config, #4298). A failed check puts the backup back, recreates
       again and fails the run: the old key keeps working. The backup is removed either
       way. A run whose job died is re-dispatched with the same inputs once the unit has
       ended (while it runs, the apply is refused) and within the 6 h:

@@ -561,6 +561,18 @@ routes:
     file: apps/admin/app/learning/page.tsx
     status: product-ready
   - app: admin
+    route: /learning/schools
+    file: apps/admin/app/learning/schools/page.tsx
+    status: product-ready
+  - app: admin
+    route: /learning/schools/new
+    file: apps/admin/app/learning/schools/new/page.tsx
+    status: product-ready
+  - app: admin
+    route: /learning/schools/[id]
+    file: apps/admin/app/learning/schools/[id]/page.tsx
+    status: product-ready
+  - app: admin
     route: /learning/courses/[id]
     file: apps/admin/app/learning/courses/[id]/page.tsx
     status: product-ready

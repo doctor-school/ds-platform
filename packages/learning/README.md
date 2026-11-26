@@ -9,7 +9,7 @@ The 024 learning path (spec `apps/docs/content/specs/features/024-learning-modul
 | `.`        | the structure model (`model.ts`); the element-type catalog (`video`, `download`, `test` — which facts a type takes, whether it needs a provider source or a media file) and the condition-type catalog; setting keys, `LEARNING_PLATFORM_SEED` and `LEARNING_PRESET_SEEDS` (`rules/seed.ts`); the layer resolver (`rules/resolver.ts`, nearest layer wins: step › lesson › module › course › school › platform); rule and step-payload validation plus `publishRequirements` (`rules/validate.ts`); the evaluator cascade with the rule-sentence builder (`evaluator/`); RU copy (`copy/learning-copy-ru.ts`) | none                         |
 | `./server` | framework-free services over `packages/db`: `LearningAdminService` (structure, publish gate, step source/media, rules, presets), `LearningDoctorService` (path/lesson/step reads, facts intake, attempts), the repository and the node-status projector                                                                                                                                                                                                                                                                                                                                                       | through `LearningServerDeps` |
 
-`./client`, `./ui` and `./admin` are added by the doctor and admin UI slices of #4011; they do not exist yet.
+`./client` is the browser transport; `./ui` holds the doctor screens (course path, lesson steps, the 023 school screen); `./admin` holds the staff screens over an injected transport port — the 023 school editor (`SchoolEditorScreen`) and the course structure editor (`CourseCompositionScreen`), the lesson composer, the rules editor and the preset panel.
 
 ## Seams (`LearningServerDeps`)
 
@@ -27,7 +27,7 @@ No completion / unlock / order / visibility / test / progress value is a constan
 
 - Public: `GET /v1/learning/courses/:courseSlug/path`, `GET /v1/learning/lessons/:lessonId`.
 - Doctor: `GET /v1/me/learning/steps/:stepId`, `POST /v1/me/learning/facts`, `POST /v1/me/learning/tests/:testId/attempts`, `POST /v1/me/learning/attempts/:attemptId/submit`.
-- Admin (`/v1/admin/learning`, 012 envelope — `Idempotency-Key` on writes, `If-Match` on versioned writes): schools, courses (publish / unpublish), modules, lessons (publish / unpublish, step order), steps (source for `video`, media for `download`), presets, rules per scope and apply-preset. Publishing a lesson that is not whole is `409 PUBLISH_REQUIREMENTS_NOT_MET` with field paths (`steps`, `steps.N.source`, `steps.N.media`, `exitTest`).
+- Admin (`/v1/admin/learning`, 012 envelope — `Idempotency-Key` on writes, `If-Match` on versioned writes): schools (edit, publish / unpublish, course order), courses (edit, publish / unpublish — refused `409 PUBLISH_REQUIREMENTS_NOT_MET` without a published lesson, module order), modules (rename), lessons (publish / unpublish, step order), steps (source for `video`, media for `download`), presets, rules per scope and apply-preset. Publishing a lesson that is not whole is `409 PUBLISH_REQUIREMENTS_NOT_MET` with field paths (`steps`, `steps.N.source`, `steps.N.media`, `exitTest`).
 
 ## Tests
 

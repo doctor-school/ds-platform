@@ -1,6 +1,8 @@
 import { emailSender } from "./email-layout.js";
 import {
   adminLockoutMessage,
+  applicationReceiptMessage,
+  applicationTeamNoticeMessage,
   phoneConfirmedNoticeMessage,
   congressConfirmationMessage,
   type CongressSubmissionDecisionContent,
@@ -32,6 +34,8 @@ import {
   type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
   type SchoolOpenedNoticeRequest,
+  type ApplicationReceiptRequest,
+  type ApplicationTeamNoticeRequest,
   type CongressSubmissionReminderRequest,
   type Mailer,
 } from "./mailer.types.js";
@@ -270,6 +274,28 @@ export class SmtpMailer implements Mailer {
         eventTitle: input.eventTitle,
       }),
       "congress submission receipt",
+    );
+  }
+  async sendApplicationTeamNotice(
+    input: ApplicationTeamNoticeRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      applicationTeamNoticeMessage({
+        kindLabel: input.kindLabel,
+        submittedAt: input.submittedAt,
+        adminUrl: input.adminUrl,
+      }),
+      "application team notice",
+    );
+  }
+  async sendApplicationReceipt(input: ApplicationReceiptRequest): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      applicationReceiptMessage(input.projectsUrl),
+      "application receipt",
     );
   }
   async sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void> {

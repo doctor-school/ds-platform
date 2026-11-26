@@ -129,9 +129,36 @@ add the kind's entry to `APPLICATION_ADMIN_VIEWS` (its labelled fields and
 contact for the admin detail) and the kind's intake. Storage, retention,
 erasure and audit need no change.
 
+## Notifications (EARS-11, EARS-12)
+
+`application-notices.ts` runs after an intake commits a NEW row (a replay sends
+nothing), off the response path — no send, lookup or record failure changes the
+intake's answer. It sends, once each through the mailer chain's failover:
+
+- the **team notice** (`applicationTeamNoticeMessage`: kind label, Moscow
+  submission time, admin detail link) to every active staff account holding
+  the 047 `platform_admin` role — the IdP grant says who holds it, the mirror
+  says the account is active (`deactivated_at` null, `record_status` active)
+  and gives the email, read at send time. Outcome `team_notice`: `sent`,
+  `failed` (any recipient's send failed, or the link could not be built), or
+  `skipped` when nobody holds the role;
+- the **receipt** «Заявка получена» (`applicationReceiptMessage`, the owner's
+  Stage-A copy on #4029) to the kind's `receiptTo` recipient — the account
+  email for `author`, the contact's `email` for a later `contact-email` kind.
+  Outcome `receipt_notice`: `sent`, `failed`, or `not_applicable` for a kind
+  without a receipt (`partnership`).
+
+Neither builder takes the application: no topic, name, company or contact can
+reach a queue email (033-design decisions 8, 19). Links come from
+`ACADEMY_PUBLIC_ORIGIN` at send time: the receipt links `/projects` on it, the
+team notice `/applications/<id>` on its `admin` sibling host
+(`academy.doctor.school` → `admin.doctor.school`, `academy-<slot>.…` →
+`admin-<slot>.…`). An outcome that could not be recorded stays `pending`, which
+the admin list marks «Команда не уведомлена» like `failed` and `skipped`.
+
 ## Sibling slices
 
-Notifications (EARS-11, EARS-12) — #4029; admin queue API (EARS-13…17,
+Notifications (EARS-11, EARS-12) — #4029 (above); admin queue API (EARS-13…17,
 EARS-20 action; above) and its «Заявки» screens — #4030; the «Подать заявку»
 page and `GET /v1/me/applications` — #4031; the home form re-pointed at the
 partnership intake and the file store retired — #4032 (its portal slice); the

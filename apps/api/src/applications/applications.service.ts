@@ -33,6 +33,7 @@ import {
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { canonicalJson } from "../taxonomy/idempotency.service.js";
 import { resolveApplicationConsentVersion } from "./applications-consent.js";
+import { ApplicationNotices } from "./application-notices.js";
 import { APPLICATION_KIND_TABLE } from "./applications.kinds.js";
 import {
   APPLICATIONS_CLOCK,
@@ -142,6 +143,7 @@ export class ApplicationsService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(APPLICATIONS_CLOCK) private readonly clock: ApplicationsClock,
+    @Inject(ApplicationNotices) private readonly notices: ApplicationNotices,
   ) {}
 
   /** Absent/blank `Idempotency-Key` is 428, a non-canonical one 400 (012 §6). */
@@ -162,6 +164,8 @@ export class ApplicationsService {
    * row and one `applications` row linked to it. A replay of the same key by
    * the same account with the same body answers the stored result and writes
    * nothing; any other reuse of the key is `422 IDEMPOTENCY_KEY_REUSED`.
+   * Only a new row, once committed, fires the EARS-11/12 notices; a replay
+   * sends nothing again.
    */
   async submitAuthor(
     sub: string,
@@ -173,7 +177,7 @@ export class ApplicationsService {
     const { consentVersion, ...rest } = body;
     const payload = defined(kind.payloadSchema.parse(defined(rest)));
 
-    return withRequestAuditContext(this.db, async (tx) => {
+    const outcome = await withRequestAuditContext(this.db, async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`applications:author:${idempotencyKey}`}, 0))`,
       );
@@ -200,7 +204,13 @@ export class ApplicationsService {
           canonicalJson(stored.payload) === canonicalJson(payload);
         if (!same)
           throw refusal(422, ApplicationProblemCodes.idempotencyKeyReused);
-        return { id: stored.id, submittedAt: stored.submittedAt.toISOString() };
+        return {
+          created: false as const,
+          result: {
+            id: stored.id,
+            submittedAt: stored.submittedAt.toISOString(),
+          },
+        };
       }
 
       const current = resolveApplicationConsentVersion(
@@ -262,10 +272,23 @@ export class ApplicationsService {
           submittedAt: applications.submittedAt,
         });
       return {
-        id: created!.id,
-        submittedAt: created!.submittedAt.toISOString(),
+        created: true as const,
+        submittedAt: created!.submittedAt,
+        result: {
+          id: created!.id,
+          submittedAt: created!.submittedAt.toISOString(),
+        },
       };
     });
+    if (outcome.created)
+      this.notices.afterCommit({
+        id: outcome.result.id,
+        kind: "author",
+        submittedAt: outcome.submittedAt,
+        applicantUserId: userId,
+        contact: null,
+      });
+    return outcome.result;
   }
 
   /**

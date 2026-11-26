@@ -378,3 +378,58 @@ export function schoolOpenedMessage(
     footer: ["Команда Doctor.School"],
   });
 }
+
+/**
+ * 033 EARS-12 — the «Заявка получена» receipt (copy: the owner's Stage-A pick
+ * on #4029, 2026-11-26). It takes nothing but the Academy projects link: the
+ * builder never sees the application, so no topic or other application content
+ * can reach the letter (033-design decision 19).
+ */
+export function applicationReceiptMessage(projectsUrl: string): EmailMessage {
+  return composeEmail({
+    subject: "Академия Doctor.School — заявка получена",
+    preheader: "Заявка получена",
+    intro:
+      "Ваша заявка получена. Администратор Академии рассмотрит её и свяжется с вами.",
+    paragraphs: ["Пока заявка на рассмотрении, посмотрите проекты Академии."],
+    action: { label: "Проекты Академии", url: projectsUrl },
+    footer: ["Команда Академии Doctor.School"],
+  });
+}
+
+/** 033 EARS-11 — what the team notification is rendered from, and only that. */
+export interface ApplicationTeamNoticeContent {
+  /** The kind's admin label («Автор», «Партнёрство»). */
+  kindLabel: string;
+  /** `applications.submitted_at`; rendered in Moscow wall-clock. */
+  submittedAt: Date;
+  /** The application's admin detail. */
+  adminUrl: string;
+}
+
+/**
+ * 033 EARS-11 — the internal team notification (the lead's call, no Stage A):
+ * the kind, the submission time in Moscow and the admin detail link. No topic,
+ * name, company or contact — the builder is never handed the application, so
+ * the queue email stays inside the RF-processor scope of ADR-0011 §2 channel 7
+ * (033-design decisions 8, 19).
+ */
+export function applicationTeamNoticeMessage(
+  content: ApplicationTeamNoticeContent,
+): EmailMessage {
+  const { dateWithYear, time } = formatEventTime({
+    startsAt: content.submittedAt,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return composeEmail({
+    subject: `Академия Doctor.School — новая заявка: ${content.kindLabel}`,
+    preheader: `Новая заявка: ${content.kindLabel}`,
+    intro: "В Академию поступила новая заявка.",
+    paragraphs: [
+      `Вид заявки: ${content.kindLabel}`,
+      `Получена: ${dateWithYear} в ${time} МСК`,
+    ],
+    action: { label: "Открыть заявку", url: content.adminUrl },
+    footer: ["Doctor.School"],
+  });
+}

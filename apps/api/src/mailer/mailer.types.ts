@@ -46,6 +46,29 @@ export interface SchoolOpenedNoticeRequest {
   schoolUrl: string;
 }
 
+/**
+ * 033 EARS-11 — the team notification to one `platform_admin`: the kind, the
+ * submission time and the admin detail link, never the application itself.
+ */
+export interface ApplicationTeamNoticeRequest {
+  /** The staff account's email. */
+  email: string;
+  /** The kind's admin label («Автор», «Партнёрство»). */
+  kindLabel: string;
+  /** `applications.submitted_at`; rendered in Moscow by the mail layer. */
+  submittedAt: Date;
+  /** The application's admin detail. */
+  adminUrl: string;
+}
+
+/** 033 EARS-12 — the «Заявка получена» receipt: a recipient and the projects link. */
+export interface ApplicationReceiptRequest {
+  /** The receipt recipient the kind names (033 `receiptTo`). */
+  email: string;
+  /** The Academy projects page. */
+  projectsUrl: string;
+}
+
 export interface CongressSubmissionReceiptRequest {
   /** The account email of the submission's author. */
   email: string;
@@ -197,6 +220,21 @@ export interface Mailer {
    * like the receipt.
    */
   sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void>;
+
+  /**
+   * 033 EARS-11: tell one `platform_admin` that an application was committed —
+   * an internal **product notice** carrying only kind, time and admin link,
+   * sent after the commit. Resolves on acceptance, rejects on a relay failure
+   * after failover; MUST reject an invalid email.
+   */
+  sendApplicationTeamNotice(input: ApplicationTeamNoticeRequest): Promise<void>;
+
+  /**
+   * 033 EARS-12: the «Заявка получена» receipt to the kind's receipt recipient —
+   * a **product notice** with no application content, sent after the commit.
+   * Same acceptance / rejection contract as the team notice.
+   */
+  sendApplicationReceipt(input: ApplicationReceiptRequest): Promise<void>;
 
   /**
    * 046 EARS-29, EARS-35: send the author the letter of a committee decision

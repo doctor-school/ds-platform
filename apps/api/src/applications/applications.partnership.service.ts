@@ -10,6 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { canonicalJson } from "../taxonomy/idempotency.service.js";
+import { ApplicationNotices } from "./application-notices.js";
 import { APPLICATION_KIND_TABLE } from "./applications.kinds.js";
 import { defined, refusal } from "./applications.service.js";
 import {
@@ -27,13 +28,14 @@ type Db = DrizzleHandle["db"];
  * it: the row itself carries the consent purpose and the form's fixed version
  * tag, the same stamp every imported interim record carries (EARS-19). The
  * home form promises no letter, so the receipt is `not_applicable` from the
- * start; the team notice stays `pending` for the notifications slice (#4029).
+ * start; the committed row fires the EARS-11 team notice after the commit.
  */
 @Injectable()
 export class ApplicationsPartnershipService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(APPLICATIONS_CLOCK) private readonly clock: ApplicationsClock,
+    @Inject(ApplicationNotices) private readonly notices: ApplicationNotices,
   ) {}
 
   /**
@@ -60,7 +62,7 @@ export class ApplicationsPartnershipService {
     );
     const contact = kind.contactSchema.parse({ emailOrTelegram });
 
-    return withRequestAuditContext(this.db, async (tx) => {
+    const outcome = await withRequestAuditContext(this.db, async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`applications:partnership:${idempotencyKey}`}, 0))`,
       );
@@ -86,7 +88,7 @@ export class ApplicationsPartnershipService {
           canonicalJson(stored.contact) === canonicalJson(contact);
         if (!same)
           throw refusal(422, ApplicationProblemCodes.idempotencyKeyReused);
-        return { id: stored.id };
+        return { created: false as const, id: stored.id };
       }
 
       if (consentVersion !== kind.consentVersionTag)
@@ -109,8 +111,24 @@ export class ApplicationsPartnershipService {
           submittedAt: this.clock(),
           receiptNotice: "not_applicable",
         })
-        .returning({ id: applications.id });
-      return { id: created!.id };
+        .returning({
+          id: applications.id,
+          submittedAt: applications.submittedAt,
+        });
+      return {
+        created: true as const,
+        id: created!.id,
+        submittedAt: created!.submittedAt,
+      };
     });
+    if (outcome.created)
+      this.notices.afterCommit({
+        id: outcome.id,
+        kind: "partnership",
+        submittedAt: outcome.submittedAt,
+        applicantUserId: null,
+        contact,
+      });
+    return { id: outcome.id };
   }
 }

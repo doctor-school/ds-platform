@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
+import { MailerModule } from "../mailer/mailer.module.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
+import { ApplicationNotices } from "./application-notices.js";
 import { ApplicationsAdminController } from "./applications.admin.controller.js";
 import { ApplicationAdminProblemFilter } from "./applications.admin.errors.js";
 import { ApplicationsAdminService } from "./applications.admin.service.js";
@@ -22,7 +24,8 @@ import {
  */
 @Module({
   // TaxonomyModule: the 012 admin idempotency service and problem filter (#4030).
-  imports: [TaxonomyModule],
+  // MailerModule: the 033 EARS-11/12 after-commit sends (#4029).
+  imports: [TaxonomyModule, MailerModule],
   controllers: [
     ApplicationsMeController,
     ApplicationsPublicController,
@@ -31,6 +34,7 @@ import {
   providers: [
     ApplicationsAdminService,
     ApplicationAdminProblemFilter,
+    ApplicationNotices,
     ApplicationsService,
     ApplicationsPartnershipService,
     PartnershipRecordsImport,

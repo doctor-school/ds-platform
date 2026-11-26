@@ -184,6 +184,17 @@ sudo chmod -R a+rX <export folder>
 
 Stdout is one JSON line of counts; a second run prints `written: 0`.
 
+**VK history import on a slot (048 EARS-46).** The same one-off container, with no
+mount — the wall is read from VK through the slot's `VK_SERVICE_KEY`. The source must
+already show «Работает» (an unbound source is refused):
+
+```bash
+#   ... run --rm --no-deps api #     node dist/materials/vk/vk-history-import.main.js --source vk.com/<address>
+```
+
+Stdout is one JSON line of counts; a stop before the month's 8 000 VK calls exits 1
+and keeps what it wrote; a second complete run prints `written: 0`.
+
 Moving the connector to another slot: remove the file from the old slot and recreate
 its api first, then place it on the new slot. On its first poll the api deletes any
 webhook the bot still has (keeping its pending updates), so no separate registration

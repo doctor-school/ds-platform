@@ -6,7 +6,8 @@ EARS-19); #3513 adds the public feed and material reads; #3993 opens slice 2
 with the «Источники» source list (EARS-20…EARS-23); #3994 adds the Telegram
 connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36); #3995 adds the
 one-off history import (EARS-30); #4004 opens slice 3 with the VK connector in
-`vk/` (EARS-38…EARS-45, EARS-47, EARS-51).
+`vk/` (EARS-38…EARS-45, EARS-47, EARS-51); #4005 adds the one-off VK wall
+history import (EARS-46).
 
 ## What it owns
 
@@ -149,6 +150,22 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
   - `vk-wall-reconcile.service.ts` — the EARS-45 hourly reconcile by
     `wall.get` (count 100): edits in place, missed posts written, «Удалён в
     VK» set / cleared within the returned span; videos never reconciled.
+  - `vk-history-import.command.ts` + `vk-history-import.main.ts` +
+    `vk-history-import-cli.ts` (in the api image: `node
+dist/materials/vk/vk-history-import.main.js --source vk.com/<address>` in a
+    `docker compose run --rm --no-deps api` container; on a workstation
+    `pnpm --filter @ds/api vk:import-history -- --source vk.com/<address>`) —
+    the EARS-46 one-off import of the whole wall: refused with nothing written
+    and exit 1 for a non-VK address, an unlisted or unbound source or VK not
+    configured; otherwise `wall.get` pages of 100 by `offset` until a short
+    page, each post written through `VkFeedSource.writePost` (`keep`) in its
+    own transaction under the source's lock, so a post already in
+    `feed_entry_vk_objects` is skipped (re-run / Callback overlap / hidden
+    entry untouched). Before each page the month's call count is read: the
+    run stops before a call would take it past 8 000, keeps what it wrote,
+    exits 1 and is completed by a run next month. Prints read / written /
+    skipped as existing / dropped by reason / VK calls used / `stopped`.
+    Standalone videos are not imported (`video.get` gated).
 
 ## Properties worth stating
 

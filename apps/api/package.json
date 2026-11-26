@@ -12,6 +12,7 @@
     "start": "node dist/main.js",
     "reconcile:sweep": "tsx scripts/reconcile-sweep.ts",
     "telegram:import-history": "tsx src/materials/telegram/telegram-import-history.main.ts",
+    "vk:import-history": "tsx src/materials/vk/vk-history-import.main.ts",
     "applications:import-partnership": "tsx src/applications/import-partnership-records.main.ts",
     "presence:export": "tsx scripts/presence-export.ts",
     "seed:events": "tsx scripts/seed-events.ts",

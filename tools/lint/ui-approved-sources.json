@@ -637,7 +637,8 @@
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/application-dialogs.tsx",
         "apps/admin/components/status-chip.tsx",
-        "apps/admin/messages/ru.json"
+        "apps/admin/messages/ru.json",
+        "packages/design-system/src/blocks/data-table.tsx"
       ],
       "states": [
         "applications-list",

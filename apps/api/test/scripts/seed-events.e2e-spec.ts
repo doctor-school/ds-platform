@@ -160,6 +160,7 @@ describe("scripts/seed-events (#1851)", () => {
         linkId: eventExperts.id,
         expertId: eventExperts.expertId,
         position: eventExperts.position,
+        programRole: eventExperts.programRole,
         role: eventExperts.role,
         expertStatus: experts.status,
       })
@@ -186,7 +187,15 @@ describe("scripts/seed-events (#1851)", () => {
         expect(isGoldenVolumeUuid(speaker.expertId), slug).toBe(true);
         expect(speaker.expertStatus, slug).toBe("published");
         expect(speaker.position, slug).toBe(index);
-        expect(speaker.role, slug).toBeTruthy();
+        // 012 EARS-31: a moderator is the programme role with no caption; a
+        // speaker keeps its caption, and no caption is a role word.
+        if (speaker.programRole === "moderator") {
+          expect(speaker.role, slug).toBeNull();
+        } else {
+          expect(speaker.programRole, slug).toBe("speaker");
+          expect(speaker.role, slug).toBeTruthy();
+        }
+        expect(["Докладчик", "Модератор"], slug).not.toContain(speaker.role);
       });
       before.set(slug, speakers);
     }

@@ -1492,26 +1492,41 @@ describe("#2213 golden dataset at volume", () => {
     }
   });
 
-  it("#2213: gives most panels a Модератор, not a wall of Спикеры", () => {
-    // The role is rendered on the эфир page and in the programme PDF, so a
-    // roster that only ever says «Спикер» leaves the moderated-panel layout
-    // unreachable on the walk. Most, not all: a two-speaker эфир without a
-    // moderator is a real shape the product also has to render.
+  it("#2213: gives most panels a moderator, not a wall of speakers", () => {
+    // The programme role drives the admin link card and the programme PDF, so
+    // a roster of speakers only leaves the moderated-panel shape unreachable on
+    // the walk. Most, not all: a two-speaker эфир without a moderator is a real
+    // shape the product also has to render.
     const roles = new Map<string, Set<string>>();
+    const captions = new Map<string, Set<string | null>>();
     for (const link of dataset.eventExperts) {
       const id = link.eventId as string;
       if (!isGoldenVolumeUuid(id)) continue;
       const set = roles.get(id) ?? new Set<string>();
-      set.add(link.role as string);
+      set.add(link.programRole as string);
       roles.set(id, set);
+      const caps = captions.get(id) ?? new Set<string | null>();
+      caps.add(link.role ?? null);
+      captions.set(id, caps);
     }
     const moderated = [...roles.values()].filter((set) =>
-      set.has("Модератор"),
+      set.has("moderator"),
     ).length;
     expect(moderated / volumeEvents.length).toBeGreaterThanOrEqual(0.6);
     expect(
-      [...roles.values()].filter((set) => set.has("Эксперт")).length,
+      [...captions.values()].filter((set) => set.has("Эксперт")).length,
     ).toBeGreaterThanOrEqual(10);
+  });
+
+  it("012 EARS-31: models the moderator as the programme role, never as caption text", () => {
+    // The caption is the per-event line above the name; the role words belong
+    // to the closed programme role only.
+    for (const link of dataset.eventExperts) {
+      expect(["speaker", "moderator"]).toContain(link.programRole);
+      expect(["Докладчик", "Модератор"]).not.toContain(link.role);
+      if (link.programRole === "moderator") expect(link.role).toBeNull();
+      else expect(link.role).toBeTruthy();
+    }
   });
 
   it("#2213: gives each volume doctor a personal history, not one row", () => {

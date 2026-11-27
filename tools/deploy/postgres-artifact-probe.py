@@ -56,7 +56,7 @@ def run(*args, stdin=None):
 
 
 def offsite_lines(info):
-    """`offsite repoN: <status>` per repo other than repo1 in an all-repo `info`."""
+    """`offsite repoN: <status>` per repo other than repo1 in an `info` (one offsite repo's own, #4298)."""
     repos = info[0].get("repo", []) if isinstance(info, list) and info else []
     return ["offsite repo%s: %s" % (r.get("key"), (r.get("status") or {}).get("message", "unknown"))
             for r in repos if isinstance(r, dict) and r.get("key") != 1]

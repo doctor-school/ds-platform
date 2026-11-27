@@ -1,6 +1,6 @@
 {
   "name": "@ds/applications",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "DS Platform shared application-queue unit — the «Подать заявку» page: its copy, the account gate, the author form, its states and the repeat banner, the /v1/me/applications client and the route component (feature 033, ADR-0013 A1).",

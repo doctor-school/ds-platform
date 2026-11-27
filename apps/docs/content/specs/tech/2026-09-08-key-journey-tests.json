@@ -86,8 +86,8 @@
       "gap": null
     },
     "A7": {
-      "status": "FULL",
-      "gap": null
+      "status": "NONE",
+      "gap": 4244
     },
     "S1": {
       "status": "FULL",
@@ -1461,23 +1461,15 @@
       "project": "e2e",
       "titles": [
         [
-          "Feature 013 — static public Academy home",
-          "EARS-1: when a visitor requests public /, portal shall render the exact static Academy home"
+          "Academy home at /",
+          "EARS-4: the home shall remain readable at desktop and mobile in light and dark themes and pass axe"
         ],
         [
-          "Feature 013 — static public Academy home",
-          "EARS-2: page shall render six supplied portraits and the approved repeated Project and Events rows"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "EARS-4: static page shall remain readable at desktop and mobile in light and dark themes and pass axe"
-        ],
-        [
-          "Feature 013 — static public Academy home",
+          "Academy home at /",
           "#1877: parallel chrome mounts the app-shell header on / and on non-root routes"
         ],
         [
-          "Feature 013 — static public Academy home",
+          "Academy home at /",
           "#2664: the @footer slot mounts the home footer on / only — a soft navigation away drops it"
         ]
       ]
@@ -1489,7 +1481,7 @@
       "project": "e2e",
       "titles": [
         [
-          "Feature 013 — static public Academy home",
+          "Academy home at /",
           "048 EARS-14: on a 390 px phone the feed rail shows one row with the next card partly visible, no page scroll and no axe violation"
         ]
       ]
@@ -1502,38 +1494,6 @@
       "titles": [
         [
           "048 EARS-14/15: a guest reads Academy and Telegram cards, pages the feed and opens a material"
-        ]
-      ]
-    },
-    {
-      "rows": ["A7"],
-      "leg": "live/academy/default",
-      "file": "e2e/academy-home.e2e.spec.ts",
-      "project": "e2e",
-      "titles": [
-        [
-          "Feature 013 — static public Academy home",
-          "EARS-5: enabled partnership form shall expose the exact controls and reject invalid contact accessibly"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "EARS-5: first submit click after contact blur shall retain all required errors at mobile and desktop widths"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success (013 EARS-6/7)"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "033 EARS-18: an unavailable intake shall preserve browser values and store no row (013 EARS-7)"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "EARS-8: enabled partnership form shall remain keyboard-operable and axe-clean while pending"
-        ],
-        [
-          "Feature 013 — static public Academy home",
-          "EARS-8: submit shall remain visually distinct from the primary surface in both themes"
         ]
       ]
     },

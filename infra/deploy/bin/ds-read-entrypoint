@@ -566,14 +566,19 @@ def pgbackrest():
 
 # #4280: each offsite repo's endpoint (argv[4:], "<n>=<endpoint>" as the data verb read
 # them): one anonymous HTTPS request by curl, -q so no curlrc and no credential goes
-# along, capped at 8 s; its TCP and TLS phase times classify a failure.
+# along, capped at 8 s; its TCP and TLS phase times classify a failure. #4287:
+# "<n>=<endpoint>=<via>" is an endpoint reached through a tunnel container (repo2's to
+# IDrive), as pgBackRest reaches it: <via> its address (curl connects there and keeps
+# the name for TLS), or `-` when that tunnel is not running (state tunnel-down).
 ENDPOINT_RE = re.compile(r"(?:https://)?([A-Za-z0-9][A-Za-z0-9.-]{0,252}(?::[0-9]{1,5})?)/?")
 CURL_W = "%{http_code} %{time_connect} %{time_appconnect}"
 
-def reach(host):
+def reach(host, via=None):
+    name, _, port = host.partition(":")
+    route = ["--connect-to", "%s:%s:%s:%s" % (name, port or "443", via, port or "443")] if via else []
     try:
-        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https",
-                            "-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
+        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https"] + route +
+                           ["-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=12)
     except subprocess.TimeoutExpired:
         return "timeout", None
@@ -593,6 +598,7 @@ def offsite():
     out = []
     for arg in sys.argv[4:]:
         n, _, endpoint = arg.partition("=")
+        endpoint, tunnelled, via = endpoint.partition("=")
         if n not in ("2", "3"):
             continue
         m = ENDPOINT_RE.fullmatch(endpoint)
@@ -600,7 +606,16 @@ def offsite():
             # not an https host[:port]: a fixed entry, the value never echoed
             out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
             continue
-        state, http = reach(m.group(1))
+        if tunnelled and via == "-":
+            out.append({"repo": int(n), "host": m.group(1), "state": "tunnel-down", "http": None})
+            continue
+        if tunnelled:
+            try:
+                via = str(ipaddress.IPv4Address(via))
+            except ValueError:
+                out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+                continue
+        state, http = reach(m.group(1), via or None)
         out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
     return out
 
@@ -664,13 +679,16 @@ SCHEMA = {
                  archiver={"archivedCount": nat, "failedCount": nat, "lastArchivedTime": opt(iso),
                            "lastFailedTime": opt(iso), "lastFailedWal": opt(pattern(r"[0-9A-Za-z.]{8,64}"))},
                  pgbackrest={"version": pattern(r"pgBackRest [0-9][0-9A-Za-z.-]{0,31}")},
-                 offsite=lambda v: isinstance(v, list) and len(v) <= 2 and all(isinstance(r, dict) and "error" not in r and ok(r, OFFSITE_REPO) for r in v)),
+                 offsite=lambda v: isinstance(v, list) and len(v) <= 2 and all(isinstance(r, dict) and "error" not in r and offsite_repo(r) for r in v)),
 }
 # #4280: one offsite repo's reachability (HOST_STATE_PY offsite()).
 OFFSITE_REPO = {"repo": lambda v: v in (2, 3) and not isinstance(v, bool),
                 "host": opt(pattern(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}(:[0-9]{1,5})?")),
-                "state": lambda v: v in ("reachable", "tcp-refused", "timeout", "dns-fail", "tls-fail", "endpoint-unparsed"),
+                "state": lambda v: v in ("reachable", "tcp-refused", "timeout", "dns-fail", "tls-fail",
+                                         "endpoint-unparsed", "tunnel-down"),
                 "http": opt(lambda v: nat(v) and 100 <= v <= 599)}
+# The host is null exactly for an unparsed endpoint, the one state that names none.
+offsite_repo = lambda r: ok(r, OFFSITE_REPO) and (r["host"] is None) == (r["state"] == "endpoint-unparsed")
 def ok(value, spec):
     if isinstance(value, dict) and set(value) == {"error"} and value["error"] in ERRORS:
         return True

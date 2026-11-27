@@ -964,6 +964,9 @@ create-access-key` on the operator's workstation, as above. The values never ent
       PGBACKREST_REPO2_CIPHER_PASS=<generate>
       ```
 
+      repo2's endpoint is exactly `s3.ap-southeast-2.idrivee2.com`: the tunnel
+      carries that name («repo2 through the tunnel» below).
+
       and pipes it into `pnpm prod:data-secret <live sha>` (step 2 above). For a key
       rotation only the key pair lines go in; `<generate>` over a held pass is refused.
 
@@ -1022,6 +1025,65 @@ create-access-key` on the operator's workstation, as above. The values never ent
    retention. Each backup takes only its own repo's lock (`--repo=1` / `--repo=<N>`),
    so an offsite backup still running at 06:00 never blocks repo1's incremental.
    Alerting on per-repo backup age, archive failures and `pg_wal` growth is #3671.
+
+   **repo2 through the tunnel** (#4287). IDrive e2 drops connections from RU source
+   addresses, and every packet ds-data-prod sends leaves through the `twc_router` NAT
+   (RU, «first-boot egress» below). So repo2's traffic leaves through an SSH local
+   forward to the relay host, which is outside RU and belongs to the BBM side (the
+   relay's owner): `94.198.221.20:22`, user `deploy`.
+   - **The tunnel.** The compose service `repo2-tunnel` runs the certified pgbackrest
+     image (its `openssh-client`) with `compose/data-prod/repo2-tunnel/tunnel.sh`:
+     `ssh -N -L 0.0.0.0:443:s3.ap-southeast-2.idrivee2.com:443 deploy@94.198.221.20`,
+     the relay's host key pinned in `repo2-tunnel/known_hosts` (`StrictHostKeyChecking=yes`,
+     no trust on first use), keepalives every 15 s (a dead relay ends the session
+     within 45 s), `ExitOnForwardFailure=yes`, and a loop that reconnects 10 s after
+     any exit. Docker's `unless-stopped` restarts a crashed container.
+   - **The name.** The service carries the network alias
+     `s3.ap-southeast-2.idrivee2.com` on its own compose network
+     (`ds-data-prod_repo2-tunnel`). The pgbackrest sidecar is the only other container
+     on that network: it is the only container that talks to an offsite repo, because
+     PostgreSQL archives to repo1 alone (#4298). The tunnel publishes no port and uses
+     no host network, so nothing else on the VPC can reach the forward. The relay
+     admits the NAT address, which every VPC machine shares. Inside the sidecar, Docker
+     DNS resolves IDrive's name to the tunnel, so `PGBACKREST_REPO2_S3_ENDPOINT` stays
+     `s3.ap-southeast-2.idrivee2.com` (exactly that, port 443). The TLS session (SNI,
+     the certificate check at the default `repo2-storage-verify-tls=y`) and the S3
+     signature stay IDrive's end to end. No `repo2-storage-host` is set: pgBackRest
+     would use it for the connect, the SNI and the certificate check alike.
+   - **The key.** `gh workflow run data-secret.yml --ref main -f box=data -f action=tunnel-key`
+     prints the tunnel's public key and its SHA256 fingerprint. The data verb
+     `repo2-tunnel-key` (relayed as `data-repo2-tunnel-key prod`) generates the ed25519
+     pair on its first call: `/etc/ds-platform/repo2-tunnel/id_ed25519`, root 0600 in
+     a root-only 0700 dir. The service mounts that dir read-only, and the private key
+     never leaves the box. The box cannot see its own egress address from inside: it
+     is `terraform output -raw data_prod_egress_ip` (owner-local tfstate).
+   - **The relay's key line** (the relay's owner adds it; this repo never configures
+     the relay):
+     `from="<data_prod_egress_ip>",restrict,port-forwarding,permitopen="s3.ap-southeast-2.idrivee2.com:443",command="/usr/sbin/nologin" ssh-ed25519 <public key> ds-data-prod-repo2`.
+     `permitopen` is by name, so the forward's target is the name and the relay
+     resolves it.
+   - **When it runs.** `data-up` (every release) and the data-secret rotation unit
+     start the tunnel only once its key exists (`repo2-tunnel: no key yet` otherwise).
+     The rotation unit starts it before its check, so a rotation that turns repo2 on
+     checks it through the tunnel. Postgres and pgbackrest never depend on it. Nobody
+     waits on it, and a tunnel Docker cannot start is a WARNING line, never a failed
+     release or rotation. While the tunnel or the relay is down, repo2's spool grows
+     (cap and gap marker above) and repo1 is unaffected.
+   - **Order of turning repo2 on.** (1) A release ships this. (2) The operator
+     dispatches `tunnel-key` and hands the relay's owner the public key, its
+     fingerprint and `data_prod_egress_ip`. (3) The relay's owner adds the key line.
+     (4) The provider-side owner issues the IDrive key and pipes the repo2 lines
+     (`PGBACKREST_REPO2_S3_ENDPOINT=s3.ap-southeast-2.idrivee2.com`) into
+     `pnpm prod:data-secret`. Its apply on the owner's word starts the tunnel, and its
+     verdict `repo-check.sh 2` runs `pgbackrest-repo.sh 2 check` through it.
+   - **Reading it.** `pnpm prod:read` host-state prints
+     `offsite repo2 s3.ap-southeast-2.idrivee2.com: <state> http=<code|->`. The host
+     probe connects to the tunnel container's address on its network and keeps IDrive's
+     name for TLS, so it takes pgBackRest's path. `tunnel-down` means the container
+     is not running; then no direct probe is made. `docker compose logs repo2-tunnel`
+     (ds-read) shows each reconnect. The recovery bundle's repo2 copy goes through the
+     tunnel the same way (`ds-recovery offsite-via`). With the tunnel down, that copy
+     fails by a fixed reason, never by a direct write; repo1's copy stands.
 
    **Bundle the irreplaceable keys** before you leave this step, and again after any
    later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,
@@ -2158,7 +2220,9 @@ on any service without the bound, with no exemption.
   and would hang against unreachable mirrors). Do **not** attach a temporary
   floating IP to data-prod as an egress workaround — that puts a public IP on the
   IP-less data plane; if first-boot egress fails, verify the router gateway var
-  (DD-8 in the spec) and the netplan drop-in instead.
+  (DD-8 in the spec) and the netplan drop-in instead. The NAT source is an RU
+  address, which IDrive e2 refuses: repo2 leaves through the relay host instead
+  («repo2 through the tunnel», #4287).
 - **VPC region vs server AZ:** `twc_vpc.location` takes a **region** code
   (`ru-1`/`ru-3`, NOT `ru-2` — no VPC there), while `twc_server.availability_zone`
   takes an **AZ** (`spb-3`/`msk-1`). Keep them co-located (single-AZ, ADR-0012).

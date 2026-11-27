@@ -111,8 +111,55 @@
         "postgres": {
           "condition": "service_healthy"
         }
+      },
+      "networks": [
+        "default",
+        "repo2-tunnel"
+      ]
+    },
+    "repo2-tunnel": {
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "ds-pgbackrest:local",
+      "restart": "unless-stopped",
+      "init": true,
+      "entrypoint": [
+        "/bin/sh",
+        "/etc/repo2-tunnel/tunnel.sh"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "./repo2-tunnel",
+          "target": "/etc/repo2-tunnel",
+          "read_only": true
+        },
+        {
+          "type": "bind",
+          "source": "/etc/ds-platform/repo2-tunnel",
+          "target": "/run/repo2-tunnel",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        }
+      ],
+      "networks": {
+        "repo2-tunnel": {
+          "aliases": [
+            "s3.ap-southeast-2.idrivee2.com"
+          ]
+        }
       }
     }
+  },
+  "networks": {
+    "repo2-tunnel": {}
   },
   "volumes": {
     "pgdata": null,

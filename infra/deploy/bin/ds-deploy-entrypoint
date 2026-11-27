@@ -38,6 +38,10 @@
 #                          -> the data-box secret rotation (prod box only; #4068):
 #                             relayed over the hop to the data verbs secret-recipient,
 #                             secret-apply, status and finish (see DATA_SECRET below)
+#   data-repo2-tunnel-key prod
+#                          -> the public half of ds-data-prod's repo2 tunnel key
+#                             (prod box only; #4287): relayed over the hop to the data
+#                             verb repo2-tunnel-key
 #   api-secret-recipient prod | api-secret-apply prod <sha> |
 #   api-secret-status prod <sha> | api-secret-finish prod <sha> succeeded|failed
 #                          -> the api-box secret change (prod box only; #4153): the
@@ -576,7 +580,7 @@ secret_hop() {
 data_secret_relay() {
   local n=${#words[@]} sha=${words[2]-} role image live
   case $verb in
-    data-secret-recipient) [[ $n == 2 && ${words[1]} == prod ]] || reject "usage: data-secret-recipient prod" ;;
+    data-secret-recipient | data-repo2-tunnel-key) [[ $n == 2 && ${words[1]} == prod ]] || reject "usage: $verb prod" ;;
     data-secret-apply | data-secret-status)
       [[ $n == 3 && ${words[1]} == prod ]] || reject "usage: $verb prod <sha>"
       check_sha "$sha" ;;
@@ -590,6 +594,7 @@ data_secret_relay() {
   [[ $role == prod ]] || refuse "$verb is served by the prod box only"
   case $verb in
     data-secret-recipient) secret_hop secret-recipient </dev/null ;;
+    data-repo2-tunnel-key) secret_hop repo2-tunnel-key </dev/null ;;
     data-secret-status) secret_hop "status prod $sha" </dev/null ;;
     data-secret-finish) secret_hop "finish $sha ${words[3]}" </dev/null ;;
     data-secret-apply)
@@ -785,7 +790,7 @@ postgres_artifact() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest read-host-state read-secret-journal secret-recipient secret-apply postgres-load'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest read-host-state read-secret-journal secret-recipient secret-apply repo2-tunnel-key postgres-load'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 # backup-info's read of the offsite repos, run in the sidecar (#4298): repo1's config
@@ -814,6 +819,11 @@ SECRET_KEEP=$SECRET_STAGED.keep
 # stands, and the one a staged rotation will record (root 0600, in the 0700 dir).
 SECRET_APPLIED=$SECRET_INTAKE_DIR/applied.json
 SECRET_PENDING=$SECRET_INTAKE_DIR/pending.json
+# #4287: repo2's tunnel to IDrive e2 (compose service repo2-tunnel). Its ssh key is
+# generated here on first `repo2-tunnel-key`, root 0600 in a root-only dir the service
+# mounts read-only, and never leaves the box; the tunnel is raised only once it exists.
+REPO2_TUNNEL_DIR=$ROOT/etc/ds-platform/repo2-tunnel
+REPO2_TUNNEL_KEY=$REPO2_TUNNEL_DIR/id_ed25519
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
 HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 # #3662: the key custody's box side and the custodians of the shipped tree.
@@ -1009,8 +1019,10 @@ if action == "data-env":
     if not os.path.isdir(compose):
         stop(3, "the data-prod compose directory is missing (ship first)")
     write(os.path.join(compose, ".env"), "VPC_IP=" + req["vpcIp"] + "\n")
-    write(os.path.join(compose, ".postgres-artifacts.json"),
-          json.dumps({"services": {r: {"image": ids[r]} for r in ROLES}}) + "\n")
+    # #4287: the repo2 tunnel runs the certified pgbackrest image (its ssh client).
+    services = {r: {"image": ids[r]} for r in ROLES}
+    services["repo2-tunnel"] = {"image": ids["pgbackrest"]}
+    write(os.path.join(compose, ".postgres-artifacts.json"), json.dumps({"services": services}) + "\n")
     sys.stdout.write("data-prod compose env written\n")
     sys.exit(0)
 
@@ -1332,6 +1344,13 @@ DATA_PGBACKREST_CHECK='docker compose exec -T -u postgres pgbackrest /usr/local/
 # The first full backup to one offsite repo (#3670): the rotation unit runs it for a
 # repo its verdict just turned on.
 DATA_OFFSITE_FULL='docker compose exec -T pgbackrest /usr/local/bin/backup.sh full offsite'
+# #4287: repo2's tunnel on the same recorded image, once its key exists (repo2-tunnel-key
+# makes it). Never waited on and never a dependency of postgres or pgbackrest: a relay
+# that refuses leaves the container reconnecting, and repo1 as it was. A tunnel Docker
+# cannot start is a warning, never the step's failure: only repo2's traffic needs it
+# (the sidecar's WAL pusher spools until it is back, #4298), so no release and no
+# rotation stops on it.
+DATA_UP_TUNNEL="if test -s '$REPO2_TUNNEL_KEY'; then docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel || echo 'repo2-tunnel: WARNING: the tunnel could not be started; repo2 waits for it, repo1 is unaffected'; else echo 'repo2-tunnel: no key yet (repo2-tunnel-key generates it)'; fi"
 
 # The durable step units of data-prod: the step script is fixed here; ds-release
 # copies it root-only and runs it in ds-prod-<sha12>-<step>.
@@ -1351,6 +1370,7 @@ data_step() {
       # before the port opens.
       script="cd '$DATA_COMPOSE'
 $DATA_UP_PERSISTENCE
+$DATA_UP_TUNNEL
 docker compose up -d --no-deps redis
 docker compose -f glitchtip/compose.yml --env-file .env up -d --no-build --pull missing --wait --wait-timeout 300"
       ;;
@@ -1387,6 +1407,27 @@ secret_recipient() {
   sudo openssl x509 -in "$SECRET_INTAKE_CERT" -noout -fingerprint -sha256
 }
 
+# repo2-tunnel-key (#4287): the public key of repo2's tunnel to the relay and its SHA256
+# fingerprint; the ed25519 key pair is generated here on first call (root 0600 / 0644 in
+# a root-only dir the repo2-tunnel service mounts read-only), never printed, never leaves
+# the box. The relay's owner adds the public key, restricted to this box's egress
+# address and the one IDrive forward (infra/deploy/README.md → «repo2 through the
+# tunnel»). The egress address is the VPC router's NAT, which the box cannot see from
+# inside: Terraform's twc_router output names it.
+repo2_tunnel_key() {
+  if ! sudo test -s "$REPO2_TUNNEL_KEY" || ! sudo test -s "$REPO2_TUNNEL_KEY.pub"; then
+    sudo install -d -m 0700 -o root -g root "$REPO2_TUNNEL_DIR"
+    sudo rm -f -- "$REPO2_TUNNEL_KEY" "$REPO2_TUNNEL_KEY.pub"
+    sudo ssh-keygen -q -t ed25519 -N '' -C ds-data-prod-repo2 -f "$REPO2_TUNNEL_KEY" >/dev/null 2>&1 ||
+      refuse "ssh-keygen could not generate the repo2 tunnel key"
+    sudo chmod 0600 "$REPO2_TUNNEL_KEY"
+    sudo chmod 0644 "$REPO2_TUNNEL_KEY.pub"
+    printf '%s: repo2 tunnel key generated\n' "$TAG" >&2
+  fi
+  sudo cat "$REPO2_TUNNEL_KEY.pub"
+  sudo ssh-keygen -l -E sha256 -f "$REPO2_TUNNEL_KEY.pub"
+}
+
 # The rotation unit's script: back data.env up, put the staged copy in place, recreate
 # postgres + pgbackrest with data-up's command, check the repository; on any failure
 # put the backup back, recreate again and fail. It runs as root (the entrypoint's own
@@ -1395,6 +1436,10 @@ secret_script() {
   cat <<SH
 cd '$DATA_COMPOSE'
 test -f '$SECRET_STAGED' || { echo 'data-secret: no staged change (secret-apply stages one)'; exit 1; }
+# #4287: repo2's tunnel first, so a repo2 the rotation turns on is checked through it;
+# a tunnel that cannot be started is a warning: such a repo2 then fails its check and
+# the previous data.env comes back, while a rotation that leaves repo2 alone goes on.
+$DATA_UP_TUNNEL
 cp -p -- '$DATA_ENV' '$SECRET_BACKUP'
 install -m 0600 -o root -g root -- '$SECRET_STAGED' '$DATA_ENV'
 rm -f -- '$SECRET_STAGED'
@@ -1754,14 +1799,19 @@ def pgbackrest():
 
 # #4280: each offsite repo's endpoint (argv[4:], "<n>=<endpoint>" as the data verb read
 # them): one anonymous HTTPS request by curl, -q so no curlrc and no credential goes
-# along, capped at 8 s; its TCP and TLS phase times classify a failure.
+# along, capped at 8 s; its TCP and TLS phase times classify a failure. #4287:
+# "<n>=<endpoint>=<via>" is an endpoint reached through a tunnel container (repo2's to
+# IDrive), as pgBackRest reaches it: <via> its address (curl connects there and keeps
+# the name for TLS), or `-` when that tunnel is not running (state tunnel-down).
 ENDPOINT_RE = re.compile(r"(?:https://)?([A-Za-z0-9][A-Za-z0-9.-]{0,252}(?::[0-9]{1,5})?)/?")
 CURL_W = "%{http_code} %{time_connect} %{time_appconnect}"
 
-def reach(host):
+def reach(host, via=None):
+    name, _, port = host.partition(":")
+    route = ["--connect-to", "%s:%s:%s:%s" % (name, port or "443", via, port or "443")] if via else []
     try:
-        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https",
-                            "-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
+        p = subprocess.run(["curl", "-q", "-s", "-o", "/dev/null", "--max-time", "8", "--proto", "=https"] + route +
+                           ["-w", CURL_W, "https://%s/" % host], stdin=subprocess.DEVNULL,
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=12)
     except subprocess.TimeoutExpired:
         return "timeout", None
@@ -1781,6 +1831,7 @@ def offsite():
     out = []
     for arg in sys.argv[4:]:
         n, _, endpoint = arg.partition("=")
+        endpoint, tunnelled, via = endpoint.partition("=")
         if n not in ("2", "3"):
             continue
         m = ENDPOINT_RE.fullmatch(endpoint)
@@ -1788,7 +1839,16 @@ def offsite():
             # not an https host[:port]: a fixed entry, the value never echoed
             out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
             continue
-        state, http = reach(m.group(1))
+        if tunnelled and via == "-":
+            out.append({"repo": int(n), "host": m.group(1), "state": "tunnel-down", "http": None})
+            continue
+        if tunnelled:
+            try:
+                via = str(ipaddress.IPv4Address(via))
+            except ValueError:
+                out.append({"repo": int(n), "host": None, "state": "endpoint-unparsed", "http": None})
+                continue
+        state, http = reach(m.group(1), via or None)
         out.append({"repo": int(n), "host": m.group(1), "state": state, "http": http})
     return out
 
@@ -1817,7 +1877,7 @@ PY
 # PGBACKREST_REPO<n>_S3_ENDPOINT line (grep reads that one name, no other line leaves),
 # else a committed `[#repo<n>: ]repo<n>-s3-endpoint=` line of pgbackrest.conf.
 offsite_endpoints() {
-  local n value
+  local n value via
   for n in 2 3; do
     value=$({ sudo grep -E "^PGBACKREST_REPO${n}_S3_ENDPOINT=" "$DATA_ENV" 2>/dev/null || true; } | tail -n 1)
     value=${value#*=}
@@ -1826,7 +1886,11 @@ offsite_endpoints() {
       value=${value#*=}
     fi
     value=${value//[\"\']/}
-    if [[ -n $value ]]; then printf '%s=%s\n' "$n" "$value"; fi
+    [[ -n $value ]] || continue
+    # #4287: an endpoint repo2's tunnel carries is probed through it (ds-recovery
+    # offsite-via: the tunnel's address, or `-` while it is not running).
+    via=$(sudo "$DS_RECOVERY" offsite-via "$n" "$value" 2>/dev/null </dev/null || true)
+    printf '%s=%s%s\n' "$n" "$value" "${via:+=$via}"
   done
 }
 
@@ -1847,7 +1911,7 @@ data_verb() {
       check_sha "${words[1]}" ;;
     read-observe)
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
-    secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
+    secret-recipient | repo2-tunnel-key) ((n == 1)) || reject "usage: $verb" ;;
     secret-apply) ((n == 2)) || reject "usage: secret-apply <sha>"
       check_sha "${words[1]}" ;;
     postgres-load)
@@ -1927,6 +1991,7 @@ data_verb() {
       exec sudo journalctl -u "ds-prod-${words[1]:0:12}-data-secret" -n 400 -o short-iso -q --no-pager </dev/null ;;
     secret-recipient) secret_recipient ds-data-prod-secret-intake </dev/null ;;
     secret-apply) secret_apply "${words[1]}" ;;
+    repo2-tunnel-key) repo2_tunnel_key </dev/null ;;
     postgres-load) postgres_load "${words[1]}" "${words[2]}" "${words[3]}" ;;
   esac
 }
@@ -2479,7 +2544,7 @@ case "$verb" in
     [[ -x $RELEASE_DRIVER ]] || refuse "release driver not installed: no box-side redeploy on this box"
     exec "$RELEASE_DRIVER" redeploy prod "${words[2]}"
     ;;
-  data-secret-recipient | data-secret-apply | data-secret-status | data-secret-finish)
+  data-secret-recipient | data-secret-apply | data-secret-status | data-secret-finish | data-repo2-tunnel-key)
     data_secret_relay
     ;;
   api-secret-recipient | api-secret-apply | api-secret-status | api-secret-finish)
@@ -2506,10 +2571,10 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | read-host-state | read-secret-journal | secret-recipient | secret-apply | postgres-load)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | read-host-state | read-secret-journal | secret-recipient | secret-apply | repo2-tunnel-key | postgres-load)
     data_verb
     ;;
   *)
-    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, api-secret-recipient, api-secret-apply, api-secret-status, api-secret-finish, postgres-artifact, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, data-repo2-tunnel-key, api-secret-recipient, api-secret-apply, api-secret-status, api-secret-finish, postgres-artifact, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
     ;;
 esac

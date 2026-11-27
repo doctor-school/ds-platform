@@ -547,6 +547,13 @@
       "when": 1795752008467,
       "tag": "0078_012_event_expert_program_role",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1795762472365,
+      "tag": "0079_023_module_club_reward",
+      "breakpoints": true
     }
   ]
 }

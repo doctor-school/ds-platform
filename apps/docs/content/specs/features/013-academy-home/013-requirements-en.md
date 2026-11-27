@@ -2,7 +2,7 @@
 title: "013 — Academy home page and partner lead capture"
 description: "Requirements for the full public Academy home at /: the approved split-hero landing from the «Главная» canvas, a live эфиры feed rendered by feature 014's shared event-list unit, curated platform/argument/partner screens, a 012-fed experts block, and a partner lead form that persists a retained leads record and notifies the Mattermost channel «DS Лиды» through a dedicated API-only webhook — plus the platform-wide post-login return-to-origin rule with /webinars as the default landing."
 slug: 013-academy-home
-status: In dev
+status: Superseded
 surface: user-facing
 storefronts: academy-only
 storefronts_reason: "The Academy home at / only; the doctor storefront home is specified by feature 017. The Academy home is being rebuilt whole under #1799, which mounts the shared nearest-events block of #1485."
@@ -28,6 +28,8 @@ lang: en
 > PRD source: [`013-product.md`](./013-product.md) (US-1…US-12). Epic: [Academy public surface — product brief](../../product/academy-public/brief.md). Feature 013 ships a public portal surface, so `surface: user-facing`. Authored under [#1324](https://github.com/doctor-school/ds-platform/issues/1324).
 
 # 013 — Academy home page and partner lead capture (Requirements)
+
+> **Superseded at `/` by [029 — Academy home relaunch](../029-academy-home-relaunch/029-requirements-en.md) ([#4243](https://github.com/doctor-school/ds-platform/issues/4243)).** The 029 home replaces every section of this landing — the split hero, «Что такое Doctor.School», «Зачем», the ecosystem, people and podcast screens over fixtures, the partner value band, the participation formats and the closing partnership form (EARS-1…EARS-14, EARS-16…EARS-20; 029 EARS-1, design §4). The interim partnership form, its browser intake client and its schema leave the home with no replacement form: the partner entries lead to `/investors` (034), the expert entries to `/apply` (033), and the form's stored records are already in the 033 application queue (033 EARS-18 / EARS-19). **EARS-15 — the post-login landing on `/webinars` (the 008 EARS-7 amendment) — stays in force.**
 
 ## This triplet supersedes the interim stub
 

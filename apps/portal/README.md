@@ -6,7 +6,7 @@ Next.js 16 App Router app with custom React on the shared design system — **no
 Refine (Refine is `apps/admin` only; ADR-0004 §5.3 / §7).
 
 The app owns both the public Academy home and the authenticated cabinet. Public
-`/` is the static Feature 013 composition; cabinet, webinar, and authentication
+`/` is the Feature 029 Academy home; cabinet, webinar, and authentication
 routes keep their existing application behavior.
 
 ## Stack (ADR-0004)
@@ -28,7 +28,7 @@ app/
 │   └── [...catchAll]/page.tsx   # persistent AcademyShellHeader elsewhere
 ├── globals.css                  # shared tokens + Tailwind
 ├── layout.tsx                   # root providers, theme baseline, chrome slot, shell footer
-├── page.tsx                     # static Academy home (Feature 013)
+├── page.tsx                     # Academy home (Feature 029)
 └── login/page.tsx               # sign-in surface
 
 components/
@@ -46,18 +46,16 @@ only. The footer mounts from the root layout, so it appears on every route the
 config does not hide (`/login`, `/register`, `/verify`, `/reset` and
 `/webinars/*/room`).
 
-The Academy home reads local fixtures and local WEBP portraits only. Its
-partnership form uses React Hook Form with one shared Zod schema and posts each
-attempt from the browser, same-origin through the `/v1/*` BFF rewrite, to the
-api's application queue (`POST /v1/public/applications/partnership`, 033
-EARS-18): one `Idempotency-Key` per attempt (a retry of the same values reuses
-it, an edit mints a new one) and the invisible SmartCaptcha token, whose site
-key the page reads from the runtime `SMARTCAPTCHA_SITE_KEY`. The portal writes
-nothing itself; the interim file store it once wrote is retired, and its stored
-records reach the queue through the api's one-off
-`applications:import-partnership` (EARS-19).
-
-## Commands
+The Academy hThe Academy home (Feature 029, `app/academy-home-view.tsx`) is a server
+composition built from the owner-approved `design-source/academy-home.dc.html`
+canvas: the host-only hero, «Кто мы» and persona entries, plus the mounted owner
+blocks — the shared `EventsFeed` of `@ds/events-storefront/feed` (`limit: 3`)
+and the 048 materials rail (`app/materials-feed-section.tsx`). The hero's count
+lines (`app/academy-home-counts.ts`) read `GET /v1/public/projects`,
+`GET /v1/public/experts/count` and `GET /v1/public/organisations/count` per
+request, each settled on its own: a failed or zero read drops only its own
+segment. The home carries no fixture data and no form; its expert entries lead
+to `/apply` (033) and its partner entries to `/investors` (034).
 
 ```bash
 pnpm --filter @ds/portal dev        # next dev (local)

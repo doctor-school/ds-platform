@@ -3,7 +3,7 @@ title: "Feature 013 — Academy home page & lead capture (PRD)"
 description: "Product requirements for the academy home page at /: an eight-screen dual-audience landing that routes doctors to content and partners to a lead form, a live feed of the latest эфиры built on the reusable event-list unit, and lead capture that persists to the leads table and posts to the Mattermost channel «DS Лиды». Feature 013 of the Academy public surface epic; source of the 013 EARS triplet (ADR-0014)."
 slug: academy-public-013-academy-home-product
 epic: ../../product/academy-public/brief.md
-status: Draft
+status: Superseded
 surface: user-facing
 storefronts: academy-only
 storefronts_reason: "The Academy home at / only; the doctor storefront home is specified by feature 017. The Academy home is being rebuilt whole under #1799, which mounts the shared nearest-events block of #1485."
@@ -11,6 +11,8 @@ lang: en
 ---
 
 > **EN (this)** · **RU:** [`013-product-ru.md`](./013-product-ru.md)
+
+> **Superseded at `/` by [029 — Academy home relaunch](../029-academy-home-relaunch/029-requirements-en.md) ([#4243](https://github.com/doctor-school/ds-platform/issues/4243)).** The 029 home replaces every section of this landing — the split hero, «Что такое Doctor.School», «Зачем», the ecosystem, people and podcast screens over fixtures, the partner value band, the participation formats and the closing partnership form (EARS-1…EARS-14, EARS-16…EARS-20; 029 EARS-1, design §4). The interim partnership form, its browser intake client and its schema leave the home with no replacement form: the partner entries lead to `/investors` (034), the expert entries to `/apply` (033), and the form's stored records are already in the 033 application queue (033 EARS-18 / EARS-19). **EARS-15 — the post-login landing on `/webinars` (the 008 EARS-7 amendment) — stays in force.**
 
 > Epic: [Academy public surface — product brief](../../product/academy-public/brief.md) · Owner priority #1 on the critical path (after 012 content-taxonomy).
 

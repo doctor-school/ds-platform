@@ -91,6 +91,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   searchLabel,
   searchPlaceholder,
   filterable = true,
+  statusFilterLabel,
+  statusAnyLabel,
   extraFilters,
   extraApplied = [],
   onResetExtra,
@@ -146,6 +148,12 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   searchPlaceholder?: string;
   /** Whether the resource has a lifecycle to filter by at all. */
   filterable?: boolean;
+  /**
+   * The state facet's label and its «any» option, for a resource whose screens
+   * name that column otherwise than the shared default.
+   */
+  statusFilterLabel?: string;
+  statusAnyLabel?: string;
   /** Resource-specific facet controls, rendered inside the same bar. */
   extraFilters?: ReactNode;
   /** Chips for the resource-specific facets — the bar cannot know their labels. */
@@ -348,7 +356,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
               <>
                 <div className="flex flex-col gap-1.5 sm:w-56">
                   <Label htmlFor={`${testId}-status`}>
-                    {t("common.list.status")}
+                    {statusFilterLabel ?? t("common.list.status")}
                   </Label>
                   <NativeSelect
                     id={`${testId}-status`}
@@ -362,7 +370,9 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
                       })
                     }
                   >
-                    <option value="">{t("common.list.statusAny")}</option>
+                    <option value="">
+                      {statusAnyLabel ?? t("common.list.statusAny")}
+                    </option>
                     {(
                       statuses ??
                       (TAXONOMY_STATUSES as readonly string[] as readonly Status[])

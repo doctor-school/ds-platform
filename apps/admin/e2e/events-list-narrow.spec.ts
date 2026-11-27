@@ -1,5 +1,6 @@
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
+import { anyListedEventId, visibleEventRows } from "./support/events-list";
 
 /**
  * #1222 — the admin `/events` list at a phone width (390px).
@@ -7,22 +8,21 @@ import { expect, test, type Page } from "@playwright/test";
  * Two independent layout faults on one screen; either alone leaves the operator
  * unable to work the list on a phone.
  *
- * 1. **The page scrolled sideways, so the table could not.** The admin chrome row
- *    (brand + three nav links + sign-out) never wrapped, measuring ~503px, which
- *    overflowed a 390px viewport by 113px. Two consequences: «Выйти» was cut off
- *    at the right edge, and a horizontal swipe panned the WHOLE PAGE rather than
- *    the events table — so the table's own `overflow-x-auto` wrapper, which was
- *    already scrollable, was in practice unreachable and «Дата» / «Статус» /
- *    «Действия» read as clipped. Removing the page-level overflow is what hands
- *    the table its scroll back; the table markup itself needed no change.
+ * 1. **The page scrolled sideways.** The admin chrome row (brand + three nav
+ *    links + sign-out) never wrapped, measuring ~503px, which overflowed a 390px
+ *    viewport by 113px: «Выйти» was cut off at the right edge, and a horizontal
+ *    swipe panned the WHOLE PAGE. Since 007 EARS-14 (#4305) the list is the
+ *    `AdminDataList` composition, whose rows are record CARDS below `md` — so
+ *    the phone list has no table to side-scroll at all, and every card must
+ *    fit the viewport.
  * 2. **Header overlap.** `flex items-center justify-between` kept the heading
  *    block and the «Создать мероприятие» button on ONE row at every width, so at
  *    390px the button rode over the list description text.
  *
  * The assertions are measured geometry, not class strings: a class assertion
  * would pass on any string edit and prove nothing about the render. "The page has
- * no horizontal overflow while the table wrapper does" IS "a swipe reaches the
- * trailing columns", and two non-intersecting boxes IS "nothing overlaps".
+ * no horizontal overflow and every card ends inside the viewport" IS "nothing
+ * is cut off", and two non-intersecting boxes IS "nothing overlaps".
  *
  * The reproducer half matters as much as the fix half. `restoreBrokenLayout()`
  * puts the ORIGINAL class strings back on the live nodes and re-measures, so the
@@ -72,21 +72,14 @@ const BROKEN_SHELL_NAV_CLASS = "flex items-center gap-5 text-sm";
 const BROKEN_LIST_HEADER_CLASS = "mb-6 flex items-center justify-between";
 
 /**
- * The list must have at least one row for the table to render at all — the empty
- * state is a paragraph, and a paragraph cannot clip a column. Seeding is
- * conditional so a repeat run against a populated stand adds nothing: the shared
- * dev database is not this spec's to grow one event per invocation. A realistic
- * title (an event name carries a school and a direction) is what makes the five
- * columns exceed 390px in the first place.
+ * The list must have at least one row for a card to render at all — the empty
+ * state cannot overflow. Seeding is conditional so a repeat run against a
+ * populated stand adds nothing: the shared dev database is not this spec's to
+ * grow one event per invocation. A realistic title (an event name carries a
+ * school and a direction) is what would push a card past 390px.
  */
 async function seedEventIfListEmpty(page: Page): Promise<void> {
-  await page.goto("/events");
-  await page
-    .getByTestId("events-table")
-    .or(page.getByTestId("events-empty"))
-    .first()
-    .waitFor({ state: "visible" });
-  if (await page.getByTestId("events-table").isVisible()) return;
+  if (await anyListedEventId(page)) return;
 
   await page.goto("/events/create");
   await page.locator("#title").fill("Ведение пациентов с ХСН: разбор случаев");
@@ -112,23 +105,33 @@ async function pageOverflow(page: Page): Promise<number> {
   );
 }
 
-/** Table-wrapper horizontal overflow in px. > 0 at 390px means the columns are swipe-reachable. */
-async function tableOverflow(page: Page): Promise<number> {
-  return page
-    .getByTestId("events-table")
-    .evaluate(
-      (table) =>
-        table.parentElement!.scrollWidth - table.parentElement!.clientWidth,
-    );
+/**
+ * How far the widest visible row render reaches past the viewport's right edge,
+ * in px. Must be ≤ 0 at 390px: every record card ends inside the screen.
+ */
+async function rowOverhang(page: Page): Promise<number> {
+  const rows = visibleEventRows(page);
+  await expect(rows.first()).toBeVisible();
+  const width = page.viewportSize()!.width;
+  const edges = await rows.evaluateAll((titles) =>
+    // The record card is the DS `DataTable` card a clickable row renders below
+    // `md` (`data-clickable`); a title outside one is no card at all.
+    titles.map((title) => {
+      const card = title.closest('[data-clickable="true"]');
+      if (!card) throw new Error(`no record card around «${title.textContent}»`);
+      return card.getBoundingClientRect().right;
+    }),
+  );
+  return Math.max(...edges) - width;
 }
 
 /** Do the heading block and the create button share any vertical band? */
 async function headerBoxesShareVerticalBand(page: Page): Promise<boolean> {
   const description = await page
-    .getByTestId("create-event")
+    .getByTestId("events-create")
     .locator("xpath=../div/p")
     .boundingBox();
-  const button = await page.getByTestId("create-event").boundingBox();
+  const button = await page.getByTestId("events-create").boundingBox();
   if (!description || !button) throw new Error("header boxes not measurable");
   return (
     button.y < description.y + description.height &&
@@ -149,7 +152,7 @@ async function restoreBrokenLayout(page: Page): Promise<void> {
   await page.getByTestId("nav-events").evaluate((navLink, cls) => {
     navLink.closest("nav")!.setAttribute("class", cls);
   }, BROKEN_SHELL_NAV_CLASS);
-  await page.getByTestId("create-event").evaluate((createLink, cls) => {
+  await page.getByTestId("events-create").evaluate((createLink, cls) => {
     // The DS Button renders its `asChild` link, so this node is the <a> and its
     // nearest <div> ancestor IS the list header row.
     createLink.closest("div")!.setAttribute("class", cls);
@@ -157,7 +160,7 @@ async function restoreBrokenLayout(page: Page): Promise<void> {
 }
 
 test.describe("#1222 admin /events at 390px", () => {
-  test("the page does not side-scroll, the table does, and the create button clears the description", async ({
+  test("the page does not side-scroll, every record card fits the screen, and the create button clears the description", async ({
     page,
   }) => {
     await page.setViewportSize(WIDE);
@@ -167,10 +170,11 @@ test.describe("#1222 admin /events at 390px", () => {
     // --- narrow, fixed ------------------------------------------------------
     await page.setViewportSize(NARROW);
     await page.goto("/events");
-    await page.getByTestId("events-table").waitFor({ state: "visible" });
 
+    // Below `md` the rows are record cards — the column table is not shown.
+    await expect(page.getByRole("table")).toBeHidden();
+    expect(await rowOverhang(page)).toBeLessThanOrEqual(0);
     expect(await pageOverflow(page)).toBe(0);
-    expect(await tableOverflow(page)).toBeGreaterThan(0);
     expect(await headerBoxesShareVerticalBand(page)).toBe(false);
     if (SHOT_DIR) {
       await page.screenshot({
@@ -198,7 +202,8 @@ test.describe("#1222 admin /events at 390px", () => {
     // the list header stay single rows and nothing scrolls sideways.
     await page.setViewportSize(WIDE);
     await page.goto("/events");
-    await page.getByTestId("events-table").waitFor({ state: "visible" });
+    await expect(page.getByRole("table")).toBeVisible();
+    await expect(visibleEventRows(page).first()).toBeVisible();
 
     expect(await pageOverflow(page)).toBe(0);
     // No desktop table-overflow assert: the wrapper scrollWidth at 1440px is

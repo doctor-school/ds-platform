@@ -7626,9 +7626,14 @@ export interface operations {
     EventsAdminController_list: {
         parameters: {
             query?: {
+                dir?: "asc" | "desc";
                 page?: number;
                 pageSize?: number;
                 q?: string;
+                sort?: "startsAt" | "title" | "school" | "state";
+                startsFrom?: string;
+                startsTo?: string;
+                state?: "draft" | "published" | "live" | "ended" | "hidden" | "in_archive";
             };
             header?: never;
             path?: never;

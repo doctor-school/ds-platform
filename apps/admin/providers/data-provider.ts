@@ -6,6 +6,7 @@ import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type { RosterFilterKey } from "@/lib/congress-roster";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
+  EventAdminListSortKeySchema,
   LEARNING_STEP_MEDIA_PART,
   LIFECYCLE_IMPACT_TOKEN_HEADER,
 } from "@ds/schemas";
@@ -459,10 +460,48 @@ function taxonomyListQuery(params: {
   return query.toString();
 }
 
+/** The facets `GET /v1/admin/events` takes beside paging (007 EARS-14). */
+const EVENT_LIST_FILTER_FIELDS = ["q", "state", "startsFrom", "startsTo"];
+
+/**
+ * The admin event list query (007 EARS-14). The route is strict (#1643), so
+ * only its own facets are sent, a blank one left out; the first sorter on a
+ * sortable column becomes `sort` + `dir`. A caller without a sorter — the
+ * reverse-relation and staff-access pickers — sends none and keeps the route's
+ * alphabetical title order.
+ */
+function eventListQuery(params: {
+  pagination?: { currentPage?: number; pageSize?: number };
+  filters?: readonly { field?: string; value?: unknown }[];
+  sorters?: readonly { field: string; order: "asc" | "desc" }[];
+}): string {
+  const query = new URLSearchParams();
+  query.set("page", String(params.pagination?.currentPage ?? 1));
+  query.set("pageSize", String(params.pagination?.pageSize ?? 20));
+  for (const filter of params.filters ?? []) {
+    const value = filter.value;
+    if (
+      filter.field &&
+      EVENT_LIST_FILTER_FIELDS.includes(filter.field) &&
+      typeof value === "string" &&
+      value.length > 0
+    ) {
+      query.set(filter.field, value);
+    }
+  }
+  const sorter = params.sorters?.[0];
+  const sortKey = EventAdminListSortKeySchema.safeParse(sorter?.field);
+  if (sorter && sortKey.success) {
+    query.set("sort", sortKey.data);
+    query.set("dir", sorter.order);
+  }
+  return query.toString();
+}
+
 export const dataProvider: DataProvider = {
   getApiUrl: () => ADMIN_BASE,
 
-  getList: async ({ resource, pagination, filters }) => {
+  getList: async ({ resource, pagination, filters, sorters }) => {
     if (isTaxonomyResource(resource)) {
       const res = await fetch(
         `${ADMIN_BASE}/${resource}?${taxonomyListQuery({
@@ -479,9 +518,10 @@ export const dataProvider: DataProvider = {
       return { data: body.data as unknown as never[], total: body.total };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
-    const eventQuery = taxonomyListQuery({
+    const eventQuery = eventListQuery({
       ...(pagination ? { pagination } : {}),
       ...(filters ? { filters } : {}),
+      ...(sorters ? { sorters } : {}),
     });
     const res = await fetch(`${ADMIN_BASE}/events?${eventQuery}`, {
       credentials: "include",

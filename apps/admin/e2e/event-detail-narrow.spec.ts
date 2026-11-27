@@ -1,5 +1,6 @@
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
+import { anyListedEventId } from "./support/events-list";
 
 /**
  * #1399 — the admin `/events/[id]` edit screen at a phone width (390px).
@@ -57,21 +58,8 @@ const BROKEN_DETAIL_HEADER_CLASS = "flex items-center justify-between";
  * Returns the event id the detail assertions run against.
  */
 async function eventDetailId(page: Page): Promise<string> {
-  await page.goto("/events");
-  await page
-    .getByTestId("events-table")
-    .or(page.getByTestId("events-empty"))
-    .first()
-    .waitFor({ state: "visible" });
-
-  if (await page.getByTestId("events-table").isVisible()) {
-    const testId = await page
-      .locator('[data-testid^="event-row-"]')
-      .first()
-      .getAttribute("data-testid");
-    if (!testId) throw new Error("events table rendered without a row test id");
-    return testId.replace("event-row-", "");
-  }
+  const listed = await anyListedEventId(page);
+  if (listed) return listed;
 
   await page.goto("/events/create");
   await page.locator("#title").fill("Ведение пациентов с ХСН: разбор случаев");

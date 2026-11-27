@@ -51,6 +51,16 @@ export interface AdminWorld {
     expertUrl: string;
     rowId?: string;
   };
+  /**
+   * The 007 EARS-14 list journey (`event-list/steps.ts`): the run marker every
+   * seeded school carries, the seeded ids by seed key, and the address the
+   * operator stood on before a reload.
+   */
+  eventList?: {
+    marker: string;
+    ids: Partial<Record<"htn" | "back" | "dm" | "af" | "migraine", string>>;
+    addressBeforeReload?: string;
+  };
   /** Retired curator row refused while another Expert holds the seat (012). */
   projectCuratorRestoreConflict?: {
     projectTitle: string;

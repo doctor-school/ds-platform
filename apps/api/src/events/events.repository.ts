@@ -22,6 +22,8 @@ import {
   type EventAudience,
   type EventAdminListQuery,
   MONTH_BROADCAST_STATES,
+  mskClosingInstantAfterLastDay,
+  mskDayStartInstant,
   PAST_BROADCAST_STATES,
   type PublicEventFacetOptions,
   type StreamConfig,
@@ -465,21 +467,52 @@ export class EventsRepository {
     return row ? { provider: row.provider, embedRef: row.embedRef } : null;
   }
 
+  /**
+   * 007 EARS-14 — the operator event list and the reverse-relation / staff
+   * pickers over one strict query. Every filter is one more `AND`, so search,
+   * state and period compose with each other and with paging, and the `total`
+   * counts exactly the filtered set:
+   *
+   * - search: a case-insensitive «contains» over the title, the slug or the
+   *   school;
+   * - state: equality on the one lifecycle state;
+   * - period: an inclusive range of Moscow calendar days over `starts_at`,
+   *   `startsTo` covering its whole day (up to 00:00 Moscow of the next day,
+   *   exclusive) — Moscow midnights, never UTC ones.
+   */
   async listAdminPage(
     query: EventAdminListQuery,
   ): Promise<{ rows: Event[]; total: number }> {
-    const search = query.q
-      ? or(
-          ilike(events.title, `%${escapeLike(query.q)}%`),
-          ilike(events.slug, `%${escapeLike(query.q)}%`),
-        )
-      : undefined;
-    const where = search ? and(ACTIVE_EVENT, search) : ACTIVE_EVENT;
+    const predicates: SQL[] = [ACTIVE_EVENT];
+    if (query.q) {
+      const term = `%${escapeLike(query.q)}%`;
+      predicates.push(
+        or(
+          ilike(events.title, term),
+          ilike(events.slug, term),
+          ilike(events.school, term),
+        )!,
+      );
+    }
+    if (query.state !== undefined) {
+      predicates.push(eq(events.state, query.state));
+    }
+    if (query.startsFrom !== undefined) {
+      predicates.push(
+        gte(events.startsAt, mskDayStartInstant(query.startsFrom)),
+      );
+    }
+    if (query.startsTo !== undefined) {
+      predicates.push(
+        lt(events.startsAt, mskClosingInstantAfterLastDay(query.startsTo)),
+      );
+    }
+    const where = and(...predicates);
     const rows = await this.db
       .select()
       .from(events)
       .where(where)
-      .orderBy(asc(events.title), asc(events.id))
+      .orderBy(...adminListOrderBy(query))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const [totals] = await this.db
@@ -886,4 +919,37 @@ export class EventsRepository {
 /** Treat SQL wildcard characters in an operator query as literal text. */
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+/**
+ * 007 EARS-14 — the admin event-list `ORDER BY`. One column in the requested
+ * direction, and every tie-break in that SAME direction ending on the id, so
+ * `desc` is the exact reverse of `asc` and offset pages never repeat or skip a
+ * row. No `sort` is the title ascending — the alphabetical order the pickers
+ * that send no sort have always read.
+ *
+ * - The title and the school order under the ICU Russian collation
+ *   (`ru-x-icu`, as the 044 roster sort does): case-insensitive, «ё» beside
+ *   «е», whatever the database's default collation is.
+ * - The state orders by the lifecycle enum's declared order (draft → published
+ *   → live → ended → hidden → in_archive), not by its spelling.
+ * - The school and the state group many events, so inside a group the start
+ *   date decides before the id.
+ */
+function adminListOrderBy(query: EventAdminListQuery): SQL[] {
+  const dir = query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
+  const russian = (column: typeof events.title | typeof events.school): SQL =>
+    sql`${column} collate "ru-x-icu" ${dir}`;
+  const startsAt = sql`${events.startsAt} ${dir}`;
+  const id = sql`${events.id} ${dir}`;
+  switch (query.sort ?? "title") {
+    case "startsAt":
+      return [startsAt, id];
+    case "title":
+      return [russian(events.title), id];
+    case "school":
+      return [russian(events.school), startsAt, id];
+    case "state":
+      return [sql`${events.state} ${dir}`, startsAt, id];
+  }
 }

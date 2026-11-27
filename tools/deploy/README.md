@@ -745,7 +745,21 @@ from one anonymous `curl -q` HTTPS request capped at 8 s; an endpoint that is no
 endpoint is data.env's `PGBACKREST_REPO<n>_S3_ENDPOINT` (only that name is read). A
 committed `repo<n>-s3-endpoint=` line of `pgbackrest.conf` is the fallback, but the
 committed conf carries none for repo2/3 today: the data.env line is the live source; no
-credential is sent.
+credential is sent. repo2 at IDrive's endpoint (`s3.ap-southeast-2.idrivee2.com`, #4287)
+is probed the way pgBackRest reaches it, through the `repo2-tunnel` container: curl
+connects to that container's address on its compose network (`ds-recovery offsite-via`)
+and keeps IDrive's name for TLS. While that container is not running the line is
+`offsite repo2 s3.ap-southeast-2.idrivee2.com: tunnel-down http=-`, with no direct probe.
+The answer check (`ds-read-entrypoint` `OFFSITE_REPO`) admits a null host for
+`endpoint-unparsed` only, and refuses one with any other state.
+
+`data-secret.yml` `action=tunnel-key` (#4287) prints the public key of that tunnel's ssh
+key and its SHA256 fingerprint (ds-api-prod's relay verb `data-repo2-tunnel-key prod` →
+the data verb `repo2-tunnel-key`, which generates the ed25519 pair on its first call and
+rebuilds a lost `.pub` from the private key; the private key never leaves ds-data-prod).
+The relay host belongs to the BBM side: the
+operator hands that key to the relay's owner with `terraform output -raw data_prod_egress_ip`
+(`infra/deploy/README.md` → «repo2 through the tunnel»).
 
 ## Docker Hub login on the boxes (#2240)
 

@@ -333,7 +333,9 @@ is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
 region its `repoN-s3-region=`, the endpoint that provider's S3 host, and the access a
 key of that provider account, which the provider-side owner issues (README → «Adding
 or rotating an offsite pgBackRest repo»). The bundle's own offsite key is inside the
-bundle, so it cannot be the key that fetches it.
+bundle, so it cannot be the key that fetches it. IDrive e2 (repo2) refuses RU source
+addresses: fetch repo2's copy from a machine outside RU (§3.6 «repo2 (IDrive e2)
+reaches only through the tunnel from an RU address»).
 
 1. **Fetch the latest manifest of the box** (any S3 client; the AWS CLI shown, the keys
    in its environment, never on the command line):
@@ -658,6 +660,80 @@ there is nothing to check; take SEG from the last segment `info` lists for repo 
 instead. Report which repo was read. The same path, from a `backup --repo=N` to a
 PITR restore through a repo-N-only config, runs in `pgbackrest-offsite-proof.yml`.
 
+#### repo2 (IDrive e2) reaches only through the tunnel from an RU address
+
+IDrive e2 refuses RU source addresses, and every connection ds-data-prod makes leaves
+through the RU `twc_router` NAT. On the box, repo2 is reached through the compose
+service `repo2-tunnel` (infra/deploy/README.md → «repo2 through the tunnel»). That
+service carries IDrive's name, `s3.ap-southeast-2.idrivee2.com`, as its alias on the
+compose network `ds-data-prod_repo2-tunnel`. A one-shot container on Docker's default
+bridge resolves that name to IDrive's own address, and its packets are dropped. The
+bundle's `PGBACKREST_REPO2_S3_ENDPOINT` is that exact name, so pgBackRest needs no
+other change on either path below. TLS stays verified on both: the certificate is
+IDrive's either way.
+
+**On ds-data-prod, through the tunnel.** The tunnel must be running:
+
+```bash
+sudo docker inspect -f '{{.State.Running}}' ds-data-prod-repo2-tunnel-1   # true
+# Every one-shot run of §3.2 (with the repo2-only $BR above) and step 5's copy join
+# the tunnel's network, which holds only the tunnel and the pgbackrest sidecar (never
+# postgres): Docker DNS there resolves IDrive's name to the tunnel.
+BR="$BR --network ds-data-prod_repo2-tunnel"
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off info
+```
+
+Then add `--network ds-data-prod_repo2-tunnel` to step 5's `docker run` too: the
+copy's `archive-get` replays WAL from repo2 through the tunnel. The copy still
+publishes no port and listens on no address (`listen_addresses=''`). `false` or no
+such container means the tunnel is down. `docker compose logs repo2-tunnel` names the
+cause (a refused key, an unreachable relay). Use the path below instead.
+
+**A rebuilt box (§4)** has no tunnel key: the key never leaves the box, so it is not
+in the bundle. The tunnel has its own compose profile, so §4 step 3's `create` and
+`up -d`, which name no service, leave it out and raise postgres, redis and the sidecar
+without the key. After step 4 of §4 the operator dispatches `data-secret.yml`
+`action=tunnel-key`, and the relay's owner replaces the key line with the new public
+key (the NAT address stays `data_prod_egress_ip` unless Terraform recreated the
+router's floating IP). The next `data-up` (a release) or data-secret apply then starts
+the tunnel, or, on the box, `data-up`'s own command, which names the service and so
+activates its profile:
+
+```bash
+cd ~/ds-platform/infra/deploy/compose/data-prod
+sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel
+```
+
+Until then, restore from repo1, from repo3, or from repo2 on the path below.
+
+**From a machine outside RU, without the tunnel.** When ds-data-prod or the relay is
+unavailable, repo2 is read directly from any machine whose egress IDrive accepts.
+That machine needs Docker, the committed tree at the live SHA, and the bundle's
+`data.env`, which a custodian feeds onto tmpfs there (§2.3 step 4 into
+`/run/ds-recovery/restore.env` on that machine). The restored cluster holds personal
+data in plaintext outside RF. §3's restore proof stays on ds-data-prod for that
+reason, so this path is a disaster restore on the owner's word only, never a drill.
+
+```bash
+ENVF=/run/ds-recovery/restore.env
+CONF=$PWD/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
+# The same pinned images the box runs, built from the committed Dockerfiles.
+sudo docker build -q -t ds-recovery-pgbackrest infra/deploy/compose/data-prod/pgbackrest
+sudo docker build -q -t ds-recovery-postgres infra/deploy/compose/data-prod/postgres
+BR_IMAGE=ds-recovery-pgbackrest PG_IMAGE=ds-recovery-postgres
+# Reachability first: IDrive answers this machine (any HTTP status), or stop here.
+curl -sS -o /dev/null -w '%{http_code}\n' https://s3.ap-southeast-2.idrivee2.com/
+```
+
+Then define `BR` as in §3.2, derive the repo2-only config with `N=2` as above, and run
+§3.2 steps 1, 2 and 4 and step 5 on Docker's default bridge, with
+`SCRATCH=/var/lib/ds-recovery/$(date -u +%Y%m%dT%H%M%SZ)`. The default bridge
+resolves IDrive's name through public DNS, so pgBackRest and the copy's `archive-get`
+connect to IDrive directly. Skip step 3, as above. This copy lets the data be read
+while no RU box can reach repo2. The rebuilt box restores from repo2 itself (§4
+step 3) once the relay holds its new key. Tear down by §3.4 on that machine, including
+the tmpfs `restore.env`.
+
 ## 4. Full host-loss path
 
 Each step is an existing section; this list only orders them.
@@ -674,7 +750,9 @@ Each step is an existing section; this list only orders them.
    labelled volumes without starting anything; then run the README «Rollback» restore
    `docker run` (it overrides the sidecar entrypoint and needs no running postgres;
    skip its `compose stop`), then `sudo docker compose up -d` and
-   `pgbackrest --stanza=ds info`. The release guard records a new
+   `pgbackrest --stanza=ds info`. Both compose commands leave the repo2 tunnel out (its
+   own profile; the box has no tunnel key yet, §3.6 «A rebuilt box» brings it up after
+   step 4). The release guard records a new
    `ds-platform-postgres-state.json` on its first successful run
    (`tools/deploy/README.md`).
 4. **App.** The live SHA from §1.1 through `deploy-prod.yml` (README → «Release»),

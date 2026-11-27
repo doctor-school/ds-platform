@@ -65,6 +65,17 @@ Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable
   The entrypoint writes each enabled offsite repo's own config, runs `stanza-create`
   (idempotent), then cron in the foreground (spec §6.3). It mounts `pgdata` read-only to read PGDATA files during backup and
   connects to postgres through the shared socket.
+- **repo2-tunnel** (#4287) — repo2's way to IDrive e2, which refuses this box's RU
+  egress address: the pgbackrest image (its `openssh-client`) running
+  `repo2-tunnel/tunnel.sh`, an SSH local forward to IDrive's endpoint through the relay
+  host (pinned host key `repo2-tunnel/known_hosts`), key read-only from
+  `/etc/ds-platform/repo2-tunnel/`. It carries the alias
+  `s3.ap-southeast-2.idrivee2.com` on its own network `repo2-tunnel`, shared with
+  `pgbackrest` alone (`postgres` never talks to an offsite repo). It publishes no port
+  and uses no host network. Nothing depends on it, and it starts only once its key
+  exists (`infra/deploy/README.md` → «repo2 through the tunnel»). It has its own
+  compose profile, `repo2-tunnel`: an `up -d` that names no service (above) leaves it
+  out, and a command that names it (the release's `data-up` does) starts it.
 
 ## Guard contract
 

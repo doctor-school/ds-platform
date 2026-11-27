@@ -685,6 +685,62 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
     assert.equal(bucket().filter((k) => k.startsWith("ds-backups/")).length, 6, "repo1 holds both boxes' copies");
   });
 
+  it("4287: repo2 at IDrive's endpoint is written through the repo2 tunnel container, the name kept for TLS; repo1 direct", () => {
+    enableOffsite();
+    const dataEnv = join(data, "etc/ds-platform/data.env");
+    writeFileSync(
+      dataEnv,
+      readFileSync(dataEnv, "utf8").replace(
+        "PGBACKREST_REPO2_S3_ENDPOINT=s3.offsite.test",
+        "PGBACKREST_REPO2_S3_ENDPOINT=s3.ap-southeast-2.idrivee2.com",
+      ),
+    );
+    stub(
+      join(stubs, "docker"),
+      ['echo "docker $*" >> "$STUB_DIR/docker.log"', '[[ -f $STUB_DIR/tunnel-ip ]] || exit 1', 'cat "$STUB_DIR/tunnel-ip"'].join("\n"),
+    );
+    writeFileSync(join(dir, "tunnel-ip"), "172.30.0.5\n");
+    const r = read("recovery-bundle");
+    assert.equal(r.status, 0, r.stderr);
+    const lines = log("curl").trim().split("\n");
+    const tunnelled = lines.filter((l) => l.includes("https://s3.ap-southeast-2.idrivee2.com/bbm-ds-pgbackrest/"));
+    assert.ok(tunnelled.length > 0, log("curl"));
+    for (const l of tunnelled) assert.match(l, /^curl --connect-to s3\.ap-southeast-2\.idrivee2\.com:443:172\.30\.0\.5:443 /);
+    for (const l of lines.filter((l) => l.includes("/ds-backups/"))) assert.doesNotMatch(l, /--connect-to/, "repo1 direct");
+    assert.match(log("docker"), /^docker inspect --format .*"ds-data-prod_repo2-tunnel".* ds-data-prod-repo2-tunnel-1$/m);
+    assert.equal(bucket().filter((k) => k.startsWith("bbm-ds-pgbackrest/")).length, 6);
+  });
+
+  it("4287: with repo2's tunnel down the repo2 copy fails by a fixed reason, repo1's copy stands, never a direct write", () => {
+    enableOffsite();
+    const dataEnv = join(data, "etc/ds-platform/data.env");
+    writeFileSync(
+      dataEnv,
+      readFileSync(dataEnv, "utf8").replace(
+        "PGBACKREST_REPO2_S3_ENDPOINT=s3.offsite.test",
+        "PGBACKREST_REPO2_S3_ENDPOINT=https://s3.ap-southeast-2.idrivee2.com:443/",
+      ),
+    );
+    stub(join(stubs, "docker"), 'echo "docker $*" >> "$STUB_DIR/docker.log"\nexit 1');
+    const r = read("recovery-bundle");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /ds-recovery: the repo2 tunnel is not running \(compose service repo2-tunnel\)/);
+    assert.doesNotMatch(log("curl"), /idrivee2/);
+    assert.equal(bucket().filter((k) => k.startsWith("ds-backups/")).length, 6, "repo1 holds both boxes' copies");
+  });
+
+  it("4287: offsite-via names the tunnel for repo2's IDrive endpoint only", () => {
+    stub(join(stubs, "docker"), 'echo 172.30.0.5');
+    const via = (repo, endpoint) => recovery(["offsite-via", repo, endpoint], data).stdout;
+    assert.equal(via("2", "s3.ap-southeast-2.idrivee2.com"), "172.30.0.5\n");
+    assert.equal(via("2", "https://s3.ap-southeast-2.idrivee2.com/"), "172.30.0.5\n");
+    assert.equal(via("3", "s3.ap-southeast-2.idrivee2.com"), "");
+    assert.equal(via("2", "s3.ap-southeast-2.idrivee2.com:9000"), "");
+    assert.equal(via("2", "s3.offsite.test"), "");
+    stub(join(stubs, "docker"), "echo '<no value>'");
+    assert.equal(via("2", "s3.ap-southeast-2.idrivee2.com"), "-\n");
+  });
+
   it("3670: latest reads a named offsite repo, and refuses one that is off", () => {
     enableOffsite();
     assert.equal(read("recovery-bundle").status, 0);

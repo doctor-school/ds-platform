@@ -1180,7 +1180,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(ok.status, 0, String(ok.stderr));
     assert.equal(readFileSync(join(compose, ".env"), "utf8"), "VPC_IP=192.168.0.10\n");
     assert.deepEqual(JSON.parse(readFileSync(join(compose, ".postgres-artifacts.json"), "utf8")), {
-      services: { postgres: { image: IMG("b") }, pgbackrest: { image: IMG("c") } },
+      // #4287: the repo2 tunnel runs the certified pgbackrest image.
+      services: { postgres: { image: IMG("b") }, pgbackrest: { image: IMG("c") }, "repo2-tunnel": { image: IMG("c") } },
     });
     for (const vpcIp of ["192.168.0.256", "192.168.0.10\nX=1", "::1"]) {
       const bad = run("data-env", {
@@ -1401,6 +1402,11 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       log("ds-release"),
       `ds-release-called release prod ${SHA} up\ncd '${compose}'\n` +
         "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest\n" +
+        // #4287: the repo2 tunnel once its key exists, never waited on.
+        `if test -s '${join(root, "etc/ds-platform/repo2-tunnel/id_ed25519")}'; then ` +
+        "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel" +
+        " || echo 'repo2-tunnel: WARNING: the tunnel could not be started; repo2 waits for it, repo1 is unaffected'; " +
+        "else echo 'repo2-tunnel: no key yet (repo2-tunnel-key generates it)'; fi\n" +
         "docker compose up -d --no-deps redis\n" +
         "docker compose -f glitchtip/compose.yml --env-file .env up -d --no-build --pull missing --wait --wait-timeout 300\n" +
         `ds-release-called release --retry-failed prod ${SHA} backup\ncd '${compose}'\n` +
@@ -1474,6 +1480,54 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       const r = run(command, { input: "" });
       assert.equal(r.status, 3, command);
       assert.match(r.stderr, /is served by the data box only/);
+    }
+  });
+
+  it("4287: repo2-tunnel-key generates the tunnel key once, root-only, and prints only the public key and its fingerprint", () => {
+    setRole("data");
+    const first = run("repo2-tunnel-key");
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stderr, /repo2 tunnel key generated/);
+    assert.match(
+      first.stdout,
+      /^ssh-ed25519 [A-Za-z0-9+/]+={0,2} ds-data-prod-repo2\n256 SHA256:[A-Za-z0-9+/]{43} ds-data-prod-repo2 \(ED25519\)\n$/,
+    );
+    assert.doesNotMatch(first.stdout, /PRIVATE KEY/);
+    const key = join(root, "etc/ds-platform/repo2-tunnel/id_ed25519");
+    assert.match(readFileSync(key, "utf8"), /^-----BEGIN OPENSSH PRIVATE KEY-----/);
+    assert.equal(statSync(key).mode & 0o777, 0o600);
+    assert.equal(statSync(`${key}.pub`).mode & 0o777, 0o644);
+    assert.equal(statSync(dirname(key)).mode & 0o777, 0o700);
+    const again = run("repo2-tunnel-key");
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(again.stdout, first.stdout, "the same key pair, not a new one");
+    assert.doesNotMatch(again.stderr, /generated/);
+    assert.equal(run("repo2-tunnel-key now").status, 2);
+    setRole("prod");
+    const r = run("repo2-tunnel-key");
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /is served by the data box only/);
+  });
+
+  it("4287: repo2-tunnel-key rebuilds a missing or empty public key from the private key the relay trusts — never a new pair", () => {
+    setRole("data");
+    const first = run("repo2-tunnel-key");
+    assert.equal(first.status, 0, first.stderr);
+    const key = join(root, "etc/ds-platform/repo2-tunnel/id_ed25519");
+    const private_ = readFileSync(key);
+    for (const lose of [() => rmSync(`${key}.pub`), () => writeFileSync(`${key}.pub`, "")]) {
+      lose();
+      chmodSync(key, 0o640);
+      const again = run("repo2-tunnel-key");
+      assert.equal(again.status, 0, again.stderr);
+      assert.equal(again.stdout, first.stdout, "the same public key and fingerprint");
+      assert.doesNotMatch(again.stderr, /generated/);
+      assert.match(again.stderr, /repo2 tunnel public key rebuilt from the private key/);
+      assert.deepEqual(readFileSync(key), private_, "the private key is byte-identical");
+      assert.equal(readFileSync(`${key}.pub`, "utf8"), first.stdout.split("\n")[0] + "\n");
+      assert.equal(statSync(key).mode & 0o777, 0o600);
+      assert.equal(statSync(`${key}.pub`).mode & 0o777, 0o644);
+      assert.equal(statSync(dirname(key)).mode & 0o777, 0o700);
     }
   });
 
@@ -1640,6 +1694,34 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest",
       "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh",
     ]);
+    assert.match(r.stdout, /repo2-tunnel: no key yet/);
+  });
+
+  it("4287: with the tunnel key on the box, the unit raises repo2's tunnel first, before data.env changes", async () => {
+    mkdirSync(join(root, "etc/ds-platform/repo2-tunnel"), { recursive: true });
+    writeFileSync(join(root, "etc/ds-platform/repo2-tunnel/id_ed25519"), "key\n", { mode: 0o600 });
+    const r = await runUnit("NO-SUCH-KEY");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(log("docker").trim().split("\n"), [
+      "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel",
+      "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest",
+      "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh",
+    ]);
+  });
+
+  it("4287: a tunnel Docker cannot start is a warning — a rotation that leaves repo2 alone goes on", async () => {
+    mkdirSync(join(root, "etc/ds-platform/repo2-tunnel"), { recursive: true });
+    writeFileSync(join(root, "etc/ds-platform/repo2-tunnel/id_ed25519"), "key\n", { mode: 0o600 });
+    // upFailKey matches the old data.env only: the first `up` (the tunnel's) fails.
+    const r = await runUnit("NO-SUCH-KEY", new Date(), "OLDKEYID0001");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /repo2-tunnel: WARNING: the tunnel could not be started; repo2 waits for it, repo1 is unaffected/);
+    assert.match(readFileSync(dataEnv(), "utf8"), /^PGBACKREST_REPO1_S3_KEY=NEWKEYID0002$/m);
+    assert.deepEqual(log("docker").trim().split("\n"), [
+      "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel",
+      "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest",
+      "docker compose exec -T -u postgres pgbackrest /usr/local/bin/repo-check.sh",
+    ]);
   });
 
   it("4068: a failed check puts the previous data.env back, recreates again and fails the unit", async () => {
@@ -1795,6 +1877,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     relayBox();
     const cases = [
       ["data-secret-recipient prod", "secret-recipient"],
+      ["data-repo2-tunnel-key prod", "repo2-tunnel-key"],
       [`data-secret-status prod ${SHA}`, `status prod ${SHA}`],
       [`data-secret-finish prod ${SHA} failed`, `finish ${SHA} failed`],
       [`data-secret-apply prod ${SHA}`, `secret-apply ${SHA}`],
@@ -1827,6 +1910,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(log("ssh"), "", "no hop");
     for (const command of [
       "data-secret-recipient",
+      "data-repo2-tunnel-key",
+      "data-repo2-tunnel-key prod now",
       "data-secret-apply prod",
       `data-secret-finish prod ${SHA} maybe`,
       `data-secret-status stage-main ${SHA}`,
@@ -3123,6 +3208,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       `  *" volume inspect "*) echo "${PG_VOLUME()}" ;;`,
       `  *" psql "*) ${archiver === null ? "exit 1" : `echo '${archiver}'`} ;;`,
       '  *" pgbackrest version "*) echo "pgBackRest 2.60.0" ;;',
+      // #4287: the repo2 tunnel container's address (ds-recovery offsite-via), if running.
+      '  " inspect --format "*) [[ -f $STUB_DIR/tunnel-ip ]] || exit 1; cat "$STUB_DIR/tunnel-ip" ;;',
       "  *) exit 7 ;;",
       "esac",
     ]);
@@ -3290,6 +3377,69 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.deepEqual(answer.data.offsite[0], { repo: 2, host: "e2.example.test", state, http });
     });
 
+  // --- 4287: repo2's IDrive endpoint is probed through the repo2 tunnel, as pgBackRest reaches it
+  const IDRIVE = "s3.ap-southeast-2.idrivee2.com";
+  const tunnelBox = () => {
+    offsiteBox();
+    writeFileSync(join(dataRoot(), "etc/ds-platform/data.env"), `PGBACKREST_REPO2_S3_ENDPOINT=${IDRIVE}\n`);
+    const lib = join(dataRoot(), "usr/local/lib/ds-platform");
+    mkdirSync(lib, { recursive: true });
+    copyFileSync(resolve(here, "../../infra/deploy/bin/ds-recovery"), join(lib, "ds-recovery"));
+    chmodSync(join(lib, "ds-recovery"), 0o755);
+  };
+
+  it("4287: host-state probes repo2's IDrive endpoint through the running tunnel, keeping the name for TLS", () => {
+    tunnelBox();
+    writeFileSync(join(dir, "tunnel-ip"), "172.30.0.5\n");
+    curlAnswers({ [IDRIVE]: "0 403 0.051 0.123" });
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.deepEqual(answer.data.offsite[0], { repo: 2, host: IDRIVE, state: "reachable", http: 403 });
+    const probes = log("curl").trim().split("\n").filter((l) => l.endsWith(`https://${IDRIVE}/`));
+    assert.equal(probes.length, 1, log("curl"));
+    assert.match(probes[0], new RegExp(` --connect-to ${IDRIVE.replaceAll(".", "\\.")}:443:172\\.30\\.0\\.5:443 `));
+    assert.match(
+      log("docker"),
+      /^inspect --format .*"ds-data-prod_repo2-tunnel".* ds-data-prod-repo2-tunnel-1$/m,
+      "the tunnel's address on its compose network",
+    );
+  });
+
+  it("4287: host-state answers tunnel-down for repo2 while its tunnel is not running — no direct probe", () => {
+    tunnelBox();
+    curlAnswers({ "s3.onidel.test": "0 403 0.051 0.123" });
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.deepEqual(answer.data.offsite, [
+      { repo: 2, host: IDRIVE, state: "tunnel-down", http: null },
+      { repo: 3, host: "s3.onidel.test", state: "reachable", http: 403 },
+    ]);
+    const curls = log("curl").trim().split("\n");
+    assert.deepEqual(curls.filter((l) => l.includes(IDRIVE)), [], "never past the tunnel to IDrive's own address");
+    assert.deepEqual(curls.filter((l) => l.includes("--connect-to")), [], "no tunnel route for a tunnel that is down");
+    assert.equal(curls.filter((l) => l.endsWith("https://s3.onidel.test/")).length, 1, "repo3 is still probed, directly");
+    assert.deepEqual(hostStateLines(answer).filter((l) => l.startsWith("offsite repo2")), [
+      `offsite repo2 ${IDRIVE}: tunnel-down http=-`,
+    ]);
+  });
+
+  it("4287: host-state probes any other repo2 endpoint directly, as pgBackRest then reaches it", () => {
+    offsiteBox();
+    const lib = join(dataRoot(), "usr/local/lib/ds-platform");
+    mkdirSync(lib, { recursive: true });
+    copyFileSync(resolve(here, "../../infra/deploy/bin/ds-recovery"), join(lib, "ds-recovery"));
+    chmodSync(join(lib, "ds-recovery"), 0o755);
+    writeFileSync(join(dir, "tunnel-ip"), "172.30.0.5\n");
+    curlAnswers({ "e2.example.test": "0 403 0.051 0.123" });
+    const answer = decrypt(readRun("host-state").stdout);
+    assert.deepEqual(answer.data.offsite[0], { repo: 2, host: "e2.example.test", state: "reachable", http: 403 });
+    assert.doesNotMatch(log("curl"), /--connect-to/);
+  });
+
   it("4144: host-state reports a dead resolver as measured values, never an aborted answer", () => {
     hostBox({ resolves: { root: [], "data-root": [] }, upstream: { root: "Global: 1.1.1.1\n", "data-root": null } });
     const r = readRun("host-state");
@@ -3351,6 +3501,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       { ...good, resolver: { ...good.resolver, nameservers: ["DS_SECRET=x"] } },
       { ...good, selfHostname: { ...good.selfHostname, hostname: "DS_SECRET=x" } },
       { ...good, uptime: { error: "DS_SECRET=x".repeat(40) } },
+      // #4287: a null host belongs to an unparsed endpoint only, and an unparsed one has none.
+      { ...good, offsite: [{ repo: 2, host: null, state: "reachable", http: 200 }] },
+      { ...good, offsite: [{ repo: 2, host: null, state: "tunnel-down", http: null }] },
+      { ...good, offsite: [{ repo: 2, host: "DS_SECRET.example.test", state: "endpoint-unparsed", http: null }] },
     ]) {
       writeFileSync(join(dir, "bad.json"), JSON.stringify(bad));
       writeFileSync(join(stubs, "ssh"), `#!/usr/bin/env bash\ncat "${join(dir, "bad.json")}"\n`);

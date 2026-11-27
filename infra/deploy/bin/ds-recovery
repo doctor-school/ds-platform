@@ -22,6 +22,7 @@
 #   ds-recovery install-age
 #   ds-recovery bundle  <box> <custodians> <work-dir> <stamp>   → stdout: members count
 #   ds-recovery offsite-repos                                    (ds-data-prod only) → stdout: the on offsite repos
+#   ds-recovery offsite-via <repo> <endpoint>                    → stdout: the tunnel address, `-` or nothing (#4287)
 #   ds-recovery upload  <box> <stamp> bundle|manifest <file> [<repo>] (ds-data-prod only)
 #   ds-recovery latest  <box> <out-file> [<repo>]                (ds-data-prod only) → stdout: FOUND | MISSING
 #   ds-recovery custodians <custodians>                          (the fail-closed gate alone)
@@ -240,6 +241,7 @@ s3_value() { sed -n "s/^$1=//p" "$DATA_ENV" | tail -n 1 | tr -d '\r'; }
 # Timeweb. The ciphertext is age's to the custodians: no copy is readable without
 # their identities, wherever it is stored.
 REPO=1
+VIA=
 PGBACKREST_CONF=$ROOT/home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
 conf_value() { sed -n "s/^#repo${REPO}: repo${REPO}-$1=//p" "$PGBACKREST_CONF" 2>/dev/null | tail -n 1 | tr -d '\r'; }
 # The offsite repos data.env turns on: all four names set, as pgbackrest-offsite.sh.
@@ -254,6 +256,29 @@ offsite_repos() {
   done
   return 0
 }
+# #4287: IDrive e2 drops RU source addresses, so repo2's IDrive endpoint is reached
+# through the compose service repo2-tunnel (infra/deploy/compose/data-prod/repo2-tunnel/),
+# which carries that name as its network alias; pgBackRest resolves it there. This host
+# is outside that network's DNS, so it connects to the container's address on it and
+# keeps the name for TLS (SNI and the certificate are IDrive's) and for the signature.
+# The names are the compose project's (pinned equal to compose.yml by the tests).
+REPO2_TUNNEL_HOST=s3.ap-southeast-2.idrivee2.com
+REPO2_TUNNEL_CONTAINER=ds-data-prod-repo2-tunnel-1
+REPO2_TUNNEL_NETWORK=ds-data-prod_repo2-tunnel
+# offsite_via <repo> <endpoint>: the running tunnel's IPv4 address when <repo> is 2 and
+# <endpoint> (host[:port], an optional https:// and trailing /) is the tunnelled one on
+# 443; `-` when that tunnel is not running; nothing for any other endpoint (direct).
+offsite_via() {
+  local v=$2 ip
+  v=${v#https://}
+  v=${v%/}
+  v=${v%:443}
+  [[ $1 == 2 && $v == "$REPO2_TUNNEL_HOST" ]] || return 0
+  ip=$(docker inspect --format \
+    "{{if .State.Running}}{{with index .NetworkSettings.Networks \"$REPO2_TUNNEL_NETWORK\"}}{{.IPAddress}}{{end}}{{end}}" \
+    "$REPO2_TUNNEL_CONTAINER" 2>/dev/null </dev/null || true)
+  if [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then printf '%s\n' "$ip"; else printf -- '-\n'; fi
+}
 # The bucket a failure names: repo1's keeps its wording ("the bucket").
 bucket_name() { [[ $REPO == 1 ]] && printf 'the bucket' || printf 'the repo%s bucket' "$REPO"; }
 set_repo() { # [<repo>]
@@ -261,6 +286,9 @@ set_repo() { # [<repo>]
   [[ $1 =~ ^[23]$ ]] || usage "<repo> is 2 or 3"
   [[ -f $DATA_ENV && " $(offsite_repos | tr '\n' ' ')" == *" $1 "* ]] || fail "repo$1 is not on (data.env lacks its names)"
   REPO=$1
+  # #4287: a tunnelled repo is written through its tunnel or not at all, never directly.
+  VIA=$(offsite_via "$REPO" "$(s3_value "PGBACKREST_REPO${REPO}_S3_ENDPOINT")")
+  [[ $VIA != - ]] || fail "the repo2 tunnel is not running (compose service repo2-tunnel)"
 }
 # s3_origin <repo1-s3-endpoint> prints `host[:port]`. pgBackRest parses the endpoint as
 # a URL with an optional scheme (src/common/io/http/url.c), so `host`, `host:port` and
@@ -299,6 +327,7 @@ s3() {
   printf 'user = "%s:%s"\n' "$access" "$secret" >"$cfg"
   local args=(-sS -K "$cfg" --aws-sigv4 "aws:amz:$region:s3" --connect-timeout 20 --max-time 120
     -w '%{http_code}' "https://$endpoint/$bucket/$key")
+  [[ -z $VIA ]] || args=(--connect-to "$REPO2_TUNNEL_HOST:443:$VIA:443" "${args[@]}")
   case $method in
     PUT)
       payload=$(sha256sum -- "$file" | cut -d' ' -f1)
@@ -405,6 +434,11 @@ case $cmd in
     offsite_repos
     ;;
 
+  offsite-via)
+    (($# == 3)) || usage "offsite-via <repo> <endpoint>"
+    offsite_via "$2" "$3"
+    ;;
+
   upload)
     (($# == 5 || $# == 6)) || usage "upload <box> <stamp> bundle|manifest <file> [<repo>]"
     box=$2 stamp=$3 kind=$4 file=$5
@@ -473,5 +507,5 @@ case $cmd in
     py check "$box" "$ENV_DIR" "$FINGERPRINT_KEY" "$custodians" "$manifest" "$max_days" "$NOW"
     ;;
 
-  *) usage "install-age | bundle | offsite-repos | upload | latest | custodians | check" ;;
+  *) usage "install-age | bundle | offsite-repos | offsite-via | upload | latest | custodians | check" ;;
 esac

@@ -26,12 +26,16 @@ ARG PGBACKREST_PACKAGE=2.60.0-1.pgdg12+1
 # store, so pgbackrest's OpenSSL cannot verify the (publicly-valid GlobalSign)
 # cert on the Timeweb S3 endpoint — stanza-create/check/backup all fail with
 # error 19 "self-signed certificate in certificate chain" (DSO-100 on-box find).
+# openssh-client is the repo2-tunnel service's (#4287, ../repo2-tunnel/tunnel.sh): that
+# service runs this same certified image with its own entrypoint, so the forward to
+# IDrive needs no further image; Debian's security updates own its version.
 # The version step fails the build unless the pgbackrest on PATH is the pinned one.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        "pgbackrest=${PGBACKREST_PACKAGE}" \
        cron \
        ca-certificates \
+       openssh-client \
     && rm -rf /var/lib/apt/lists/* \
     && v="$(pgbackrest version)" \
     && { [ "$v" = "pgBackRest ${PGBACKREST_PACKAGE%%-*}" ] \

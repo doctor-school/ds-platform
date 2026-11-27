@@ -69,7 +69,12 @@ export const DATA_READ_VERBS = [
  * pinned), reached by ds-api-prod's `data-secret-*` relay only, never by a release, so
  * the `capabilities` probe does not require them.
  */
-export const DATA_SECRET_VERBS = Object.freeze(["secret-recipient", "secret-apply"]);
+export const DATA_SECRET_VERBS = Object.freeze([
+  "secret-recipient",
+  "secret-apply",
+  // #4287: the public half of repo2's tunnel key, relayed as `data-repo2-tunnel-key prod`.
+  "repo2-tunnel-key",
+]);
 
 /**
  * The read-path verbs the release itself calls: its `rehearse` phase (#3648; spec §5

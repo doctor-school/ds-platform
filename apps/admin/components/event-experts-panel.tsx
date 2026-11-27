@@ -283,7 +283,7 @@ function LinkRow({
           </span>
         </Fact>
         <Fact label={t("eventExperts.columns.role")}>
-          {/* The caption under the name is optional (EARS-31), and §2.4's
+          {/* The caption above the name is optional (EARS-31), and §2.4's
               editorial removal also clears it (#1306); either way the row still
               holds its slot, so it renders labelled rather than blank. */}
           <span data-testid={`event-expert-role-${row.id}`}>

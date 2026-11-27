@@ -773,7 +773,7 @@ export const eventExperts = pgTable(
       .notNull()
       .default("speaker"),
     /**
-     * The optional per-event caption shown under the speaker's name — ordinary
+     * The optional per-event caption shown above the speaker's name — ordinary
      * trimmed editorial text, 1–80 when present (EARS-7 as amended by
      * EARS-31). Null when the operator wrote none, and cleared to null by
      * `RemoveExpertContent` (#1306) when the person is taken off the site.

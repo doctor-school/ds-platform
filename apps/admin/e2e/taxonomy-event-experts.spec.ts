@@ -271,7 +271,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(page.getByTestId("event-experts-empty")).toBeVisible();
 
     // ── Accept branch: the link is authored through the selector ───────────
-    // Модератор with a caption under the name (EARS-31).
+    // Модератор with a caption above the name (EARS-31).
     await openAddDialog(page, firstExpert.name);
     await page
       .getByTestId("event-expert-add-program-role")

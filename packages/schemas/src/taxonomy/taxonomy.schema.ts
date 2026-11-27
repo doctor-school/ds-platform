@@ -761,7 +761,7 @@ export const EVENT_EXPERT_PROGRAM_ROLE_LABELS: Record<
 };
 
 /**
- * The optional per-event caption shown under the speaker's name, carried in
+ * The optional per-event caption shown above the speaker's name, carried in
  * the `role` field (012-design §2.2, EARS-31). Trimmed, at most 80 characters;
  * an empty or whitespace-only caption is no caption and becomes `null`, so a
  * stored caption is always 1–80 characters — the DB CHECK mirrors those bounds.

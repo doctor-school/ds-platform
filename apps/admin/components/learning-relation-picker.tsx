@@ -9,7 +9,8 @@ import { useServerCombobox } from "@/lib/use-server-combobox";
 /**
  * 023 EARS-26, EARS-22 (#4018) — the one server-backed picker the learning
  * structure editor chooses its taxonomy rows with: a school's direction,
- * leading expert and project, a course's 032 partner organisation. It is the
+ * leading expert and project, a course's 032 partner organisation, a module's
+ * club 020 event (#4282). It is the
  * shared `useServerCombobox` state layer over the same bounded admin list
  * reads the relationship selectors use, rendered by the DS `Combobox`.
  */
@@ -24,7 +25,7 @@ export function LearningRelationPicker({
   describedBy,
 }: {
   id: string;
-  resource: "directions" | "experts" | "projects" | "organisations";
+  resource: "directions" | "experts" | "projects" | "organisations" | "events";
   value: string | null;
   onChange: (value: string) => void;
   placeholder: string;

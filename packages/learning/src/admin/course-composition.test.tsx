@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -345,6 +346,8 @@ describe("CourseCompositionScreen", () => {
       courseId: AID.course,
       position: 2,
       title: "Блокады",
+      clubEventId: null,
+      clubEvent: null,
       version: 1,
       lessons: [],
     });
@@ -410,6 +413,148 @@ describe("CourseCompositionScreen", () => {
       expect(screen.getByLabelText("Описание курса")).toHaveValue(
         "Описание коллеги",
       ),
+    );
+  });
+
+  // 023 EARS-1 / EARS-27 (#4282) — the module's club: a 020 event picked
+  // through the host's picker, shown with its start, changed and cleared under
+  // the module's version; a refused event names the field in staff words.
+  const EVENT = "50000000-0000-4000-8000-000000000001";
+  const EVENT2 = "50000000-0000-4000-8000-000000000002";
+  function withClub(removed = false) {
+    const c = course();
+    return {
+      ...c,
+      modules: [
+        {
+          ...c.modules[0]!,
+          clubEventId: EVENT,
+          clubEvent: {
+            id: EVENT,
+            title: "Клуб по ритму",
+            startsAt: "2026-12-03T15:00:00.000Z",
+            removed,
+          },
+        },
+      ],
+    };
+  }
+  function mountClub(transport = fakeTransport()) {
+    render(
+      <CourseCompositionScreen
+        courseId={AID.course}
+        transport={transport}
+        staffRoles={["platform_admin"]}
+        lessonHref={(id) => `/learning/lessons/${id}`}
+        clubField={({ id, value, onChange }) => (
+          <button
+            type="button"
+            id={id}
+            data-value={value ?? ""}
+            onClick={() => onChange(EVENT2)}
+          >
+            Выбрать другое событие
+          </button>
+        )}
+      />,
+    );
+    return transport;
+  }
+
+  it("023 EARS-1: a module without a club says so; a module with one shows its event and start", async () => {
+    mountClub();
+    expect(
+      await within(await screen.findByTestId("module-1")).findByText(
+        "Клуб не выбран",
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+    mountClub(fakeTransport({ course: async () => withClub() }));
+    const club = within(await screen.findByTestId("module-1")).getByTestId(
+      "module-club-now",
+    );
+    expect(club).toHaveTextContent("Клуб по ритму");
+    expect(club).toHaveTextContent("3 декабря 2026, 18:00 МСК");
+  });
+
+  it("023 EARS-1: a club event removed after it was set says so, and the club can be re-picked", async () => {
+    const t = mountClub(fakeTransport({ course: async () => withClub(true) }));
+    const module = await screen.findByTestId("module-1");
+    expect(within(module).getByTestId("module-club-now")).toHaveTextContent(
+      "Клуб по ритму",
+    );
+    expect(within(module).getByTestId("module-club-removed")).toHaveTextContent(
+      "Событие клуба удалено — выберите другое",
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Выбрать другое событие" }),
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Сохранить клуб" }),
+    );
+    await waitFor(() =>
+      expect(t.updateModule).toHaveBeenCalledWith(
+        AID.module,
+        { clubEventId: EVENT2 },
+        1,
+      ),
+    );
+  });
+
+  it("023 EARS-27: picks a module's club event and saves it under the module's version", async () => {
+    const t = mountClub();
+    const module = await screen.findByTestId("module-1");
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Выбрать другое событие" }),
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Сохранить клуб" }),
+    );
+    await waitFor(() =>
+      expect(t.updateModule).toHaveBeenCalledWith(
+        AID.module,
+        { clubEventId: EVENT2 },
+        1,
+      ),
+    );
+  });
+
+  it("023 EARS-27: clears a module's club — the club turns off under the module's version", async () => {
+    const t = mountClub(fakeTransport({ course: async () => withClub() }));
+    const module = await screen.findByTestId("module-1");
+    fireEvent.click(
+      await within(module).findByRole("button", { name: "Убрать клуб" }),
+    );
+    await waitFor(() =>
+      expect(t.updateModule).toHaveBeenCalledWith(
+        AID.module,
+        { clubEventId: null },
+        1,
+      ),
+    );
+  });
+
+  it("023 EARS-27: an unknown or removed club event is refused naming the module's club", async () => {
+    mountClub(
+      fakeTransport({
+        updateModule: async () => {
+          throw refusal(
+            "VALIDATION_FAILED",
+            [{ path: "clubEventId", message: "unknown event" }],
+            400,
+          );
+        },
+      }),
+    );
+    const module = await screen.findByTestId("module-1");
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Выбрать другое событие" }),
+    );
+    fireEvent.click(
+      within(module).getByRole("button", { name: "Сохранить клуб" }),
+    );
+    expect(await screen.findByTestId("write-refusal")).toHaveTextContent(
+      "Клуб модуля: такого события нет или оно удалено — выберите другое.",
     );
   });
 });

@@ -1,5 +1,6 @@
 import {
   directions,
+  events,
   experts,
   learningCourses,
   learningLessons,
@@ -32,6 +33,7 @@ import {
   type LearningElementType,
   type LearningLessonAdmin,
   type LearningModuleAdmin,
+  type LearningModuleClubEvent,
   type LearningPreset,
   type LearningRuleChangePreview,
   type LearningSchoolAdmin,
@@ -78,6 +80,7 @@ import {
 import {
   fieldError,
   LearningServerError,
+  type LearningDb,
   type LearningServerDeps,
   type LearningTx,
 } from "./deps.js";
@@ -219,13 +222,62 @@ const toCourse = (r: LearningCourseRow): LearningCourseAdmin => ({
   version: r.version,
 });
 
-const toModule = (r: LearningModuleRow): LearningModuleAdmin => ({
+const toModule = (
+  r: LearningModuleRow,
+  clubs: ReadonlyMap<string, LearningModuleClubEvent>,
+): LearningModuleAdmin => ({
   id: r.id,
   courseId: r.courseId,
   position: r.position,
   title: r.title,
+  clubEventId: r.clubEventId,
+  clubEvent: r.clubEventId ? (clubs.get(r.clubEventId) ?? null) : null,
   version: r.version,
 });
+
+/** 023 EARS-1 — the modules' club events (title, start, removed) for the admin read. */
+async function clubEventsOf(
+  tx: LearningTx | LearningDb,
+  modules: readonly LearningModuleRow[],
+): Promise<Map<string, LearningModuleClubEvent>> {
+  const ids = [
+    ...new Set(modules.flatMap((m) => (m.clubEventId ? [m.clubEventId] : []))),
+  ];
+  if (ids.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      id: events.id,
+      title: events.title,
+      startsAt: events.startsAt,
+      deletedAt: events.deletedAt,
+    })
+    .from(events)
+    .where(inArray(events.id, ids));
+  return new Map(
+    rows.map((e) => [
+      e.id,
+      {
+        id: e.id,
+        title: e.title,
+        startsAt: e.startsAt.toISOString(),
+        removed: e.deletedAt !== null,
+      },
+    ]),
+  );
+}
+
+/** 023 EARS-1 — a module's club is a live 020 event (a field error otherwise). */
+async function assertClubEvent(
+  tx: LearningTx,
+  clubEventId: string | null | undefined,
+): Promise<void> {
+  if (clubEventId === null || clubEventId === undefined) return;
+  const [event] = await tx
+    .select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.id, clubEventId), isNull(events.deletedAt)));
+  if (!event) throw fieldError("clubEventId", "unknown event");
+}
 
 /** A partial row write; an `undefined` field is left as it is (drizzle skips it). */
 type Loose<R> = { [K in keyof R]?: R[K] | undefined };
@@ -479,10 +531,11 @@ export class LearningAdminService {
     const course = await courseById(this.deps.db, courseId);
     if (!course) throw notFound("course");
     const loaded = await loadCourseTree(this.deps.db, course, false);
+    const clubs = await clubEventsOf(this.deps.db, loaded.modules);
     const body: LearningCourseComposition = {
       ...toCourse(course),
       modules: loaded.modules.map((m) => ({
-        ...toModule(m),
+        ...toModule(m, clubs),
         lessons: loaded.lessons
           .filter((l) => l.moduleId === m.id)
           .map((l) => {
@@ -715,7 +768,7 @@ export class LearningAdminService {
     });
   }
 
-  /** 023 EARS-27 — rename a module, under the module's `If-Match`. */
+  /** 023 EARS-1, EARS-27 — rename a module and set its club, under the module's `If-Match`. */
   async updateModule(
     moduleId: string,
     input: UpdateLearningModuleRequest,
@@ -730,16 +783,19 @@ export class LearningAdminService {
         .for("update");
       if (!current) throw notFound("module");
       if (current.version !== expectedVersion) throw stale();
+      await assertClubEvent(tx, input.clubEventId);
       const [row] = await tx
         .update(learningModules)
         .set({
           title: input.title,
+          clubEventId: input.clubEventId,
           version: current.version + 1,
           updatedAt: new Date(),
         })
         .where(eq(learningModules.id, moduleId))
         .returning();
-      return finish(tx, toModule(row!), row!.version, complete);
+      const clubs = await clubEventsOf(tx, [row!]);
+      return finish(tx, toModule(row!, clubs), row!.version, complete);
     });
   }
 
@@ -762,7 +818,7 @@ export class LearningAdminService {
         .returning();
       const result = {
         status: 201 as const,
-        body: toModule(row!),
+        body: toModule(row!, new Map()),
         etag: taxonomyETag(row!.version),
         location: `/v1/admin/learning/modules/${row!.id}`,
       };

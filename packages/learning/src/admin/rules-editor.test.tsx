@@ -573,4 +573,112 @@ describe("RulesEditorScreen", () => {
     );
     await waitFor(() => expect(t.rules).toHaveBeenCalledTimes(2));
   });
+
+  // 023 EARS-2 / EARS-27 / EARS-28 (#4282) — a module's reward and the course's
+  // club in completion are 024 rule settings: their «Унаследовано от» source,
+  // a choice in words, and the change dialog on a once-published course.
+  const rewardRules = (over: Parameters<typeof rules>[0] = {}) =>
+    moduleRules({
+      effective: [
+        { key: "order", value: "free", level: "module", preset: null },
+        {
+          key: "module.reward",
+          value: "points",
+          level: "course",
+          preset: null,
+        },
+      ],
+      ...over,
+    });
+
+  async function chooseDocumentReward() {
+    const reward = await row("module.reward");
+    expect(reward).toHaveTextContent("Баллы");
+    expect(reward).toHaveTextContent("Унаследовано");
+    fireEvent.click(
+      within(reward).getByRole("button", {
+        name: "Изменить: Награда за модуль",
+      }),
+    );
+    const select = within(reward).getByLabelText("Награда за модуль");
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Баллы", "Документ", "Баллы и документ"]);
+    fireEvent.change(select, { target: { value: "document" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить правила" }));
+  }
+
+  it("023 EARS-2: a module's reward is chosen over the course's value in words and saved as the module's own", async () => {
+    const t = mount(fakeTransport({ rules: async () => rewardRules() }));
+    await chooseDocumentReward();
+    await waitFor(() =>
+      expect(t.setRules).toHaveBeenCalledWith(
+        "module",
+        AID.module,
+        { values: { order: "free", "module.reward": "document" } },
+        2,
+      ),
+    );
+    expect(t.previewRules).not.toHaveBeenCalled();
+  });
+
+  it("023 EARS-28: a module reward change on a once-published course goes through the change dialog", async () => {
+    const t = mount(
+      fakeTransport({
+        rules: async () => rewardRules({ authority: "rules-editor" }),
+        previewRules: vi.fn(async () => ({
+          affectedDoctors: 3,
+          toDone: 0,
+          toNotDone: 0,
+        })),
+      }),
+    );
+    await chooseDocumentReward();
+    expect(await screen.findByTestId("rule-change-dialog")).toBeInTheDocument();
+    expect(t.previewRules).toHaveBeenCalledWith("module", AID.module, {
+      order: "free",
+      "module.reward": "document",
+    });
+    expect(t.setRules).not.toHaveBeenCalled();
+  });
+
+  it("023 EARS-28: without `learning_rules_editor` a once-published course's reward and club in completion are read-only", async () => {
+    mount(
+      fakeTransport({
+        rules: async () =>
+          rules({
+            scopeKind: "course",
+            scopeId: AID.course,
+            authority: "rules-editor",
+            effective: [
+              {
+                key: "module.reward",
+                value: "both",
+                level: "course",
+                preset: null,
+              },
+              {
+                key: "course.clubInCompletion",
+                value: true,
+                level: "course",
+                preset: null,
+              },
+            ],
+          }),
+      }),
+      { scopeKind: "course", scopeId: AID.course, roles: ADMIN_ONLY },
+    );
+    expect(await row("module.reward")).toHaveTextContent("Баллы и документ");
+    expect(await row("course.clubInCompletion")).toHaveTextContent("да");
+    expect(
+      screen.queryByRole("button", { name: "Изменить: Награда за модуль" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Изменить: Клуб входит в прохождение",
+      }),
+    ).not.toBeInTheDocument();
+  });
 });

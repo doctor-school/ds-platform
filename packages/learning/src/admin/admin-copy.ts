@@ -36,6 +36,7 @@ export const SETTING_LABEL: Record<LearningSettingKey, string> = {
   "course.moduleSize": "Уроков в модуле",
   "course.closingClub": "Закрывающий клуб",
   "course.clubInCompletion": "Клуб входит в прохождение",
+  "module.reward": "Награда за модуль",
 };
 
 export const CONDITION_LABEL: Record<LearningConditionType, string> = {
@@ -59,13 +60,20 @@ const yesNo = (v: unknown) => (v === true ? "да" : "нет");
 const minutes = (v: unknown) => `${String(v)} мин`;
 const percent = (v: unknown) => `${String(v)} %`;
 
-const ENUM_WORDS: Record<string, Record<string, string>> = {
+const ENUM_WORDS: Partial<
+  Record<LearningSettingKey, Record<string, string>>
+> = {
   order: { strict: "строго по порядку", free: "в любом порядке" },
   lockedVisibility: { hidden: "скрыты", locked: "видны закрытыми" },
   "course.deliveryMode": {
     online: "онлайн",
     offline: "очно",
     open: "открытый",
+  },
+  "module.reward": {
+    points: "Баллы",
+    document: "Документ",
+    both: "Баллы и документ",
   },
 };
 
@@ -160,6 +168,7 @@ export const FIELD_LABEL: Record<string, string> = {
   leadExpertId: "Ведущий эксперт",
   projectId: "Проект",
   schoolId: "Школа",
+  clubEventId: "Клуб модуля",
 };
 
 export const ADMIN_COPY = {
@@ -300,22 +309,17 @@ export const SETTING_SECTIONS: readonly {
       "course.moduleSize",
       "course.closingClub",
       "course.clubInCompletion",
+      "module.reward",
     ],
   },
 ];
 
 /** The words of one enum setting's options, for its select. */
-export const SETTING_OPTIONS: Partial<
-  Record<LearningSettingKey, Record<string, string>>
-> = {
-  order: { strict: "строго по порядку", free: "в любом порядке" },
-  lockedVisibility: { hidden: "скрыты", locked: "видны закрытыми" },
-  "course.deliveryMode": {
-    online: "онлайн",
-    offline: "очно",
-    open: "открытый",
-  },
-};
+/**
+ * The enum settings' choices in words — one source for the editor's select
+ * and the value shown in a row (`settingValueInWords`).
+ */
+export const SETTING_OPTIONS = ENUM_WORDS;
 
 export const UNLOCK_KIND_LABEL: Record<string, string> = {
   immediate: "сразу",
@@ -426,6 +430,22 @@ const DOCTORS: Partial<Record<Intl.LDMLPluralRule, string>> & { many: string } =
     many: "врачей",
   };
 
+/** A club event's start in Moscow time (the platform's event clock, 020): «3 декабря 2026, 18:00». */
+const CLUB_START = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: "Europe/Moscow",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+function clubStart(startsAt: string): string {
+  const part = Object.fromEntries(
+    CLUB_START.formatToParts(new Date(startsAt)).map((p) => [p.type, p.value]),
+  );
+  return `${part.day} ${part.month} ${part.year}, ${part.hour}:${part.minute}`;
+}
+
 /**
  * 023 EARS-26, EARS-27 — the school and course structure editor in staff
  * words. Never a price, a preset name or «бесплатно» (EARS-23 holds for the
@@ -484,6 +504,17 @@ export const STRUCTURE_COPY = {
   rename: "Переименовать",
   moduleUp: (no: number) => `Поднять модуль ${no}`,
   moduleDown: (no: number) => `Опустить модуль ${no}`,
+  // 023 EARS-1 / EARS-27 — the module's club (a 020 event)
+  moduleClub: "Клуб модуля",
+  moduleClubNone: "Клуб не выбран",
+  moduleClubEvent: (title: string, startsAt: string) =>
+    `${title} · ${clubStart(startsAt)} МСК`,
+  moduleClubRemoved: "Событие клуба удалено — выберите другое",
+  pickClub: "Выберите событие",
+  saveClub: "Сохранить клуб",
+  clearClub: "Убрать клуб",
+  clubEventRefused:
+    "Клуб модуля: такого события нет или оно удалено — выберите другое.",
   // Refusals
   coursePublishRefused:
     "Курс нельзя опубликовать: в нём нет опубликованного урока. Опубликуйте хотя бы один урок.",

@@ -23,7 +23,18 @@ const LIST_PAGES = [
   "../app/specialties/page.tsx",
   "../app/direction-specialties/page.tsx",
   "../app/direction-adjacency/page.tsx",
+  "../app/events/page.tsx",
 ] as const;
+
+/**
+ * The lists whose view lives in the address (007 EARS-14) seed it from there
+ * through their own codec, not from the shared in-memory initial query.
+ */
+const ADDRESS_VIEW_LIST_PAGES: Readonly<
+  Partial<Record<(typeof LIST_PAGES)[number], string>>
+> = {
+  "../app/events/page.tsx": "eventsListViewFromAddress",
+};
 
 /**
  * EARS-23 says a taxonomy SELECTOR uses «the shared search/select combobox» and a
@@ -82,7 +93,9 @@ describe("EARS-23: one shared selector and one instant-apply list", () => {
       const text = source(path);
 
       expect(text).toContain("AdminDataList");
-      expect(text).toContain("ADMIN_DATA_LIST_INITIAL_QUERY");
+      expect(text).toContain(
+        ADDRESS_VIEW_LIST_PAGES[path] ?? "ADMIN_DATA_LIST_INITIAL_QUERY",
+      );
     }
   });
 

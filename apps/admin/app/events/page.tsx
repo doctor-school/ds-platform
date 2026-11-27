@@ -21,6 +21,7 @@ import { AdminDataList } from "@/components/admin-data-list";
 import { EventsPeriodFilter } from "@/components/events-period-filter";
 import { StateBadge } from "@/components/state-badge";
 import {
+  EVENTS_LIST_SEARCH_MAX,
   EVENTS_LIST_SORT_DEFAULT,
   eventsListHref,
   eventsListPeriod,
@@ -153,11 +154,14 @@ export default function EventsListPage() {
           createLabel={t("events.createButton")}
           statuses={EVENT_LIFECYCLE_STATES}
           statusLabels={statusLabels}
+          statusFilterLabel={t("events.list.status")}
+          statusAnyLabel={t("events.list.statusAny")}
           // An event keeps every state it reaches in the status facet — there
           // is no retained-rows switch to offer.
           retainsRetired={false}
           searchLabel={t("events.list.search")}
           searchPlaceholder={t("events.list.searchPlaceholder")}
+          searchMaxLength={EVENTS_LIST_SEARCH_MAX}
           extraFilters={
             <EventsPeriodFilter
               period={view}

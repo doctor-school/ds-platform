@@ -50,7 +50,8 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
     await page.setViewportSize({ width: 1440, height: 900 });
     await signInAsAdmin(page);
     const ids = new Map<EventListSeed["key"], string>();
-    for (const seed of SEEDS) ids.set(seed.key, await seedListEvent(page, seed));
+    for (const seed of SEEDS)
+      ids.set(seed.key, await seedListEvent(page, seed));
     const narrowed = `/events?q=${RUN}`;
 
     await test.step("the list opens newest start date first, the default order out of the address", async () => {
@@ -123,7 +124,19 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
     });
 
     await test.step("the state facet narrows instantly, as a chip", async () => {
-      await filters(page).getByTestId("events-status").selectOption("published");
+      // The facet is named as its column is, and the search field refuses
+      // what the route would (007 EARS-14).
+      await expect(filters(page).getByLabel("Статус")).toHaveAttribute(
+        "data-testid",
+        "events-status",
+      );
+      await expect(filters(page).getByRole("searchbox")).toHaveAttribute(
+        "maxlength",
+        "160",
+      );
+      await filters(page)
+        .getByTestId("events-status")
+        .selectOption("published");
       await expect(page).toHaveURL(/state=published/);
       await expectRows(page, ["htn", "dm"]);
       await expect(
@@ -148,7 +161,9 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
           name: "Убрать фильтр: Дата проведения: 01.01.2027 – 28.02.2027",
         }),
       ).toBeVisible();
-      await filters(page).getByTestId("events-status").selectOption("published");
+      await filters(page)
+        .getByTestId("events-status")
+        .selectOption("published");
       await expectRows(page, ["dm"]);
       await evidenceShot(page, "events-list-filtered");
     });
@@ -208,12 +223,16 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
     await test.step("the row opens the event, and Back / Forward keep the view in the address", async () => {
       await sortHeader(page, "Название").click();
       await expect(page).toHaveURL(/sort=title&dir=asc/);
-      await filters(page).getByTestId("events-status").selectOption("published");
+      await filters(page)
+        .getByTestId("events-status")
+        .selectOption("published");
       await expect(page).toHaveURL(/state=published/);
       await expectRows(page, ["htn", "dm"]);
       const view = address(page);
       const event = new RegExp(`/events/${ids.get("dm")}$`);
-      await visibleEventRows(page).filter({ hasText: titleOf("dm") }).click();
+      await visibleEventRows(page)
+        .filter({ hasText: titleOf("dm") })
+        .click();
       await page.waitForURL(event);
       await expect(page.getByTestId("event-form")).toBeVisible();
 

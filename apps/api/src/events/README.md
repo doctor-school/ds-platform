@@ -270,9 +270,13 @@ config is meaningless once the broadcast is live/ended/hidden. Reach: 007 EARS-8
   program-PDF reference when a replacement rides the request — then, after the
   swap commits, best-effort-deletes the superseded object from storage
   (GC-on-supersede, #627) — leaving the
-  lifecycle `state` untouched), `list()` (`EventAdminList`: strict
-  `q`/`page`/`pageSize`, stable title+id order and offset envelope for the admin
-  list and reverse relationship pickers), `detail()`
+  lifecycle `state` untouched), `list()` (`EventAdminList`, 007 EARS-14: strict
+  `q` over title/slug/school, `sort`+`dir` over one column, one `state` and a
+  Moscow-day `startsFrom`/`startsTo` period, `page`/`pageSize`; every order
+  ends on the id in the same direction, and no `sort` keeps the title-ascending
+  order the reverse relationship and staff-access pickers rely on — the admin
+  list screen asks `startsAt desc`; offset envelope with the filtered total),
+  `detail()`
   (`EventAdminDetail`),
   `transition()` (007 EARS-7: the closed-set guard — validates `current → to` via
   `canTransition`, refuses an invalid move with `InvalidTransitionError`, else

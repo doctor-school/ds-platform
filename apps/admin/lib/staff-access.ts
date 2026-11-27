@@ -289,8 +289,10 @@ export interface StaffAccessEventOption {
 
 /**
  * One server page of the event selector: the operator event list
- * (`GET /v1/admin/events`, title/slug search), which a platform administrator —
- * the only caller of this section — reads.
+ * (`GET /v1/admin/events`), which a platform administrator — the only caller of
+ * this section — reads. Its `q` matches the title, the slug and (007 EARS-14)
+ * the school, so a school name also finds that school's events; it sends no
+ * `sort`, so the options stay in the endpoint's alphabetical title order.
  */
 /** The slice of the operator event list the selector reads (title, date, id). */
 const EventPickerPageSchema = EventAdminListSchema.pick({

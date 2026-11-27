@@ -91,6 +91,11 @@ export interface FilterBarProps {
     onCommit: (value: string) => void;
     label: string;
     placeholder?: string;
+    /**
+     * The longest search the app's route accepts — the field stops there, so a
+     * longer query is never typed only to be refused or dropped. Omit for none.
+     */
+    maxLength?: number;
     /** Debounce window for `instant`. Default 400ms. */
     debounceMs?: number;
   };
@@ -354,7 +359,10 @@ export function FilterBar({
   return (
     <section
       aria-label={label}
-      className={cn("flex flex-col gap-3 border-2 border-border bg-card p-4", className)}
+      className={cn(
+        "flex flex-col gap-3 border-2 border-border bg-card p-4",
+        className,
+      )}
     >
       <form
         className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
@@ -376,6 +384,7 @@ export function FilterBar({
                 type="search"
                 value={draft}
                 placeholder={search.placeholder}
+                maxLength={search.maxLength}
                 aria-busy={showBusy || undefined}
                 onChange={(event) => onSearchChange(event.target.value)}
               />

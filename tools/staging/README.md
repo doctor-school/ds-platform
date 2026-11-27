@@ -397,13 +397,15 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 ### Academy partnership intake failure (#4121, 033 EARS-18)
 
-The Academy live tier submits the real form on the guest portal (bot protection
-is on, so the accept case resolves the widget through `@ds/e2e/captcha-stub` with
-`E2E_CAPTCHA_TEST_TOKEN`, and the spec is not run without it); it posts into
-the api's application queue (`POST /v1/public/applications/partnership`). Its
-acceptance case checks that a retry after a lost response leaves exactly one
-`partnership` row for the run's synthetic contact. For the failure case the slot
-runs the same portal image as `<slot>-portal-partnership-unavailable`, with
+No live tier submits a partnership form any more. The 029 Academy home (#4243)
+carries no form, so the two 033 EARS-18 browser journeys left with it: the
+accepted retry after a lost response, and the unavailable intake that keeps the
+values and stores no row. `e2e/academy-home.e2e.spec.ts` runs without
+`E2E_CAPTCHA_TEST_TOKEN`. The stage pieces below still run, and no browser test
+reads them. #4325 retires them together with the public intake
+`POST /v1/public/applications/partnership`.
+
+The slot runs the same portal image as `<slot>-portal-partnership-unavailable`, with
 `extra_hosts: api:127.0.0.1`: its BFF rewrite target `api` resolves to the
 container's own loopback, where nothing listens, so the intake POST really fails
 server-side. The fixture carries no volume or credentials. Its own healthcheck
@@ -413,24 +415,9 @@ slot health gate checks both portals against the same SHA-tagged image.
 The shared stage edge routes `academy-partnership-unavailable-<slot>.<domain>`
 through the usual staging gate for the home, its assets and the one intake
 `POST /v1/public/applications/partnership`, which the fixture portal itself
-answers. All other routes return 404. The browser test observes the actual intake POST answering `5xx`
-from the fixture origin and checks the retained form values. The slot's queue
-must have zero rows for that run's synthetic contact both before and after.
-
-A PR preview does not update the shared edge. Before the new static edge config
-is on stage, an authorized operator can verify the preview's real fixture over
-an SSH tunnel. Read the fixture container's address on the owned slot network
-and keep the local port bound to IPv4 loopback:
-
-```sh
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:<port>:<fixture-ip>:3001 ds-stage-1
-```
-
-Set `E2E_ACADEMY_PARTNERSHIP_UNAVAILABLE_LOOPBACK=http://127.0.0.1:<port>` only
-for that PR slot's `pnpm e2e:stage pr-<N>` run. This exercises the real preview
-portal and owning-layer observations. The shared TLS, gate and path checks use
-the normal HTTPS route after main converge. The release run refuses the override
-for `main`.
+answers. All other routes return 404. The `@ds/e2e` helper
+`stage-partnership-observation.ts` still accepts
+`E2E_ACADEMY_PARTNERSHIP_UNAVAILABLE_LOOPBACK` for a PR slot, but no spec calls it.
 
 ### Storefront sign-in entry unavailability (#4128)
 
@@ -516,7 +503,7 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    four golden passwords) exported — the no-SSH mode above, so `e2e-stage.mjs` itself
    never reads the box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. The box-observing
    scenarios (the owned mirror count, consent, phone, congress and wrong-verification
-   snapshots, the live password policy, the synthetic partnership submission) read
+   snapshots, the live password policy) read
    stage `main` only through the CI key's
    forced command, `observe <name>`: the job writes the key and the pinned host key into
    `$RUNNER_TEMP/stage-ssh/` before the suite and exports `E2E_STAGE_OBSERVE_SSH`
@@ -526,16 +513,10 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    only the observations defined in `infra/deploy/bin/ds-deploy-entrypoint`, validates
    every parameter and answers only what the lib parses. Database observations use
    a `BEGIN READ ONLY` transaction (release-pipeline spec §5, «Stage suite box reads»).
-   The existing Academy slot URL selects the partnership browser test. The observer
-   verifies the configured stage domain before the form is opened.
-   The partnership observation runs in the stage portal as its runtime user. It returns
-   only the synthetic contact's matching record count and whether the sole match
-   has the expected fields and private file metadata. It bounds reads to 10,000
-   directory entries, 16 KiB per record and 20 seconds per CI observation. Each
-   completed test uses one synthetic record in its slot's volume.
+   The box still defines the `academy-partnership` observation, but no scenario calls
+   it since the 029 home dropped the form; #4325 removes it.
    Without those three variables the same libs read the box with the operator's own
-   ssh. A preview reads its own portal with the same fixed partnership predicate
-   from the checked-out source. A preview never installs the box-wide entrypoint
+   ssh. A preview never installs the box-wide entrypoint
    (#3125); the first stage-main converge on the merged SHA installs the CI observation.
    In public-log mode the console reporter is
    `packages/e2e/reporters/summary.ts` (one line per test: status, project, title path,

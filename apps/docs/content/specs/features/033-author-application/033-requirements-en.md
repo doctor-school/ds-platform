@@ -87,6 +87,16 @@ lang: en
 
 **Policies** — «one submission, one application» (idempotency key); «the queue is the record of truth; a notification is attempted after the row is committed and its failure is recorded, never raised»; «a public intake is bot-protected»; «the applicant sees only `received`»; «notes are internal»; «closed is final in slice 1»; «a kind is a schema member, not a second queue»; «personal data is erased at term or on request and a tombstone remains».
 
+## Production amendment — the Academy home form is retired by 029 (2026-11-27, #4243)
+
+This amendment overrides only the form clause of EARS-18 and the home-form lines of design «Current behaviour → replacement delta» and «Placement». The running-production baseline is kept below. Feature 029 retires the interim partnership form of the Academy home ([029 EARS-8](../029-academy-home-relaunch/029-requirements-en.md), [029-design §4](../029-academy-home-relaunch/029-design.md)). The home's partner entries lead to `/investors` (034). The portal carries no partnership form, no browser intake client and no form schema.
+
+- **Public intake (EARS-18).** `POST /v1/public/applications/partnership` stays as specified, with no client: the bot-protection proof, the idempotency key, one `partnership` row with its consent, the 003 refusal codes and `400` for a field-invalid body. [#4325](https://github.com/doctor-school/ds-platform/issues/4325) retires it together with its stage observation.
+- **Browser journeys (EARS-18).** The form's success and error states left with the form. So did its two browser journeys: the accepted retry after a lost response, and the unavailable intake that keeps the values and stores no row. No browser test replaces them. #4325 retires the intake they exercised.
+- **Stored records (EARS-13…EARS-17, EARS-19, EARS-20).** Unchanged: the `partnership` kind, its imported and stored rows, the admin views and the «Партнёрство» filter.
+
+Verification: `apps/portal/app/academy-home-view.test.tsx` (029 `EARS-8`: the home renders no form, and both «Как это работает» lead to `/investors`); `apps/api/test/applications/partnership-intake.e2e-spec.ts` (`EARS-18`, the intake).
+
 ## EARS requirements
 
 > Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories and is covered by `033-scenarios.feature`.

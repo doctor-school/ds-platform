@@ -147,8 +147,8 @@ export function academyShellConfig(
        * The chrome-wide list PLUS the academy home. `/` mounts the shared
        * header like every other route (#1877), but the home still has its own
        * `<footer>` (mounted by the root layout's `@footer` slot, #2664) — a
-       * page-local section index (`#events`,
-       * `#projects`, `#experts`, `#partner-form`), the «Врачи учат врачей ·
+       * page-local section index (`#events`, `#experts`, `#investors`),
+       * the «Врачи учат врачей ·
        * 2026» tagline and its own `Doctor.School` wordmark — none of which the
        * shared footer carries. Mounting both gives `/` two `contentinfo`
        * landmarks; dropping the home's own footer would drop that content.

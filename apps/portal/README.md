@@ -46,7 +46,7 @@ only. The footer mounts from the root layout, so it appears on every route the
 config does not hide (`/login`, `/register`, `/verify`, `/reset` and
 `/webinars/*/room`).
 
-The Academy hThe Academy home (Feature 029, `app/academy-home-view.tsx`) is a server
+The Academy home (Feature 029, `app/academy-home-view.tsx`) is a server
 composition built from the owner-approved `design-source/academy-home.dc.html`
 canvas: the host-only hero, «Кто мы» and persona entries, plus the mounted owner
 blocks — the shared `EventsFeed` of `@ds/events-storefront/feed` (`limit: 3`)
@@ -56,6 +56,8 @@ lines (`app/academy-home-counts.ts`) read `GET /v1/public/projects`,
 request, each settled on its own: a failed or zero read drops only its own
 segment. The home carries no fixture data and no form; its expert entries lead
 to `/apply` (033) and its partner entries to `/investors` (034).
+
+## Commands
 
 ```bash
 pnpm --filter @ds/portal dev        # next dev (local)

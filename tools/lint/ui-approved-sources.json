@@ -629,6 +629,41 @@
         "https://github.com/doctor-school/ds-platform/issues/4018#issuecomment-7182710836"
       ]
     },
+    "feature-007-events-list-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/page.tsx",
+        "apps/admin/components/events-period-filter.tsx",
+        "apps/admin/components/admin-data-list.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "events-list",
+        "events-list-filtered",
+        "events-list-period-inverted",
+        "events-list-cards"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/4305#issuecomment-7192925261",
+        "https://github.com/doctor-school/ds-platform/issues/4305#issuecomment-7192876751"
+      ]
+    },
+    "feature-012-event-expert-role-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/components/event-experts-panel.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "link-dialog",
+        "link-dialog-refused",
+        "link-list-roles",
+        "link-edit"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/4306#issuecomment-7192927225"
+      ]
+    },
     "feature-024-learning-rules-admin-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

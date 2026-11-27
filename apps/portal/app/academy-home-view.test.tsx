@@ -17,7 +17,7 @@ vi.mock("./materials-feed-section", () => ({
 import { EventsFeed } from "@ds/events-storefront/feed";
 
 import { ACADEMY_EVENTS_STOREFRONT } from "../lib/events-storefront.host-config";
-import { AcademyHomeView } from "./academy-home-view";
+import { AcademyHomeFooter, AcademyHomeView } from "./academy-home-view";
 import { retryAcademyEventsBlock } from "./webinars/retry-block-action";
 
 type Counts = {
@@ -362,5 +362,47 @@ describe("029 V-3 — the Academy home composition", () => {
         .getByRole("link", { name: "Подать заявку на участие в проекте" })
         .getAttribute("href"),
     ).toBe("/apply");
+  });
+});
+
+describe("029 V-2 — the canvas casts and the footer index", () => {
+  it("029 EARS-2: the «Экспертам» hero card casts in the hero-card tone, not the blue elevation", async () => {
+    stubPlatform(BACKGROUND);
+    const { container } = await renderHome();
+    const experts = container.querySelector('[data-hero-card="experts"]');
+
+    expect(experts!.classList).toContain("shadow-hero-card");
+    expect(experts!.classList).not.toContain("shadow-lg");
+  });
+
+  it("029 EARS-8: the «Инвесторам» panel casts in the ink border tone on desktop and none on mobile", async () => {
+    stubPlatform(BACKGROUND);
+    const { container } = await renderHome();
+    const investors = container.querySelector('[data-persona="investors"]');
+
+    expect(investors!.classList).toContain("layout:shadow-panel");
+    expect(investors!.className).not.toMatch(/(^|\s)(layout:)?shadow-lg(\s|$)/);
+  });
+
+  it("029 EARS-1: every footer anchor leads to a section on the home", async () => {
+    stubPlatform(BACKGROUND);
+    const tree = await resolveServer(<>{AcademyHomeView()}</>);
+    const { container } = render(
+      <>
+        {tree}
+        <AcademyHomeFooter />
+      </>,
+    );
+    const nav = container.querySelector(
+      'nav[aria-label="Навигация в подвале"]',
+    );
+    const anchors = Array.from(nav!.querySelectorAll("a")).map((link) =>
+      link.getAttribute("href"),
+    );
+
+    expect(anchors).toEqual(["#events", "#experts", "#investors"]);
+    for (const anchor of anchors) {
+      expect(container.querySelector(anchor!)).not.toBeNull();
+    }
   });
 });

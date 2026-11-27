@@ -166,6 +166,10 @@
       "$value": "{color.blue.100}",
       "$description": "Dimmed poster ink on the `hero` band — the canvas `#D3E8FD` subtitle/tagline tier (blue.100, both themes). Decorative poster small print (`data-testid=\"poster-decor\"`, axe leaf-exclusion #924)."
     },
+    "hero-card-cast": {
+      "$value": "{color.blue.800}",
+      "$description": "Cast tone of a white card standing on a `hero` band (029 Academy home hero cards, canvas `academy-home.dc.html` `headerShadow`) — the deeper navy blue.800 in light, the near-black page `background` neutral.950 in dark. The blue `elevation` tone flips to light blue.300 in dark and glows on the navy band; this role keeps the cast darker than the band in both themes. Consumed through `shadow.hero-card`."
+    },
     "success": {
       "$value": "{color.green.500}",
       "$description": "Positive-status fill, border or icon. Pair with `success-foreground` (white is large/bold on green.500 = 3.68:1)."

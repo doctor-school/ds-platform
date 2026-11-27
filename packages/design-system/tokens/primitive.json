@@ -336,6 +336,14 @@
       "$description": "Offset shadow of the «Идёт сейчас» live strip (019 EARS-6) — the SAME 6px hard cast geometry as `lg`, but composed from the `live` status role instead of the blue `elevation` tone, so the running-эфир frame and its cast read as one red signal (canvas design-source/doctor-events.dc.html L717). Desktop only; the strip drops the cast below `lg` where the offset would push past the gutter.",
       "$value": "6px 6px 0 var(--color-live)"
     },
+    "hero-card": {
+      "$description": "Offset shadow of a white card standing on a `hero` band (029 Academy home «Экспертам» / «Партнёрам» hero cards, canvas `academy-home.dc.html` `headerShadow` cast) — the `lg` 6px geometry in the `hero-card-cast` role (blue.800 light → neutral.950 dark), not `lg`, whose blue `elevation` cast turns light blue on the navy band in dark.",
+      "$value": "6px 6px 0 var(--color-hero-card-cast)"
+    },
+    "panel": {
+      "$description": "Offset shadow of a bordered feature panel that casts in ink (029 Academy home «Инвесторам» persona panel, canvas `academy-home.dc.html` `investPanelStyle`) — the `lg` 6px geometry in the structural `border` tone (neutral.900 → white in dark), the 6px sibling of `btn`. A panel whose canvas casts in the blue tone uses `lg`.",
+      "$value": "6px 6px 0 var(--color-border)"
+    },
     "focus": { "$value": "0 0 0 3px rgba(107, 177, 247, 0.5)" },
     "focus-inset": {
       "$description": "Keyboard-focus ring drawn INSIDE the edge — same 3px, same blue.300 @ 50% as `focus`. For triggers living in a scroll container, which clips outer shadows (an `overflow-x:auto` strip clips vertically too, at every width), so the outer ring is never fully visible there.",

@@ -79,6 +79,7 @@
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
+  --color-hero-card-cast: #0d3a77;
   --color-success: #009959;
   --color-success-foreground: #ffffff;
   --color-success-text: #047857;
@@ -199,6 +200,8 @@
   --shadow-md: 4px 4px 0 var(--color-elevation);
   --shadow-lg: 6px 6px 0 var(--color-elevation);
   --shadow-live: 6px 6px 0 var(--color-live);
+  --shadow-hero-card: 6px 6px 0 var(--color-hero-card-cast);
+  --shadow-panel: 6px 6px 0 var(--color-border);
   --shadow-focus: 0 0 0 3px rgba(107, 177, 247, 0.5);
   --shadow-focus-inset: inset 0 0 0 3px rgba(107, 177, 247, 0.5);
   --shadow-btn: 4px 4px 0 var(--color-border);
@@ -294,6 +297,7 @@
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
+  --color-hero-card-cast: oklch(0.16 0.02 250);
   --color-success: #4ade80;
   --color-success-foreground: oklch(0.16 0.02 250);
   --color-success-text: #4ade80;
@@ -357,6 +361,7 @@
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
+  --color-hero-card-cast: #0d3a77;
   --color-success: #009959;
   --color-success-foreground: #ffffff;
   --color-success-text: #047857;
@@ -420,6 +425,7 @@
   --color-hero: var(--color-hero);
   --color-hero-foreground: var(--color-hero-foreground);
   --color-hero-muted: var(--color-hero-muted);
+  --color-hero-card-cast: var(--color-hero-card-cast);
   --color-success: var(--color-success);
   --color-success-foreground: var(--color-success-foreground);
   --color-success-text: var(--color-success-text);
@@ -508,6 +514,8 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-live: var(--shadow-live);
+  --shadow-hero-card: var(--shadow-hero-card);
+  --shadow-panel: var(--shadow-panel);
   --shadow-focus: var(--shadow-focus);
   --shadow-focus-inset: var(--shadow-focus-inset);
   --shadow-btn: var(--shadow-btn);

@@ -24,6 +24,7 @@ import {
   EVENTS_LIST_SORT_DEFAULT,
   eventsListHref,
   eventsListPeriod,
+  eventsListQueryChange,
   eventsListSortOrderKind,
   eventsListViewFromAddress,
   isEventsListSortDefault,
@@ -196,13 +197,18 @@ export default function EventsListPage() {
             pageSize,
             sort: view.sort,
           }}
+          // Only what this change changed reaches the address (`view` is the
+          // query the list was rendered with), so a header click right after a
+          // typed search cannot write the render's older search back.
           onQueryChange={(next) =>
-            changeView(() => ({
-              q: next.q,
-              state: next.status,
-              page: next.page,
-              sort: toEventsSort(next.sort),
-            }))
+            changeView(() =>
+              eventsListQueryChange(view, {
+                q: next.q,
+                status: next.status,
+                sort: toEventsSort(next.sort),
+                page: next.page,
+              }),
+            )
           }
           rowHref={(row) => `/events/${row.id}`}
           sortSelect={{

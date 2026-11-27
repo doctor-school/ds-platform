@@ -17,8 +17,9 @@ import { evidenceShot } from "./support/evidence-shot";
  * third header click returns to the date order), narrows by the search, the
  * state and a Moscow-day period — each composing with the others — shows every
  * applied facet as a removable chip beside «Сбросить всё», keeps the whole view
- * in the address across a reload, opens an event from its row, and below `md`
- * renders record cards with the same sort as a «Сортировка» select.
+ * in the address across a reload and Back / Forward from the event its row
+ * opens, and below `md` renders record cards with the same sort as a
+ * «Сортировка» select.
  *
  * The run seeds its own five events through the admin create form, every one in
  * a school carrying the run marker, and narrows the list to them by that marker
@@ -42,7 +43,7 @@ const expectRows = (page: Page, keys: EventListSeed["key"][]) =>
 const filters = (page: Page) => page.getByTestId("events-filters");
 
 test.describe("007 EARS-14 — the admin event list sorts by date and filters", () => {
-  test("007 EARS-14: date-desc default, every column sort, the filters with chips, the address across a reload, the row link and the phone cards", async ({
+  test("007 EARS-14: date-desc default, every column sort, the filters with chips, the address across a reload and Back / Forward, the row link and the phone cards", async ({
     page,
   }) => {
     test.setTimeout(360_000);
@@ -204,10 +205,34 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
       await page.goto(narrowed);
     });
 
-    await test.step("the row opens the event", async () => {
+    await test.step("the row opens the event, and Back / Forward keep the view in the address", async () => {
+      await sortHeader(page, "Название").click();
+      await expect(page).toHaveURL(/sort=title&dir=asc/);
+      await filters(page).getByTestId("events-status").selectOption("published");
+      await expect(page).toHaveURL(/state=published/);
+      await expectRows(page, ["htn", "dm"]);
+      const view = address(page);
+      const event = new RegExp(`/events/${ids.get("dm")}$`);
       await visibleEventRows(page).filter({ hasText: titleOf("dm") }).click();
-      await page.waitForURL(new RegExp(`/events/${ids.get("dm")}$`));
+      await page.waitForURL(event);
       await expect(page.getByTestId("event-form")).toBeVisible();
+
+      await page.goBack();
+      await expect.poll(() => address(page)).toBe(view);
+      await expectRows(page, ["htn", "dm"]);
+      await expect(filters(page).getByTestId("events-status")).toHaveValue(
+        "published",
+      );
+      await expect(
+        page.getByRole("columnheader", { name: "Название" }),
+      ).toHaveAttribute("aria-sort", "ascending");
+
+      await page.goForward();
+      await page.waitForURL(event);
+      await expect(page.getByTestId("event-form")).toBeVisible();
+      await page.goBack();
+      await expect.poll(() => address(page)).toBe(view);
+      await expectRows(page, ["htn", "dm"]);
     });
 
     await test.step("below md the rows are record cards with the sort as a «Сортировка» select", async () => {

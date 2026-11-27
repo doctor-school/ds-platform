@@ -133,6 +133,35 @@ export function eventsListHref(pathname: string, view: EventsListView): string {
   return query ? `${pathname}?${query}` : pathname;
 }
 
+/**
+ * What one `AdminDataList` query change asks of the view: only the parts that
+ * differ from the query the list was rendered with (`shown`), plus the page it
+ * names. The list builds every change from its render's copy of the query, and
+ * a change lands on the address as it stands at that moment — so a part this
+ * change did not touch keeps whatever a write since that render put there (a
+ * search typed just before a header click), never the render's older copy.
+ */
+export function eventsListQueryChange(
+  shown: Pick<EventsListView, "q" | "state" | "sort">,
+  next: {
+    q: string;
+    status: EventsListView["state"];
+    sort: EventsListSort;
+    page: number;
+  },
+): Partial<EventsListView> {
+  const change: Partial<EventsListView> = { page: next.page };
+  if (next.q !== shown.q) change.q = next.q;
+  if (next.status !== shown.state) change.state = next.status;
+  if (
+    next.sort.key !== shown.sort.key ||
+    next.sort.direction !== shown.sort.direction
+  ) {
+    change.sort = next.sort;
+  }
+  return change;
+}
+
 /** A `YYYY-MM-DD` Moscow day as «01.10.2026» — a calendar date, never shifted. */
 function formatDay(day: string): string {
   const [year, month, date] = day.split("-");

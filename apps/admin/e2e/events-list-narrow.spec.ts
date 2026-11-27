@@ -114,9 +114,11 @@ async function rowOverhang(page: Page): Promise<number> {
   await expect(rows.first()).toBeVisible();
   const width = page.viewportSize()!.width;
   const edges = await rows.evaluateAll((titles) =>
-    // The record card is the row's `group/row` box (the DS `DataTable` card).
+    // The record card is the DS `DataTable` card a clickable row renders below
+    // `md` (`data-clickable`); a title outside one is no card at all.
     titles.map((title) => {
-      const card = title.closest(".group\\/row") ?? title;
+      const card = title.closest('[data-clickable="true"]');
+      if (!card) throw new Error(`no record card around «${title.textContent}»`);
       return card.getBoundingClientRect().right;
     }),
   );

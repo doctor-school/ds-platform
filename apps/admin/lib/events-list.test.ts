@@ -4,6 +4,7 @@ import {
   EVENTS_LIST_VIEW_DEFAULT,
   eventsListHref,
   eventsListPeriod,
+  eventsListQueryChange,
   eventsListSortOrderKind,
   eventsListViewFromAddress,
   isEventsListSortDefault,
@@ -144,5 +145,84 @@ describe("007 EARS-14: the admin event list view in the address", () => {
     expect(eventsListSortOrderKind("title")).toBe("text");
     expect(eventsListSortOrderKind("school")).toBe("text");
     expect(eventsListSortOrderKind("state")).toBe("state");
+  });
+
+  it("007 EARS-14: a list change carries only the part it changed and its page, never the render's copy of the rest", () => {
+    const shown = { q: "кардио", state: "published", sort: EVENTS_LIST_SORT_DEFAULT } as const;
+    // A header click: the sort and page 1 — the search and the state stay
+    // whatever the address holds by then (a search typed a moment earlier).
+    expect(
+      eventsListQueryChange(shown, {
+        q: "кардио",
+        status: "published",
+        sort: { key: "title", direction: "asc" },
+        page: 1,
+      }),
+    ).toEqual({ sort: { key: "title", direction: "asc" }, page: 1 });
+    // A search, a state chip removed, a page — each alone.
+    expect(
+      eventsListQueryChange(shown, {
+        q: "невро",
+        status: "published",
+        sort: EVENTS_LIST_SORT_DEFAULT,
+        page: 1,
+      }),
+    ).toEqual({ q: "невро", page: 1 });
+    expect(
+      eventsListQueryChange(shown, {
+        q: "кардио",
+        status: "",
+        sort: EVENTS_LIST_SORT_DEFAULT,
+        page: 1,
+      }),
+    ).toEqual({ state: "", page: 1 });
+    expect(
+      eventsListQueryChange(shown, {
+        q: "кардио",
+        status: "published",
+        sort: EVENTS_LIST_SORT_DEFAULT,
+        page: 3,
+      }),
+    ).toEqual({ page: 3 });
+    // «Сбросить всё» clears both facets in one change.
+    expect(
+      eventsListQueryChange(shown, {
+        q: "",
+        status: "",
+        sort: EVENTS_LIST_SORT_DEFAULT,
+        page: 1,
+      }),
+    ).toEqual({ q: "", state: "", page: 1 });
+  });
+
+  it("007 EARS-14: two changes landing before the re-render both reach the address", () => {
+    const shown = EVENTS_LIST_VIEW_DEFAULT;
+    // The search is written, then — before the list re-renders with it — a
+    // header click arrives built from the same, older render.
+    let current: EventsListView = { ...shown };
+    const apply = (update: Partial<EventsListView>) => {
+      current = { ...current, ...update };
+    };
+    apply(
+      eventsListQueryChange(shown, {
+        q: "невро",
+        status: "",
+        sort: EVENTS_LIST_SORT_DEFAULT,
+        page: 1,
+      }),
+    );
+    apply(
+      eventsListQueryChange(shown, {
+        q: "",
+        status: "",
+        sort: { key: "title", direction: "asc" },
+        page: 1,
+      }),
+    );
+    expect(current).toEqual({
+      ...EVENTS_LIST_VIEW_DEFAULT,
+      q: "невро",
+      sort: { key: "title", direction: "asc" },
+    });
   });
 });

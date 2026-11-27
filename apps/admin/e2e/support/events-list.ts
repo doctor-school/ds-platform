@@ -15,13 +15,20 @@ export function visibleEventRows(page: Page): Locator {
   return visible(page.locator('[data-testid^="event-row-"]'));
 }
 
-/** The GET the list screen makes, to read what it answered. */
-export function eventsListAnswer(page: Page) {
-  return page.waitForResponse(
-    (answer) =>
+/**
+ * The GET the list screen makes, to read what it answered. With `q`, only the
+ * read narrowed by exactly that search: a read of the page left behind (the
+ * sign-in landing on the list) may still be in flight when the address changes.
+ */
+export function eventsListAnswer(page: Page, q?: string) {
+  return page.waitForResponse((answer) => {
+    const url = new URL(answer.url());
+    return (
       answer.request().method() === "GET" &&
-      new URL(answer.url()).pathname === "/v1/admin/events",
-  );
+      url.pathname === "/v1/admin/events" &&
+      (q === undefined || url.searchParams.get("q") === q)
+    );
+  });
 }
 
 /**
@@ -69,15 +76,19 @@ export async function eventIdByTitle(
   page: Page,
   title: string,
 ): Promise<string | null> {
-  const listed = eventsListAnswer(page);
+  const listed = eventsListAnswer(page, title);
   await page.goto(`/events?q=${encodeURIComponent(title)}`);
-  await listed;
-  const rows = visibleEventRows(page).filter({
-    hasText: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
-  });
-  if ((await rows.count()) === 0) return null;
-  const testId = await rows.first().getAttribute("data-testid");
-  return testId?.replace("event-row-", "") ?? null;
+  // The answer names the event; its rendered row is then awaited, never
+  // counted at the instant the answer lands (React has not drawn it yet).
+  const body = (await (await listed).json()) as {
+    data: { id: string; title: string }[];
+  };
+  const match = body.data.find((event) => event.title === title);
+  if (!match) return null;
+  await expect(visible(page.getByTestId(`event-row-${match.id}`))).toHaveText(
+    title,
+  );
+  return match.id;
 }
 
 /** The id of the newest listed event, or `null` on an empty list. */

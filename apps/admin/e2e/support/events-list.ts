@@ -93,13 +93,16 @@ export async function eventIdByTitle(
 
 /** The id of the newest listed event, or `null` on an empty list. */
 export async function anyListedEventId(page: Page): Promise<string | null> {
-  const listed = eventsListAnswer(page);
   await page.goto("/events");
-  const body = (await (await listed).json()) as { data: { id: string }[] };
-  if (body.data.length === 0) return null;
-  const id = body.data[0]!.id;
-  await expect(visible(page.getByTestId(`event-row-${id}`))).toBeVisible();
-  return id;
+  // Read off the rendered list: a read of the page left behind (the sign-in
+  // landing on this same list) may still be in flight, and the navigation
+  // discards its body.
+  const first = visibleEventRows(page).first();
+  const empty = visible(page.getByText("Мероприятий пока нет"));
+  await expect(first.or(empty)).toBeVisible();
+  if (!(await first.isVisible())) return null;
+  const testId = await first.getAttribute("data-testid");
+  return testId!.replace("event-row-", "");
 }
 
 /** One event a list run authors for itself. */

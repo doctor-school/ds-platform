@@ -97,7 +97,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
     expect(kindOptionLabel([], "author")).toBe("author");
   });
 
-  it("034 EARS-10: the «Вид» filter offers each kind by the filter text the api served — «Инвесторы» — while its rows keep the kind label «Инвестор»", () => {
+  it("034 EARS-10: the «Вид» filter and its applied chip read the filter text the api served for the kind — «Инвесторы», not the row label «Инвестор»", () => {
     const kinds = [
       { kind: "author" as const, label: "Автор", filterLabel: "Автор" },
       {
@@ -110,7 +110,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
       { value: "author", text: "Автор" },
       { value: "investor", text: "Инвесторы" },
     ]);
-    expect(kindOptionLabel(kinds, "investor")).toBe("Инвестор");
+    expect(kindOptionLabel(kinds, "investor")).toBe("Инвесторы");
     expect(kindFilterOptions([])).toEqual([]);
   });
 

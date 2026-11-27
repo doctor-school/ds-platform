@@ -101,7 +101,7 @@ export default function ApplicationsListPage() {
   useEffect(() => {
     if (servedKinds) setKinds(servedKinds);
   }, [servedKinds]);
-  const kindLabel = (kind: ApplicationKind) => kindOptionLabel(kinds, kind);
+  const kindChipText = (kind: ApplicationKind) => kindOptionLabel(kinds, kind);
   const statusFilterLabel = (status: ApplicationStatus) =>
     t(`applications.statusFilter.${status}`);
 
@@ -158,7 +158,7 @@ export default function ApplicationsListPage() {
       ? [
           {
             id: "kind",
-            label: `${t("applications.filters.kind")}: ${kindLabel(filter.kind)}`,
+            label: `${t("applications.filters.kind")}: ${kindChipText(filter.kind)}`,
             onRemove: () => changeFilter({ kind: "" }),
           },
         ]

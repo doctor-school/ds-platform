@@ -1,0 +1,119 @@
+import { randomUUID } from "node:crypto";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
+import { expect, test, type Page } from "@playwright/test";
+import { INVESTOR_REQUEST_CONSENT_VERSION_TAG } from "@ds/schemas";
+
+/**
+ * #4237 local drive (034 EARS-10) — never part of a CI config. Run with
+ * `playwright.flows.config.ts`, workers=1, against an admin standalone build
+ * proxying to an api on a branch DB with bot protection off.
+ * DRIVE_MODE=main|head, DRIVE_OUT=<capture dir>.
+ */
+const MODE = process.env.DRIVE_MODE ?? "head";
+const OUT = process.env.DRIVE_OUT ?? ".";
+const ORG = `ООО «Партнёр А» ${randomUUID().slice(0, 4)}`;
+const DESKTOP = { width: 1440, height: 900 };
+const MOBILE = { width: 390, height: 844 };
+
+/** The design-system `.dark` token block on the root (the #1927 recipe). */
+async function dark(page: Page, on: boolean) {
+  await page.evaluate(
+    (value) => document.documentElement.classList.toggle("dark", value),
+    on,
+  );
+}
+
+test("4237 drive: «Заявки» investor filter, list, detail, status move, note", async ({
+  page,
+}) => {
+  await page.setViewportSize(DESKTOP);
+  await signInAsAdmin(page);
+
+  // The investor request comes through the real public intake.
+  const res = await page.request.post("/v1/public/applications/investor", {
+    headers: { "idempotency-key": randomUUID() },
+    data: {
+      contact: {
+        organisation: ORG,
+        fullName: "Анна Петрова",
+        role: "Директор по развитию",
+        email: `investor-${randomUUID().slice(0, 8)}@partner-a.test`,
+        phone: "+7 900 000-00-00",
+      },
+      payload: { task: "Хотим войти в проект школы кардиологов" },
+      consent: {
+        accepted: true,
+        versionTag: INVESTOR_REQUEST_CONSENT_VERSION_TAG,
+      },
+    },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const id = ((await res.json()) as { id: string }).id;
+
+  await page.goto("/applications");
+  const kind = page.getByTestId("applications-kind");
+  await expect(kind.locator("option[value=investor]")).toHaveCount(1);
+  const optionTexts = await kind.locator("option").allTextContents();
+  console.log(`[drive ${MODE}] «Вид» options: ${JSON.stringify(optionTexts)}`);
+  await kind.selectOption("investor");
+  const row = page.getByTestId(`row-${id}`).first();
+  await expect(row).toBeVisible();
+  console.log(`[drive ${MODE}] row kind: ${await row.textContent()}`);
+  await kind.screenshot({ path: `${OUT}/${MODE}-filter.png` });
+  await page.screenshot({ path: `${OUT}/${MODE}-list.png`, fullPage: true });
+
+  if (MODE !== "head") return;
+
+  expect(optionTexts).toEqual(["Все", "Автор", "Партнёрство", "Инвесторы"]);
+  await expect(row).toHaveText("Инвестор");
+  await dark(page, true);
+  await page.screenshot({ path: `${OUT}/head-list-dark.png`, fullPage: true });
+  await dark(page, false);
+  await page.setViewportSize(MOBILE);
+  await page.screenshot({ path: `${OUT}/head-list-390.png`, fullPage: true });
+  await dark(page, true);
+  await page.screenshot({
+    path: `${OUT}/head-list-390-dark.png`,
+    fullPage: true,
+  });
+  await dark(page, false);
+  await page.setViewportSize(DESKTOP);
+
+  await row.click();
+  await page.waitForURL(`**/applications/${id}`);
+  await expect(page.getByTestId("application-heading")).toHaveText(ORG);
+  for (const label of [
+    "Организация",
+    "ФИО",
+    "Роль в организации",
+    "Рабочая почта",
+    "Телефон",
+    "Задача",
+  ])
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  await page.screenshot({ path: `${OUT}/head-detail.png`, fullPage: true });
+
+  await page.getByTestId("application-take").click();
+  await expect(
+    page.getByTestId("application-detail-header").getByText("На рассмотрении"),
+  ).toBeVisible();
+
+  // Reject path: a blank note is refused at the field, nothing stored.
+  await page.getByTestId("application-note-input").fill("   ");
+  await page.getByTestId("application-note-submit").click();
+  await expect(page.getByTestId("application-note-error")).toBeVisible();
+  await expect(page.getByTestId("application-notes")).toHaveCount(0);
+
+  await page
+    .getByTestId("application-note-input")
+    .fill("Созвониться в пятницу");
+  await page.getByTestId("application-note-submit").click();
+  await expect(
+    page.getByTestId("application-notes").getByText("Созвониться в пятницу"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `${OUT}/head-detail-in-review-note.png`,
+    fullPage: true,
+  });
+  console.log(`[drive head] OK id=${id}`);
+});

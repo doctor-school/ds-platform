@@ -788,6 +788,10 @@ postgres_artifact() {
 DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest read-host-state read-secret-journal secret-recipient secret-apply postgres-load'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
+# backup-info's read of the offsite repos, run in the sidecar (#4298): repo1's config
+# names repo1 alone, so each offsite repo that is on (its derived config exists) is read
+# under its own config, 20 lines each; it never fails the verb.
+OFFSITE_INFO_SH='for n in 2 3; do [ -f /etc/pgbackrest/offsite/repo$n/pgbackrest.conf ] || continue; echo "offsite repo$n:"; gosu postgres /usr/local/bin/pgbackrest-repo.sh "$n" info 2>&1 | sed -n "1,20p"; done; true'
 # What data-env writes there (DATA_PY GENERATED_COMPOSE); a ship carries them (#3822).
 DATA_COMPOSE_GENERATED=(.env .postgres-artifacts.json)
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
@@ -1894,7 +1898,9 @@ data_verb() {
     backup) data_step backup "${words[1]}" "${words[2]-}" </dev/null ;;
     backup-info)
       cd "$DATA_COMPOSE"
-      sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info </dev/null | sed -n '1,20p' ;;
+      sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info </dev/null | sed -n '1,20p'
+      # An offsite repo is a status read, never the verb's exit (#3670).
+      sudo docker compose exec -T pgbackrest sh -c "$OFFSITE_INFO_SH" </dev/null || true ;;
     rollback-floor)
       # The 0036 floor read of tools/deploy/rollback-floor.mjs. ON_ERROR_STOP: a
       # failed read is an exit, never empty output that reads like an answer.

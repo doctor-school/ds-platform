@@ -401,12 +401,13 @@ LIVE = tool("docker") + ["compose", "exec", "-T", "-e", "PGCLIENTENCODING=UTF8",
 # The live pgBackRest sidecar: the recorded pgbackrest image (data-env's
 # .postgres-artifacts.json), as `backup-info` reaches it.
 SIDECAR = tool("docker") + ["compose", "exec", "-T", "pgbackrest", "gosu", "postgres", "pgbackrest", "--stanza=ds"]
-# repo1 alone (#3670). pgBackRest 2.60.0 takes --repo for `check` only in its remote
-# role (build/config.yaml, option `repo`), so the offsite repos are left out by reading
-# no include: an explicit --config-include-path must exist (src/config/parse.c, the
-# include listing's errorOnMissing) and only its *.conf files are read. The
-# pgbackrest_log volume is mounted there in every sidecar image and holds logs only.
-# Their env names without a repoN-type are then dropped (parse.c, cfgSourceConfig).
+# repo1 alone (#3670). Since #4298 the sidecar's default config names repo1 only (each
+# offsite repo has its own config under /etc/pgbackrest/offsite/), and the offsite env
+# names without a repoN-type are dropped (src/config/parse.c, cfgSourceConfig). The
+# include path keeps that true on an older recorded image whose default config read an
+# offsite include: an explicit --config-include-path must exist (parse.c, the include
+# listing's errorOnMissing) and only its *.conf files are read; the pgbackrest_log volume
+# is mounted there in every sidecar image and holds no *.conf file.
 REPO1_ONLY = ["--config-include-path=/var/log/pgbackrest"]
 
 

@@ -116,6 +116,28 @@ not secrets; their values are in the templates or derive from the environment.
   have replaced them, about 7 days after the lock. Versions count toward the billed
   bucket size (about 1.3× the current set). Locked buckets need pgBackRest ≥ 2.55.1,
   version paging ≥ 2.59.2; both data-prod images pin pgBackRest 2.60.0 (#3992).
+- **Offsite WAL comes through a spool, not the archive_command (#4298).**
+  PostgreSQL's `archive_command` (`postgres/pgbackrest-archive.sh`) pushes each WAL
+  segment to repo1 alone, under a config that knows no other repo, and only then
+  copies it into one spool per offsite repo that is on
+  (`/var/log/pgbackrest/offsite-spool/repoN` on the `pgbackrest_log` volume); the
+  copy never fails archiving. The sidecar's `wal-offsite-push.sh` (cron, every
+  minute) pushes each spool to its repo with a synchronous `archive-push` under that
+  repo's own config and deletes a segment only once it landed. The reason: pgBackRest
+  2.60's native multi-repo push stops pushing to every repo after one repo fails
+  (pgbackrest/pgbackrest#2926; the fix, #2927, is unreleased and still keeps the
+  healthy repo at most one batch ahead), so an offsite outage would have stalled
+  repo1 and, at `archive-push-queue-max`, dropped WAL from every repo. Proven by
+  `pgbackrest-offsite-proof.yml` (repo1 complete with the offsite repo down, the
+  spool's overflow and drain, a PITR restore from the offsite repo alone, and a
+  control that reproduces the stall). Offsite RPO, therefore: normally the pusher's
+  minute plus the time to fill a segment (`archive_timeout = 300` closes one after
+  5 minutes at most, which also bounds repo1's RPO); during an offsite outage, the
+  length of the outage, its WAL waiting in the spool; past the spool cap
+  (`DS_OFFSITE_SPOOL_MAX`, 512 segments = 8 GiB per repo) the oldest segments are
+  dropped and named in `offsite-spool/repoN.gap`, and PITR on that repo then starts
+  again only from its next backup (the 04:30 offsite incremental or full), which
+  removes the marker. repo1 is never affected.
 - **Restore proof runs on the source host.** The automated drill (§3) restores a
   throw-away copy on ds-data-prod itself; a restore onto a different host is the
   fresh-host drill above.
@@ -605,29 +627,36 @@ and its bundle from repo N's own bucket, with a key of that provider account (§
 «Without Timeweb»), and decrypts it as in §2.3 and §3.1. While the box still runs,
 `recovery-check N` (a data verb) compares the live keys with repo N's copy.
 
-The same procedure as §3.2–§3.4 with one repo named: a repo whose provider is gone
-(Timeweb included) is never read. The one-shot runs override the image entrypoint,
-so they do not derive the offsite include themselves: write it from the committed
-`#repoN:` lines and mount it. The bundle's `data.env` already carries that repo's
-key pair, endpoint and box-generated cipher pass (§1.2).
+The same procedure as §3.2–§3.4 under a config that knows repo N alone, so a repo
+whose provider is gone (Timeweb included) is never read: the image's own
+`pgbackrest-offsite.sh` derives it from the committed `pgbackrest.conf` and the
+bundle's `data.env` (which carries repo N's key pair, endpoint and box-generated
+cipher pass, §1.2), exactly as the live sidecar derives the config its offsite
+backups and its WAL pusher run under (§1.4).
 
 ```bash
 N=2   # or 3
-INC=/run/ds-recovery/offsite.conf
-{ echo '[global]'; sed -n "s/^#repo$N: //p" "$CONF"; } | sudo tee "$INC" >/dev/null
-BR="$BR -v $INC:/etc/pgbackrest/conf.d/offsite.conf:ro"
-$BR "$BR_IMAGE" --stanza=ds --repo=$N --log-level-file=off info
-# §3.2 step 4 and the copy's restore_command, both on repo N only:
-$BR -v "$SCRATCH/pgdata":/var/lib/postgresql/data "$BR_IMAGE" \
-  --stanza=ds --repo=$N --log-level-file=off --type=default --archive-mode=off restore
+OFF=/run/ds-recovery/offsite
+sudo install -d -o 999 -g 999 -m 700 "$OFF"
+sudo docker run --rm --env-file "$ENVF" -v "$CONF":/etc/pgbackrest/pgbackrest.conf:ro \
+  -v "$OFF":/out --user postgres --entrypoint pgbackrest-offsite.sh "$BR_IMAGE" \
+  /etc/pgbackrest/pgbackrest.conf /out /tmp/spool
+NCONF=$OFF/repo$N/pgbackrest.conf
+grep -q "^repo$N-type=" "$NCONF" && ! grep -q '^repo1-' "$NCONF" \
+  || echo "STOP: $NCONF is not a repo$N-only config (data.env lacks its names?)"
+# Every one-shot run of §3.2 reads that config instead of pgbackrest.conf:
+BR="${BR/$CONF:/$NCONF:}"
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off info
 ```
 
-`--repo=N` picks the backup set from repo N. The copy's `restore_command`
-(`archive-get`) tries every configured repo in order and moves past one it cannot
-reach, so WAL comes from repo N once repo1 fails; to prove repo N alone, mount the
-copy's config with repo N only (unverified against a live outage until drill #3671).
-Skip §3.2 step 3 (`check`) when repo1 is unreachable: it checks every configured
-repo. Report which repo was read.
+Then §3.2 steps 1, 2 and 4 with this `$BR`, and step 5 with
+`-v "$NCONF":/etc/pgbackrest/pgbackrest.conf:ro` in place of `$CONF`: the copy's
+`restore_command` (`archive-get`) then knows repo N only, so every WAL segment it
+replays comes from repo N. Skip step 3 (`check`): under this config it waits for the
+live box's pusher to carry the switched segment to repo N, and with the box gone
+there is nothing to check; take SEG from the last segment `info` lists for repo N
+instead. Report which repo was read. The same path, from a `backup --repo=N` to a
+PITR restore through a repo-N-only config, runs in `pgbackrest-offsite-proof.yml`.
 
 ## 4. Full host-loss path
 

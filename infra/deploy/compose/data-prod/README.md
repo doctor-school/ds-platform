@@ -59,9 +59,11 @@ Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable
   parity + libpq/gosu) + pgbackrest (the same pinned version as postgres) + cron,
   prepared and certified with the postgres image. Daily full at 02:30 MSK (`TZ=Europe/Moscow`, so
   it fires in the maintenance window) + incremental every 6 h; `retention-full=7`;
-  repo cipher AES-256-CBC; continuous WAL archive (postgres `archive_command`).
-  The entrypoint runs `stanza-create` (idempotent), then cron in the foreground
-  (spec §6.3). It mounts `pgdata` read-only to read PGDATA files during backup and
+  repo cipher AES-256-CBC; continuous WAL archive (postgres `archive_command`,
+  `postgres/pgbackrest-archive.sh`: repo1 only, then a copy into one spool per enabled
+  offsite repo that cron's `wal-offsite-push.sh` drains — RECOVERY.md §1.4, #4298).
+  The entrypoint writes each enabled offsite repo's own config, runs `stanza-create`
+  (idempotent), then cron in the foreground (spec §6.3). It mounts `pgdata` read-only to read PGDATA files during backup and
   connects to postgres through the shared socket.
 
 ## Guard contract

@@ -1,0 +1,64 @@
+name: pgBackRest offsite proof
+
+# #4298 acceptance: an offsite pgBackRest repo outage must not stall repo1's WAL
+# archiving nor drop WAL, and an offsite repo stays restorable on its own. The job
+# raises the committed data-prod compose project (images built from the committed
+# Dockerfiles, pgBackRest pinned 2.60.0) against two MinIO processes and runs
+# tools/deploy/pgbackrest-offsite-proof.sh (its header lists the phases). Re-run it on
+# every PGBACKREST_PACKAGE bump: its control phase pins the upstream multi-repo
+# regression pgbackrest/pgbackrest#2926 that the archive topology routes around.
+#
+# No secret and no Environment: every credential is generated inside the run.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/deploy/compose/data-prod/**"
+      - "tools/deploy/pgbackrest-offsite-proof.sh"
+      - ".github/workflows/pgbackrest-offsite-proof.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/deploy/compose/data-prod/**"
+      - "tools/deploy/pgbackrest-offsite-proof.sh"
+      - ".github/workflows/pgbackrest-offsite-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pgbackrest-offsite-proof-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # MinIO's community distribution is source-only (anonymous image pulls fail on
+      # clean runners, PR #3681): build the same pinned source ci.yml builds.
+      - name: Build MinIO from pinned source
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/minio-build"
+          mkdir -p "$build"
+          test "$(uname -m)" = x86_64
+          curl -fsSL --retry 2 --retry-all-errors --connect-timeout 15 --max-time 120 --retry-max-time 300 https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
+          printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
+          tar -xzf "$build/go.tar.gz" -C "$build"
+          export GOROOT="$build/go" GOBIN="$build/bin" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath"
+          export GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOFLAGS=-p=2 CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+          version=v0.0.0-20260212201848-7aac2a2c5b7c
+          curl -fsSL "https://proxy.golang.org/github.com/minio/minio/@v/$version.info" > "$build/source.json"
+          jq -e '.Origin.URL == "https://github.com/minio/minio" and .Origin.Hash == "7aac2a2c5b7c882e68c1ce017d8256be2feea27f"' "$build/source.json" >/dev/null
+          "$build/go/bin/go" install "github.com/minio/minio@$version"
+          echo "MINIO_BIN=$build/bin/minio" >> "$GITHUB_ENV"
+
+      - name: Offsite outage, overflow, drain, offsite restore, control
+        run: bash tools/deploy/pgbackrest-offsite-proof.sh

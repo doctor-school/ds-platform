@@ -43,13 +43,11 @@ RUN apt-get update \
     && { [ "$v" = "pgBackRest ${PGBACKREST_PACKAGE%%-*}" ] \
          || { echo "pgbackrest on PATH is '$v', pinned ${PGBACKREST_PACKAGE}" >&2; exit 1; }; }
 
-# #3670: async WAL archiving needs a spool the server's `postgres` user owns, and the
-# offsite include (pgbackrest-offsite.sh) is derived from the container env at start
-# into conf.d, before the base image's own docker-entrypoint.sh starts the server.
-COPY entrypoint.sh /usr/local/bin/ds-entrypoint.sh
-COPY pgbackrest-offsite.sh /usr/local/bin/pgbackrest-offsite.sh
-RUN chmod 0755 /usr/local/bin/ds-entrypoint.sh /usr/local/bin/pgbackrest-offsite.sh \
-    && mkdir -p /var/spool/pgbackrest /etc/pgbackrest/conf.d \
-    && chown postgres:postgres /var/spool/pgbackrest /etc/pgbackrest/conf.d
-ENTRYPOINT ["/usr/local/bin/ds-entrypoint.sh"]
-CMD ["postgres"]
+# The archive_command (pgbackrest-archive.sh, #4298): repo1's async push needs a spool
+# the server's `postgres` user owns. This container's pgBackRest knows repo1 only:
+# nothing writes into conf.d. The offsite WAL spools live on the pgbackrest_log
+# volume both containers already mount read-write (pgbackrest-archive.sh says why).
+COPY pgbackrest-archive.sh /usr/local/bin/pgbackrest-archive.sh
+RUN chmod 0755 /usr/local/bin/pgbackrest-archive.sh \
+    && mkdir -p /var/spool/pgbackrest \
+    && chown postgres:postgres /var/spool/pgbackrest

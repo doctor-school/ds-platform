@@ -922,7 +922,8 @@ create-access-key` on the operator's workstation, as above. The values never ent
       lines replaced or appended (root:root 0600), postgres + pgbackrest recreated with data-up's
       command on the recorded image overlay (`.postgres-artifacts.json`, so the guard
       reads the recorded images and the next release passes `postgres-verify`), then
-      `repo-check.sh` (`stanza-create` + `check` on every configured repo). A failed check puts the backup back, recreates
+      `repo-check.sh` (`stanza-create` + `check` on repo1 under the default config, and on each
+      offsite repo it is given by number under that repo's own config, #4298). A failed check puts the backup back, recreates
       again and fails the run: the old key keeps working. The backup is removed either
       way. A run whose job died is re-dispatched with the same inputs once the unit has
       ended (while it runs, the apply is refused) and within the 6 h:
@@ -967,20 +968,25 @@ create-access-key` on the operator's workstation, as above. The values never ent
       rotation only the key pair lines go in; `<generate>` over a held pass is refused.
 
    2. **Apply it on the owner's word** (step 3 above). The box appends the absent names
-      and generates the pass (never printed). Both containers derive
-      `/etc/pgbackrest/conf.d/offsite.conf` from their env at start
-      (`pgbackrest-offsite.sh`, the `#repoN:` lines of `pgbackrest.conf`), and the
-      unit's verdict is `repo-check.sh <N>…`: the include again, then `stanza-create`
-      (a no-op on a valid stanza) and `check` on repo1 plus only the offsite repos
-      whose names this rotation changes, never an untouched one, so a repo1 key
-      rotation never fails on an offsite outage. When the verdict stands for a repo
+      and generates the pass (never printed). The pgbackrest
+      sidecar derives each enabled repo's own config,
+      `/etc/pgbackrest/offsite/repoN/pgbackrest.conf`, and its WAL spool from its env at
+      start (`pgbackrest-offsite.sh`: `pgbackrest.conf` without repo1, plus the
+      `#offsite:` and `#repoN:` lines). The repo never joins repo1's config: PostgreSQL
+      archives to repo1 alone and spools each segment for the offsite repos, and the
+      sidecar's pusher carries the spool to them (RECOVERY.md §1.4, #4298). The
+      unit's verdict is `repo-check.sh <N>…`: the configs again, then `stanza-create`
+      (a no-op on a valid stanza) and `check` on repo1, and on only the offsite repos
+      whose names this rotation changes under their own configs (an offsite `check`
+      waits up to its `archive-timeout` for the pusher), never an untouched one, so a
+      repo1 key rotation never fails on an offsite outage. When the verdict stands for a repo
       the rotation turned on, the unit takes that repo's first full backup itself
       (`backup.sh full offsite <N>`, printed as `the first full backup to repo<N>`); if
       it fails, the unit says so and the 04:30 offsite job takes one (an incremental
       with no full is a full). A failed verdict puts the previous `data.env` back and
       the repo is off again.
-   3. Read `docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds info`
-      (ds-read): the new repo is listed with status ok and one full backup.
+   3. Read `docker compose exec -T -u postgres pgbackrest /usr/local/bin/pgbackrest-repo.sh <N> info`
+      (ds-read): the new repo's stanza has status ok and one full backup.
    4. Dispatch `recovery-custody.yml` with `recovery-bundle`, then `recovery-check`:
       the new pass exists only in `data.env` until then. From then on every bundle is
       also stored in each offsite repo's bucket (RECOVERY.md §2).
@@ -1002,12 +1008,16 @@ create-access-key` on the operator's workstation, as above. The values never ent
 
    The release gate reads repo1 only (`postgres-artifact-probe.py`: `info --repo=1`),
    and so does the migration rehearsal's archive check. An offsite repo's state is a
-   stderr line of the probe (`offsite repo<N>: <status>`), never a refusal. WAL goes
-   to every enabled repo asynchronously: while one offsite repo is down, repo1 keeps
-   receiving WAL and `pg_wal` grows by the segments the down repo has not
-   acknowledged. Past `archive-push-queue-max` (16 GiB) pgBackRest drops the queue to
-   keep PostgreSQL up. Only the repos that missed segments then lose PITR past that
-   point (repo1 holds every segment the async push delivered), until their next
+   stderr line of the probe (`offsite repo<N>: <status>`), never a refusal; the probe
+   and the `backup-info` verb read each offsite repo that is on under its own config
+   (`pgbackrest-repo.sh <N> info`), as repo1's config names repo1 alone. WAL reaches
+   an offsite repo through its spool and the sidecar's pusher, never through the
+   `archive_command` (RECOVERY.md §1.4, #4298): while an offsite repo is down repo1
+   keeps every segment and `pg_wal` does not grow; that repo's spool grows up to its
+   cap (`DS_OFFSITE_SPOOL_MAX`, 512 segments), past which the oldest are dropped,
+   named in `offsite-spool/repo<N>.gap`, and that repo's PITR restarts at its next
+   backup. A repo1 outage still grows `pg_wal` up to `archive-push-queue-max`
+   (16 GiB), where pgBackRest drops the queue to keep PostgreSQL up, until the next
    full. Offsite backups run weekly full / daily incremental (`crontab`), 35-day
    retention. Each backup takes only its own repo's lock (`--repo=1` / `--repo=<N>`),
    so an offsite backup still running at 06:00 never blocks repo1's incremental.

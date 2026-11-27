@@ -124,15 +124,10 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
     });
 
     await test.step("the state facet narrows instantly, as a chip", async () => {
-      // The facet is named as its column is, and the search field refuses
-      // what the route would (007 EARS-14).
+      // The facet is named as its column is (007 EARS-14).
       await expect(filters(page).getByLabel("Статус")).toHaveAttribute(
         "data-testid",
         "events-status",
-      );
-      await expect(filters(page).getByRole("searchbox")).toHaveAttribute(
-        "maxlength",
-        "160",
       );
       await filters(page)
         .getByTestId("events-status")

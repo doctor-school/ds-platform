@@ -21,9 +21,7 @@ afterEach(cleanup);
  * submit control exists and the text field commits itself after the debounce window;
  * in `batch` nothing commits before submit.
  */
-function renderBar(
-  props: Partial<React.ComponentProps<typeof FilterBar>> = {},
-) {
+function renderBar(props: Partial<React.ComponentProps<typeof FilterBar>> = {}) {
   return render(
     <FilterBar
       applyMode="instant"
@@ -116,12 +114,7 @@ describe("<FilterBar>", () => {
       // `search.value` deletes those characters under the cursor.
       const onCommit = vi.fn();
       const { rerender } = renderBar({
-        search: {
-          value: "",
-          onCommit,
-          label: "Поиск по названию",
-          debounceMs: 400,
-        },
+        search: { value: "", onCommit, label: "Поиск по названию", debounceMs: 400 },
       });
       const field = screen.getByLabelText("Поиск по названию");
 
@@ -140,12 +133,7 @@ describe("<FilterBar>", () => {
           applyMode="instant"
           label="Фильтры списка"
           resetLabel="Сбросить всё"
-          search={{
-            value: "карди",
-            onCommit,
-            label: "Поиск по названию",
-            debounceMs: 400,
-          }}
+          search={{ value: "карди", onCommit, label: "Поиск по названию", debounceMs: 400 }}
         />,
       );
       expect(field).toHaveValue("кардиоло");
@@ -159,12 +147,7 @@ describe("<FilterBar>", () => {
       const first = vi.fn();
       const second = vi.fn();
       const { rerender } = renderBar({
-        search: {
-          value: "",
-          onCommit: first,
-          label: "Поиск по названию",
-          debounceMs: 400,
-        },
+        search: { value: "", onCommit: first, label: "Поиск по названию", debounceMs: 400 },
       });
       const field = screen.getByLabelText("Поиск по названию");
 
@@ -175,12 +158,7 @@ describe("<FilterBar>", () => {
           applyMode="instant"
           label="Фильтры списка"
           resetLabel="Сбросить всё"
-          search={{
-            value: "",
-            onCommit: second,
-            label: "Поиск по названию",
-            debounceMs: 400,
-          }}
+          search={{ value: "", onCommit: second, label: "Поиск по названию", debounceMs: 400 }}
         />,
       );
       act(() => {
@@ -209,21 +187,6 @@ describe("<FilterBar>", () => {
       );
       expect(field).toHaveValue("кардио");
     });
-
-    it("caps the search field at the length the app's route accepts", () => {
-      renderBar({
-        search: {
-          value: "",
-          onCommit: vi.fn(),
-          label: "Поиск",
-          maxLength: 160,
-        },
-      });
-      expect(screen.getByLabelText("Поиск")).toHaveAttribute(
-        "maxlength",
-        "160",
-      );
-    });
   });
 
   describe('applyMode="batch"', () => {
@@ -236,7 +199,10 @@ describe("<FilterBar>", () => {
         onSubmit,
         search: { value: "", onCommit, label: "Поиск по названию" },
       });
-      await userEvent.type(screen.getByLabelText("Поиск по названию"), "карди");
+      await userEvent.type(
+        screen.getByLabelText("Поиск по названию"),
+        "карди",
+      );
       expect(onCommit).not.toHaveBeenCalled();
 
       await userEvent.click(screen.getByRole("button", { name: "Применить" }));
@@ -257,9 +223,7 @@ describe("<FilterBar>", () => {
         label="Фильтры списка"
         resetLabel="Сбросить всё"
         onResetAll={vi.fn()}
-        applied={[
-          { id: "status", label: "Статус: Черновик", onRemove: vi.fn() },
-        ]}
+        applied={[{ id: "status", label: "Статус: Черновик", onRemove: vi.fn() }]}
       />,
     );
     expect(
@@ -280,9 +244,7 @@ describe("<FilterBar>", () => {
     const chip = screen.getByRole("button", { name: "Статус: Черновик" });
     await userEvent.click(chip);
     expect(onRemove).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByRole("button", { name: "Показывать снятые" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Показывать снятые" })).toBeInTheDocument();
   });
 
   describe("keyboard removal keeps the focus in the bar (044 EARS-23)", () => {
@@ -386,21 +348,14 @@ describe("<FilterBar>", () => {
   });
   describe("moreFilters — the opt-in «Все фильтры» panel (044 EARS-23, F1)", () => {
     const more = (
-      props: Partial<
-        NonNullable<React.ComponentProps<typeof FilterBar>["moreFilters"]>
-      > = {},
+      props: Partial<NonNullable<React.ComponentProps<typeof FilterBar>["moreFilters"]>> = {},
     ) => ({
       label: "Все фильтры",
       appliedCount: 0,
       appliedCountLabel: (count: number) => `применено: ${count}`,
       heading: "Фильтры по данным участника",
       hint: "Применяются сразу",
-      children: (
-        <label>
-          ФИО
-          <input />
-        </label>
-      ),
+      children: <label>ФИО<input /></label>,
       ...props,
     });
 
@@ -453,9 +408,7 @@ describe("<FilterBar>", () => {
     });
 
     it("badges the number of applied panel filters and names it, only while there is one", () => {
-      const { rerender } = renderBar({
-        moreFilters: more({ appliedCount: 0 }),
-      });
+      const { rerender } = renderBar({ moreFilters: more({ appliedCount: 0 }) });
       expect(screen.queryByText("0")).not.toBeInTheDocument();
       rerender(
         <FilterBar

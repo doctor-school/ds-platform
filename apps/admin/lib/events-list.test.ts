@@ -62,15 +62,25 @@ describe("007 EARS-14: the admin event list view in the address", () => {
   it("007 EARS-14: a value the route would refuse reads as not applied, never as a 400 page", () => {
     const view = eventsListViewFromAddress(
       address(
-        `q=${"я".repeat(161)}&state=retired&startsFrom=2026-02-31&startsTo=31.10.2026&sort=kind&dir=up&page=0`,
+        "state=retired&startsFrom=2026-02-31&startsTo=31.10.2026&sort=kind&dir=up&page=0",
       ),
     );
     expect(view).toEqual(EVENTS_LIST_VIEW_DEFAULT);
-    expect(eventsListViewFromAddress(address("sort=title&dir=up")).sort).toEqual(
-      EVENTS_LIST_SORT_DEFAULT,
-    );
+    expect(
+      eventsListViewFromAddress(address("sort=title&dir=up")).sort,
+    ).toEqual(EVENTS_LIST_SORT_DEFAULT);
     expect(eventsListViewFromAddress(address("page=2.5")).page).toBe(1);
     expect(eventsListViewFromAddress(address("page=-4")).page).toBe(1);
+  });
+
+  it("007 EARS-14: a search longer than the route's 160 characters reads as its first 160, never dropped", () => {
+    const long = `${"я".repeat(150)}кардиология`;
+    expect(eventsListViewFromAddress(address(`q=${long}`)).q).toBe(
+      long.slice(0, 160),
+    );
+    expect(eventsListViewFromAddress(address(`q=${"я".repeat(160)}`)).q).toBe(
+      "я".repeat(160),
+    );
   });
 
   it("007 EARS-14: an inverted period keeps its «с» and drops the «по» the route would refuse", () => {
@@ -110,14 +120,17 @@ describe("007 EARS-14: the admin event list view in the address", () => {
       eventsListHref("/events", { ...EVENTS_LIST_VIEW_DEFAULT, q: "  " }),
     ).toBe("/events");
     expect(
-      eventsListHref("/events", { ...EVENTS_LIST_VIEW_DEFAULT, q: " вебинар " }),
+      eventsListHref("/events", {
+        ...EVENTS_LIST_VIEW_DEFAULT,
+        q: " вебинар ",
+      }),
     ).toBe("/events?q=%D0%B2%D0%B5%D0%B1%D0%B8%D0%BD%D0%B0%D1%80");
   });
 
   it("007 EARS-14: only the date-desc pair is the default order", () => {
-    expect(isEventsListSortDefault({ key: "startsAt", direction: "desc" })).toBe(
-      true,
-    );
+    expect(
+      isEventsListSortDefault({ key: "startsAt", direction: "desc" }),
+    ).toBe(true);
     expect(isEventsListSortDefault({ key: "startsAt", direction: "asc" })).toBe(
       false,
     );
@@ -148,7 +161,11 @@ describe("007 EARS-14: the admin event list view in the address", () => {
   });
 
   it("007 EARS-14: a list change carries only the part it changed and its page, never the render's copy of the rest", () => {
-    const shown = { q: "кардио", state: "published", sort: EVENTS_LIST_SORT_DEFAULT } as const;
+    const shown = {
+      q: "кардио",
+      state: "published",
+      sort: EVENTS_LIST_SORT_DEFAULT,
+    } as const;
     // A header click: the sort and page 1 — the search and the state stay
     // whatever the address holds by then (a search typed a moment earlier).
     expect(

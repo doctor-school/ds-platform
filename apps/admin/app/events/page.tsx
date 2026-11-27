@@ -21,7 +21,6 @@ import { AdminDataList } from "@/components/admin-data-list";
 import { EventsPeriodFilter } from "@/components/events-period-filter";
 import { StateBadge } from "@/components/state-badge";
 import {
-  EVENTS_LIST_SEARCH_MAX,
   EVENTS_LIST_SORT_DEFAULT,
   eventsListHref,
   eventsListPeriod,
@@ -161,7 +160,6 @@ export default function EventsListPage() {
           retainsRetired={false}
           searchLabel={t("events.list.search")}
           searchPlaceholder={t("events.list.searchPlaceholder")}
-          searchMaxLength={EVENTS_LIST_SEARCH_MAX}
           extraFilters={
             <EventsPeriodFilter
               period={view}

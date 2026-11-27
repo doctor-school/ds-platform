@@ -81,10 +81,11 @@ export function isEventsListSortDefault(sort: {
  * The view the address asks for. A value the route would refuse is read as not
  * applied — never sent to become a 400 page: an unknown state, sort key or
  * direction (the sort then falls back to the default whole), an impossible or
- * malformed day, a search over the route's {@link EVENTS_LIST_SEARCH_MAX}, a
- * page that is not a positive whole number, and the «по» of an inverted period
- * (its «с» kept). A sort key without a direction reads ascending, as the route
- * reads it.
+ * malformed day, a page that is not a positive whole number, and the «по» of
+ * an inverted period (its «с» kept). A search over the route's
+ * {@link EVENTS_LIST_SEARCH_MAX} characters is read as its first that many, so
+ * the operator keeps what they typed rather than losing the whole search. A
+ * sort key without a direction reads ascending, as the route reads it.
  */
 export function eventsListViewFromAddress(
   params: URLSearchParams,
@@ -101,7 +102,7 @@ export function eventsListViewFromAddress(
   const to = day("startsTo");
   const page = Number(read("page"));
   return {
-    q: q.length > EVENTS_LIST_SEARCH_MAX ? "" : q,
+    q: q.slice(0, EVENTS_LIST_SEARCH_MAX),
     state: state.success ? state.data : "",
     startsFrom,
     startsTo: startsFrom && to && to < startsFrom ? "" : to,

@@ -90,7 +90,6 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   searchable = true,
   searchLabel,
   searchPlaceholder,
-  searchMaxLength,
   filterable = true,
   statusFilterLabel,
   statusAnyLabel,
@@ -147,8 +146,6 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   searchable?: boolean;
   searchLabel?: string;
   searchPlaceholder?: string;
-  /** The route's `q` ceiling, so the field stops where the route would refuse. */
-  searchMaxLength?: number;
   /** Whether the resource has a lifecycle to filter by at all. */
   filterable?: boolean;
   /**
@@ -341,7 +338,6 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
                     label: searchLabel ?? t("common.list.search"),
                     placeholder:
                       searchPlaceholder ?? t("common.list.searchPlaceholder"),
-                    maxLength: searchMaxLength,
                   }
                 : undefined
             }

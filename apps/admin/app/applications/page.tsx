@@ -25,6 +25,7 @@ import {
   applicationStatusLabelKey,
   applicationsCursorPager,
   applicationsUrl,
+  kindFilterOptions,
   kindOptionLabel,
   rememberNextCursor,
 } from "@/lib/applications";
@@ -120,9 +121,9 @@ export default function ApplicationsListPage() {
           }
         >
           <option value="">{t("applications.filters.kindAny")}</option>
-          {kinds.map((option) => (
-            <option key={option.kind} value={option.kind}>
-              {option.label}
+          {kindFilterOptions(kinds).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.text}
             </option>
           ))}
         </NativeSelect>

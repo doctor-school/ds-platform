@@ -12,6 +12,7 @@ import {
   applicationStatusLabelKey,
   applicationsCursorPager,
   applicationsUrl,
+  kindFilterOptions,
   kindOptionLabel,
   rememberNextCursor,
 } from "./applications";
@@ -89,9 +90,28 @@ describe("033 admin «Заявки» — the pure projections", () => {
   });
 
   it("EARS-13: a «Вид» chip reads the label the api served for the kind, the kind itself before any page came", () => {
-    const kinds = [{ kind: "author" as const, label: "Автор" }];
+    const kinds = [
+      { kind: "author" as const, label: "Автор", filterLabel: "Автор" },
+    ];
     expect(kindOptionLabel(kinds, "author")).toBe("Автор");
     expect(kindOptionLabel([], "author")).toBe("author");
+  });
+
+  it("034 EARS-10: the «Вид» filter offers each kind by the filter text the api served — «Инвесторы» — while its rows keep the kind label «Инвестор»", () => {
+    const kinds = [
+      { kind: "author" as const, label: "Автор", filterLabel: "Автор" },
+      {
+        kind: "investor" as const,
+        label: "Инвестор",
+        filterLabel: "Инвесторы",
+      },
+    ];
+    expect(kindFilterOptions(kinds)).toEqual([
+      { value: "author", text: "Автор" },
+      { value: "investor", text: "Инвесторы" },
+    ]);
+    expect(kindOptionLabel(kinds, "investor")).toBe("Инвестор");
+    expect(kindFilterOptions([])).toEqual([]);
   });
 
   it("EARS-13: a closed application reads as its outcome, an open one as its status", () => {

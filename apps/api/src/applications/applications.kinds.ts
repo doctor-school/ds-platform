@@ -48,6 +48,8 @@ export interface ApplicationKindDefinition<P = unknown, C = unknown> {
   receiptTo: "account-email" | "contact-email" | null;
   /** The admin label of the kind (EARS-13). */
   label: string;
+  /** The text the admin «Вид» filter offers the kind by (034 EARS-10). */
+  filterLabel: string;
 }
 
 export const APPLICATION_KIND_TABLE = {
@@ -61,6 +63,7 @@ export const APPLICATION_KIND_TABLE = {
     consentVersionTag: null,
     receiptTo: "account-email",
     label: "Автор",
+    filterLabel: "Автор",
   } satisfies ApplicationKindDefinition<AuthorApplicationPayload>,
   partnership: {
     payloadSchema: PartnershipRequestPayloadSchema,
@@ -73,6 +76,7 @@ export const APPLICATION_KIND_TABLE = {
     // The home form promises no letter (033-design «Lead decisions» 20).
     receiptTo: null,
     label: "Партнёрство",
+    filterLabel: "Партнёрство",
   } satisfies ApplicationKindDefinition<
     PartnershipRequestPayload,
     PartnershipRequestContact
@@ -88,6 +92,7 @@ export const APPLICATION_KIND_TABLE = {
     // 034 EARS-9: «Заявка получена» to the request's work email.
     receiptTo: "contact-email",
     label: "Инвестор",
+    filterLabel: "Инвесторы",
   } satisfies ApplicationKindDefinition<
     InvestorRequestPayload,
     InvestorRequestContact

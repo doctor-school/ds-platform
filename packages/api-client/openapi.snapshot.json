@@ -516,6 +516,9 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "filterLabel": {
+                  "type": "string"
+                },
                 "kind": {
                   "enum": ["author", "partnership", "investor"],
                   "type": "string"
@@ -524,7 +527,7 @@
                   "type": "string"
                 }
               },
-              "required": ["kind", "label"],
+              "required": ["kind", "label", "filterLabel"],
               "type": "object"
             },
             "type": "array"

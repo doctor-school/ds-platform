@@ -85,6 +85,7 @@ const KIND_OPTIONS = Object.entries(APPLICATION_KIND_TABLE).map(
   ([kind, definition]) => ({
     kind: kind as ApplicationKind,
     label: definition.label,
+    filterLabel: definition.filterLabel,
   }),
 );
 

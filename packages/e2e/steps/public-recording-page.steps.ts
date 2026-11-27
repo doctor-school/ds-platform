@@ -104,11 +104,7 @@ function expectCanonical(speakers: Speaker[]) {
   for (const speaker of speakers) {
     expect(speaker.source).toBe("expert");
     expect(isGoldenUuid(speaker.expertId)).toBe(true);
-    for (const value of [
-      speaker.expertSlug,
-      speaker.name,
-      speaker.credentials,
-    ])
+    for (const value of [speaker.expertSlug, speaker.name, speaker.credentials])
       expect(value).toMatch(/\S/u);
     if (speaker.role !== null) expect(speaker.role).toMatch(/\S/u);
   }

@@ -3387,12 +3387,19 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("4287: host-state answers tunnel-down for repo2 while its tunnel is not running — no direct probe", () => {
     tunnelBox();
+    curlAnswers({ "s3.onidel.test": "0 403 0.051 0.123" });
     const r = readRun("host-state");
     assert.equal(r.status, 0, r.stderr);
     const answer = decrypt(r.stdout);
     closed(answer);
-    assert.deepEqual(answer.data.offsite[0], { repo: 2, host: IDRIVE, state: "tunnel-down", http: null });
-    assert.equal(log("curl"), "", "never past the tunnel to IDrive's own address");
+    assert.deepEqual(answer.data.offsite, [
+      { repo: 2, host: IDRIVE, state: "tunnel-down", http: null },
+      { repo: 3, host: "s3.onidel.test", state: "reachable", http: 403 },
+    ]);
+    const curls = log("curl").trim().split("\n");
+    assert.deepEqual(curls.filter((l) => l.includes(IDRIVE)), [], "never past the tunnel to IDrive's own address");
+    assert.deepEqual(curls.filter((l) => l.includes("--connect-to")), [], "no tunnel route for a tunnel that is down");
+    assert.equal(curls.filter((l) => l.endsWith("https://s3.onidel.test/")).length, 1, "repo3 is still probed, directly");
     assert.deepEqual(hostStateLines(answer).filter((l) => l.startsWith("offsite repo2")), [
       `offsite repo2 ${IDRIVE}: tunnel-down http=-`,
     ]);

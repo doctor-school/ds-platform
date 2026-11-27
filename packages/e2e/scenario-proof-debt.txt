@@ -586,6 +586,15 @@
 033 | The queue is refused to anyone but a platform administrator with the second factor | #4030
 033 | With no platform administrator the application is kept and marked | #4029
 033 | «Пока не готовы?» leads to the projects | #4033
+034 | A malformed work email is reported | #4238
+034 | A missing organisation is reported and the rest of the input is kept | #4240
+034 | A platform administrator works an investor request in the shared queue | #4240
+034 | A representative reads the page and sends a request | #4240
+034 | A server failure keeps the input and a retry creates one request | #4240
+034 | The doctor storefront has no investor page | #4240
+034 | The page works on a phone | #4240
+034 | The request cannot be sent without the consent | #4238
+034 | «Следующий шаг» leads to the projects | #4239
 044 | A registration with no answers payload is never marked
 044 | A signed-in doctor registers from the platform feed
 044 | An email the platform already knows is attached, not rewritten and not disclosed

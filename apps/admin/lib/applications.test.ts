@@ -89,7 +89,7 @@ describe("033 admin «Заявки» — the pure projections", () => {
     expect(APPLICATION_STATUS_FILTERS).toEqual(["new", "in_review", "closed"]);
   });
 
-  it("EARS-13: a «Вид» chip reads the label the api served for the kind, the kind itself before any page came", () => {
+  it("EARS-13: a «Вид» chip reads the filter text the api served for the kind, the kind itself before any page came", () => {
     const kinds = [
       { kind: "author" as const, label: "Автор", filterLabel: "Автор" },
     ];

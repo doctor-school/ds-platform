@@ -2,7 +2,7 @@
 title: "034 — Investors, slice 1: the «Как это работает» page with «Обсудить проект» into the shared queue (Requirements)"
 description: "Requirements for slice 1 of feature 034: the Academy page academy.doctor.school/investors that explains how an organisation takes part (it invests in a project, experts produce education, doctors learn, the investor sees the result), what the investor gets and how the relationship is formalised (a contract outside the platform with transparent accounting on it); the «Обсудить проект — оставить заявку» form a representative sends without an account, with the purpose-bound personal-data consent, inline validation, a failure that keeps the input and one request per submission; the confirmation state; the investor request kind of the one 033 application queue — public bot-protected intake, the «Заявка получена» receipt to the work email, the team notification, the admin list and detail, statuses, notes, retention and erasure exactly as for every queue kind."
 slug: 034-investment-marketplace
-status: Draft
+status: In dev
 issues: [4236, 4237, 4238, 4239, 4240]
 surface: user-facing
 storefronts: academy-only

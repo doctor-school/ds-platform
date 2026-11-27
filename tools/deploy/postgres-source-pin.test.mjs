@@ -25,11 +25,11 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
  * The accepted v2 source hash: the v2 of the data-prod images that pin pgBackRest 2.60.0,
  * pg_partman and both bases by digest (#3992), archive to repo1 alone and spool WAL for
  * each offsite repo (#4298), and carry repo2's tunnel to IDrive (#4287: the sidecar's
- * openssh-client and its tunnel network, the repo2-tunnel service), certified by
- * postgres-artifact.yml before the release that ships them.
+ * openssh-client and its tunnel network, the repo2-tunnel service in its own compose
+ * profile), certified by postgres-artifact.yml before the release that ships them.
  */
 const ACCEPTED_SOURCE_HASH =
-  "048b55ab0c58e5c9962e82babe9e013efca1ef67ccb239641a344d5ef947da14";
+  "d3bc46e7412a71cd63cec83051ac34ba332fe36e56d4d7b7db3e2351895c7692";
 
 test("3418: the committed data-prod postgres source hash is the accepted one", () => {
   const { sourceHash } = readPostgresTarget("HEAD", REPO_ROOT);

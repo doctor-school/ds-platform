@@ -755,8 +755,9 @@ The answer check (`ds-read-entrypoint` `OFFSITE_REPO`) admits a null host for
 
 `data-secret.yml` `action=tunnel-key` (#4287) prints the public key of that tunnel's ssh
 key and its SHA256 fingerprint (ds-api-prod's relay verb `data-repo2-tunnel-key prod` →
-the data verb `repo2-tunnel-key`, which generates the ed25519 pair on its first call; the
-private key never leaves ds-data-prod). The relay host belongs to the BBM side: the
+the data verb `repo2-tunnel-key`, which generates the ed25519 pair on its first call and
+rebuilds a lost `.pub` from the private key; the private key never leaves ds-data-prod).
+The relay host belongs to the BBM side: the
 operator hands that key to the relay's owner with `terraform output -raw data_prod_egress_ip`
 (`infra/deploy/README.md` → «repo2 through the tunnel»).
 

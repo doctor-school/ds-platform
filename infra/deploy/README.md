@@ -1070,7 +1070,9 @@ create-access-key` on the operator's workstation, as above. The values never ent
      `repo2-tunnel-key` (relayed as `data-repo2-tunnel-key prod`) generates the ed25519
      pair on its first call: `/etc/ds-platform/repo2-tunnel/id_ed25519`, root 0600 in
      a root-only 0700 dir. The service mounts that dir read-only, and the private key
-     never leaves the box. The box cannot see its own egress address from inside: it
+     never leaves the box. A later call prints the same pair; a lost or empty `.pub` is
+     rebuilt from the private key (`ssh-keygen -y`), never replaced by a new pair the
+     relay does not trust. The box cannot see its own egress address from inside: it
      is `terraform output -raw data_prod_egress_ip` (owner-local tfstate).
    - **The relay's key line** (the relay's owner adds it; this repo never configures
      the relay):

@@ -690,10 +690,20 @@ such container means the tunnel is down. `docker compose logs repo2-tunnel` name
 cause (a refused key, an unreachable relay). Use the path below instead.
 
 **A rebuilt box (§4)** has no tunnel key: the key never leaves the box, so it is not
-in the bundle. After step 4 of §4 the operator dispatches `data-secret.yml`
+in the bundle. The tunnel has its own compose profile, so §4 step 3's `create` and
+`up -d`, which name no service, leave it out and raise postgres, redis and the sidecar
+without the key. After step 4 of §4 the operator dispatches `data-secret.yml`
 `action=tunnel-key`, and the relay's owner replaces the key line with the new public
 key (the NAT address stays `data_prod_egress_ip` unless Terraform recreated the
-router's floating IP). The next `data-up` or data-secret apply then starts the tunnel.
+router's floating IP). The next `data-up` (a release) or data-secret apply then starts
+the tunnel, or, on the box, `data-up`'s own command, which names the service and so
+activates its profile:
+
+```bash
+cd ~/ds-platform/infra/deploy/compose/data-prod
+sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel
+```
+
 Until then, restore from repo1, from repo3, or from repo2 on the path below.
 
 **From a machine outside RU, without the tunnel.** When ds-data-prod or the relay is
@@ -740,7 +750,9 @@ Each step is an existing section; this list only orders them.
    labelled volumes without starting anything; then run the README «Rollback» restore
    `docker run` (it overrides the sidecar entrypoint and needs no running postgres;
    skip its `compose stop`), then `sudo docker compose up -d` and
-   `pgbackrest --stanza=ds info`. The release guard records a new
+   `pgbackrest --stanza=ds info`. Both compose commands leave the repo2 tunnel out (its
+   own profile; the box has no tunnel key yet, §3.6 «A rebuilt box» brings it up after
+   step 4). The release guard records a new
    `ds-platform-postgres-state.json` on its first successful run
    (`tools/deploy/README.md`).
 4. **App.** The live SHA from §1.1 through `deploy-prod.yml` (README → «Release»),

@@ -1411,19 +1411,29 @@ secret_recipient() {
 # fingerprint; the ed25519 key pair is generated here on first call (root 0600 / 0644 in
 # a root-only dir the repo2-tunnel service mounts read-only), never printed, never leaves
 # the box. The relay's owner adds the public key, restricted to this box's egress
-# address and the one IDrive forward (infra/deploy/README.md → «repo2 through the
-# tunnel»). The egress address is the VPC router's NAT, which the box cannot see from
-# inside: Terraform's twc_router output names it.
+# address and local forwards to the IDrive endpoint (infra/deploy/README.md → «repo2
+# through the tunnel»). The egress address is the VPC router's NAT, which the box cannot
+# see from inside: Terraform's twc_router output names it.
+# The relay trusts the private key, so a lost or empty .pub is rebuilt from it: a new
+# pair would silently lock the tunnel out until the relay's owner swaps the key line.
 repo2_tunnel_key() {
-  if ! sudo test -s "$REPO2_TUNNEL_KEY" || ! sudo test -s "$REPO2_TUNNEL_KEY.pub"; then
-    sudo install -d -m 0700 -o root -g root "$REPO2_TUNNEL_DIR"
+  sudo install -d -m 0700 -o root -g root "$REPO2_TUNNEL_DIR"
+  if ! sudo test -s "$REPO2_TUNNEL_KEY"; then
     sudo rm -f -- "$REPO2_TUNNEL_KEY" "$REPO2_TUNNEL_KEY.pub"
     sudo ssh-keygen -q -t ed25519 -N '' -C ds-data-prod-repo2 -f "$REPO2_TUNNEL_KEY" >/dev/null 2>&1 ||
       refuse "ssh-keygen could not generate the repo2 tunnel key"
-    sudo chmod 0600 "$REPO2_TUNNEL_KEY"
-    sudo chmod 0644 "$REPO2_TUNNEL_KEY.pub"
     printf '%s: repo2 tunnel key generated\n' "$TAG" >&2
   fi
+  # ssh-keygen refuses to read a private key that others can read.
+  sudo chmod 0600 "$REPO2_TUNNEL_KEY"
+  if ! sudo test -s "$REPO2_TUNNEL_KEY.pub"; then
+    local pub
+    pub=$(sudo ssh-keygen -y -f "$REPO2_TUNNEL_KEY" 2>/dev/null) && [[ $pub == ssh-ed25519\ * ]] ||
+      refuse "ssh-keygen could not read the repo2 tunnel key"
+    printf '%s\n' "$pub" | sudo tee -- "$REPO2_TUNNEL_KEY.pub" >/dev/null
+    printf '%s: repo2 tunnel public key rebuilt from the private key\n' "$TAG" >&2
+  fi
+  sudo chmod 0644 "$REPO2_TUNNEL_KEY.pub"
   sudo cat "$REPO2_TUNNEL_KEY.pub"
   sudo ssh-keygen -l -E sha256 -f "$REPO2_TUNNEL_KEY.pub"
 }

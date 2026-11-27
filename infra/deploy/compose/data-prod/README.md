@@ -73,7 +73,9 @@ Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable
   `s3.ap-southeast-2.idrivee2.com` on its own network `repo2-tunnel`, shared with
   `pgbackrest` alone (`postgres` never talks to an offsite repo). It publishes no port
   and uses no host network. Nothing depends on it, and it starts only once its key
-  exists (`infra/deploy/README.md` → «repo2 through the tunnel»).
+  exists (`infra/deploy/README.md` → «repo2 through the tunnel»). It has its own
+  compose profile, `repo2-tunnel`: an `up -d` that names no service (above) leaves it
+  out, and a command that names it (the release's `data-up` does) starts it.
 
 ## Guard contract
 

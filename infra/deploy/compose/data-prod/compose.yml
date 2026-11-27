@@ -118,6 +118,9 @@
       ]
     },
     "repo2-tunnel": {
+      "profiles": [
+        "repo2-tunnel"
+      ],
       "logging": {
         "driver": "json-file",
         "options": {

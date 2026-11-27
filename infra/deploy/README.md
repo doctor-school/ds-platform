@@ -960,12 +960,14 @@ create-access-key` on the operator's workstation, as above. The values never ent
       ```text
       PGBACKREST_REPO2_S3_KEY=…
       PGBACKREST_REPO2_S3_KEY_SECRET=…
-      PGBACKREST_REPO2_S3_ENDPOINT=<bare host[:port] the provider assigned>
+      PGBACKREST_REPO2_S3_ENDPOINT=s3.ap-southeast-2.idrivee2.com
       PGBACKREST_REPO2_CIPHER_PASS=<generate>
       ```
 
       repo2's endpoint is exactly `s3.ap-southeast-2.idrivee2.com`: the tunnel
-      carries that name («repo2 through the tunnel» below).
+      carries that name («repo2 through the tunnel» below). For repo3 the lines read
+      `PGBACKREST_REPO3_…`, and its endpoint is the bare host[:port] its provider
+      assigned.
 
       and pipes it into `pnpm prod:data-secret <live sha>` (step 2 above). For a key
       rotation only the key pair lines go in; `<generate>` over a held pass is refused.
@@ -1036,8 +1038,21 @@ create-access-key` on the operator's workstation, as above. The values never ent
      `ssh -N -L 0.0.0.0:443:s3.ap-southeast-2.idrivee2.com:443 deploy@94.198.221.20`,
      the relay's host key pinned in `repo2-tunnel/known_hosts` (`StrictHostKeyChecking=yes`,
      no trust on first use), keepalives every 15 s (a dead relay ends the session
-     within 45 s), `ExitOnForwardFailure=yes`, and a loop that reconnects 10 s after
-     any exit. Docker's `unless-stopped` restarts a crashed container.
+     within 45 s), `ExitOnForwardFailure=yes`, and a loop that reconnects after 10 s,
+     doubling to a 300 s cap, and from 10 s again once a session held 60 s. A relay
+     that refuses the key (before its line is added, after a NAT address change, a
+     revoked key) then sees one attempt per 5 minutes from the NAT address every VPC
+     machine shares, not one per 10 s that a ban on the relay would answer for all of
+     them. Docker's `unless-stopped` restarts a crashed container.
+   - **The relay's host key.** `repo2-tunnel/known_hosts` pins the relay's ed25519 host
+     key, `SHA256:9gxL0VpC5PAy/UJY56z6Do6D46BTEWRmGSzBmsh/UWo`
+     (`ssh-keygen -lf infra/deploy/compose/data-prod/repo2-tunnel/known_hosts`). The
+     pinned line was compared against the Tech Lead's own `known_hosts` entry for the
+     relay host. On the relay, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints
+     the fingerprint to compare. A relay host-key change is a PR that replaces this line,
+     plus a release. Until that release the tunnel fails closed: ssh refuses the relay
+     (`Host key verification failed` in `docker compose logs repo2-tunnel`), and repo2's
+     spool grows as in any tunnel outage.
    - **The name.** The service carries the network alias
      `s3.ap-southeast-2.idrivee2.com` on its own compose network
      (`ds-data-prod_repo2-tunnel`). The pgbackrest sidecar is the only other container
@@ -1061,9 +1076,39 @@ create-access-key` on the operator's workstation, as above. The values never ent
      the relay):
      `from="<data_prod_egress_ip>",restrict,port-forwarding,permitopen="s3.ap-southeast-2.idrivee2.com:443",command="/usr/sbin/nologin" ssh-ed25519 <public key> ds-data-prod-repo2`.
      `permitopen` is by name, so the forward's target is the name and the relay
-     resolves it.
+     resolves it. The line limits only where the key's local forwards (`-L`) may
+     connect. `port-forwarding` turns remote forwards (`-R`) back on as well, and
+     `authorized_keys` has no `permitlisten` value that denies every listen (it takes
+     `[host:]port` only, sshd(8)). So the relay's owner also confines the key's user in
+     the relay's `sshd_config`:
+
+     ```text
+     Match User <the tunnel's user>
+         AllowTcpForwarding local
+         AllowStreamLocalForwarding no
+         PermitListen none
+         PermitTTY no
+         X11Forwarding no
+         AllowAgentForwarding no
+     ```
+
+     `AllowTcpForwarding local` refuses every `-R`, and `PermitListen none` refuses
+     every listen request on top of it; the key line's `permitopen` still bounds the
+     `-L` target (sshd_config(5)). The block applies to every key of that user, so a
+     dedicated user is better than `deploy`. Moving to one is a PR that changes
+     `relay=` in `tunnel.sh` (and this section), plus a release, before the key line
+     moves to that user.
+
    - **When it runs.** `data-up` (every release) and the data-secret rotation unit
      start the tunnel only once its key exists (`repo2-tunnel: no key yet` otherwise).
+     The service has its own compose profile, `repo2-tunnel`, so a compose command
+     that names no service (`create`, `up -d`, «Apply order» step 7, RECOVERY.md §4)
+     leaves it out, and a box without the key still raises postgres, redis and the
+     sidecar; the tunnel's network is created with the sidecar. Both box paths name the
+     service, which activates its profile:
+     `docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --no-deps repo2-tunnel`.
+     A `down` that names no service leaves the running tunnel (and its network) in
+     place: name it (`docker compose stop repo2-tunnel`) to stop it.
      The rotation unit starts it before its check, so a rotation that turns repo2 on
      checks it through the tunnel. Postgres and pgbackrest never depend on it. Nobody
      waits on it, and a tunnel Docker cannot start is a WARNING line, never a failed
@@ -1071,7 +1116,8 @@ create-access-key` on the operator's workstation, as above. The values never ent
      (cap and gap marker above) and repo1 is unaffected.
    - **Order of turning repo2 on.** (1) A release ships this. (2) The operator
      dispatches `tunnel-key` and hands the relay's owner the public key, its
-     fingerprint and `data_prod_egress_ip`. (3) The relay's owner adds the key line.
+     fingerprint and `data_prod_egress_ip`. (3) The relay's owner adds the key line
+     and the `Match` block.
      (4) The provider-side owner issues the IDrive key and pipes the repo2 lines
      (`PGBACKREST_REPO2_S3_ENDPOINT=s3.ap-southeast-2.idrivee2.com`) into
      `pnpm prod:data-secret`. Its apply on the owner's word starts the tunnel, and its

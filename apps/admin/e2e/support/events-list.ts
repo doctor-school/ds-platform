@@ -25,6 +25,23 @@ export function eventsListAnswer(page: Page) {
 }
 
 /**
+ * A `GET` on the admin's same-origin `/v1/*` proxy as the signed-in operator,
+ * made from the page: the session cookie is `__Host-` (Secure), which the
+ * browser sends to an `http://localhost` stand and `page.request` does not.
+ */
+export async function adminRead<T>(page: Page, path: string): Promise<T> {
+  const answer = await page.evaluate(async (url) => {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    return { status: response.status, body: await response.text() };
+  }, path);
+  expect(answer.status, `GET ${path}: ${answer.body}`).toBe(200);
+  return JSON.parse(answer.body) as T;
+}
+
+/**
  * Open the list narrowed to one event and return the visible table row of it.
  * The slug is read from the event's own admin read on the signed-in session.
  */
@@ -32,9 +49,10 @@ export async function eventListRow(
   page: Page,
   eventId: string,
 ): Promise<Locator> {
-  const answer = await page.request.get(`/v1/admin/events/${eventId}`);
-  expect(answer.ok(), `GET /v1/admin/events/${eventId}`).toBe(true);
-  const { slug } = (await answer.json()) as { slug: string };
+  const { slug } = await adminRead<{ slug: string }>(
+    page,
+    `/v1/admin/events/${eventId}`,
+  );
   await page.goto(`/events?q=${encodeURIComponent(slug)}`);
   const row = page
     .getByRole("row")

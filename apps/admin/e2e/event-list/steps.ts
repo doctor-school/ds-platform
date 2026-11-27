@@ -4,6 +4,7 @@ import { expect, type Page } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 
 import {
+  adminRead,
   eventListSeeds,
   expectListRows,
   listAddress,
@@ -88,9 +89,10 @@ Given(
     const marker = Date.now().toString(36);
     const [first] = eventListSeeds(marker);
     const id = await seedListEvent(page, first!);
-    const read = await page.request.get(`/v1/admin/events/${id}`);
-    expect(read.ok(), `GET /v1/admin/events/${id}`).toBe(true);
-    const event = (await read.json()) as { programPdfRef: string | null };
+    const event = await adminRead<{ programPdfRef: string | null }>(
+      page,
+      `/v1/admin/events/${id}`,
+    );
     expect(event.programPdfRef, "the program PDF is stored").toBeTruthy();
     world.eventList = { marker, ids: { [first!.key]: id } };
   },
@@ -108,15 +110,19 @@ Given(
       "in_archive",
     ]);
     await page.goto("/events");
-    const offered = await filters(page)
-      .getByTestId("events-status")
-      .locator("option")
-      .evaluateAll((options) =>
-        options
-          .map((option) => (option as HTMLOptionElement).value)
-          .filter(Boolean),
-      );
-    expect(offered).toEqual([...EVENT_LIFECYCLE_STATES]);
+    const facet = filters(page).getByTestId("events-status");
+    await expect(facet).toBeVisible();
+    await expect
+      .poll(() =>
+        facet
+          .locator("option")
+          .evaluateAll((options) =>
+            options
+              .map((option) => (option as HTMLOptionElement).value)
+              .filter(Boolean),
+          ),
+      )
+      .toEqual([...EVENT_LIFECYCLE_STATES]);
   },
 );
 
@@ -125,8 +131,10 @@ Given(
   async ({ page, world }) => {
     const [first] = seedsOf(world);
     const id = journey(world).ids[first!.key]!;
-    const read = await page.request.get(`/v1/admin/events/${id}`);
-    const { startsAt } = (await read.json()) as { startsAt: string };
+    const { startsAt } = await adminRead<{ startsAt: string }>(
+      page,
+      `/v1/admin/events/${id}`,
+    );
     expect(new Date(startsAt).toISOString()).toBe(
       new Date(`${first!.startsAtMsk}:00+03:00`).toISOString(),
     );
@@ -266,8 +274,9 @@ When("the operator picks a «по» day before the «с» day", async ({ page })
 Then(
   "the «по» day is refused in place and is not applied",
   async ({ page, world }) => {
+    // The DS FormError leads with its warning glyph.
     await expect(page.getByTestId("events-period-inverted")).toHaveText(
-      "Дата «по» раньше даты «с»",
+      /Дата «по» раньше даты «с»$/,
     );
     const to = page.getByTestId("events-period-to");
     await expect(to).toHaveValue(INVERTED_TO);

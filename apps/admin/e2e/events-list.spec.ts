@@ -2,7 +2,6 @@ import { signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
 import {
   eventListSeeds,
-  eventsListAnswer,
   expectListRows,
   listAddress as address,
   seedListEvent,
@@ -106,9 +105,15 @@ test.describe("007 EARS-14 — the admin event list sorts by date and filters", 
     });
 
     await test.step("a sort change returns to page 1", async () => {
-      const listed = eventsListAnswer(page);
+      // Waits for the page-2 read itself: a read of the previous step may
+      // still be in flight when the address changes.
+      const secondPage = page.waitForResponse(
+        (answer) =>
+          new URL(answer.url()).pathname === "/v1/admin/events" &&
+          new URL(answer.url()).searchParams.get("page") === "2",
+      );
       await page.goto(`${narrowed}&page=2`);
-      expect(new URL((await listed).url()).searchParams.get("page")).toBe("2");
+      expect((await secondPage).ok()).toBe(true);
       await sortHeader(page, "Название").click();
       await expect(page).toHaveURL(/sort=title&dir=asc/);
       expect(address(page)).not.toContain("page=");

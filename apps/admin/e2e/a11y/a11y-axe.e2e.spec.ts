@@ -203,6 +203,15 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.goto("/events");
     for (const theme of THEMES) await scan(page, theme);
 
+    // 007 EARS-14: the list with every facet applied as a chip, and the period
+    // refusal of a «по» before the «с».
+    await page.goto(
+      "/events?q=a&state=published&startsFrom=2027-01-01&sort=title&dir=asc",
+    );
+    await page.getByTestId("events-period-to").fill("2026-12-01");
+    await expect(page.getByTestId("events-period-inverted")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
     const id = await createEventForScan(page);
     await page.goto("/events/create");
     for (const theme of THEMES) await scan(page, theme);

@@ -217,12 +217,15 @@ interface SeedSpec {
   /**
    * #2996: the event's speakers — golden volume experts (index into the first
    * {@link SPEAKER_EXPERT_COUNT}) in presentation order, each with its
-   * event-specific role. Present ⇒ the event's active `event_experts` links are
-   * reconciled to exactly this list; omitted ⇒ its links are left untouched.
+   * programme role and optional per-event caption (012 EARS-31: a moderator is
+   * the role, never caption text). Present ⇒ the event's active `event_experts`
+   * links are reconciled to exactly this list; omitted ⇒ its links are left
+   * untouched.
    */
   readonly speakers?: readonly {
     readonly expert: number;
-    readonly role: string;
+    readonly programRole: SpeakerProgramRole;
+    readonly role: string | null;
   }[];
   /**
    * 006 (#584): the event's stream config the room's EARS-2 player is
@@ -303,8 +306,8 @@ function specs(now: number): SeedSpec[] {
       specialties: ["Кардиология", "Терапия", "Общая врачебная практика"],
       partnerRef: "Партнёр Фарма",
       speakers: [
-        { expert: 0, role: "Спикер" },
-        { expert: 1, role: "Модератор" },
+        { expert: 0, programRole: "speaker", role: "Спикер" },
+        { expert: 1, programRole: "moderator", role: null },
       ],
     },
     {
@@ -470,7 +473,7 @@ function specs(now: number): SeedSpec[] {
       partnerRef: "Партнёр Фарма",
       // 014 EARS-7: ended, nothing published and NO committed day — the
       // UNDATED «запись готовится» plaque.
-      speakers: [{ expert: 2, role: "Спикер" }],
+      speakers: [{ expert: 2, programRole: "speaker", role: "Спикер" }],
     },
     {
       slug: "seed-005-ended-preparing",
@@ -487,8 +490,8 @@ function specs(now: number): SeedSpec[] {
       // operator has committed to a day — the DATED «запись готовится» plaque.
       recordingExpectedInDays: 5,
       speakers: [
-        { expert: 1, role: "Ведущий" },
-        { expert: 3, role: "Спикер" },
+        { expert: 1, programRole: "moderator", role: null },
+        { expert: 3, programRole: "speaker", role: "Спикер" },
       ],
     },
     // ── wave-3 format × seats fixtures (#2996, 020 EARS-8/9/19) ─────────────
@@ -509,7 +512,7 @@ function specs(now: number): SeedSpec[] {
         "Очная встреча клуба: три клинических случая ХСН со сниженной фракцией выброса — титрация квадротерапии, ведение при гипотонии и почечной дисфункции, показания к устройствам. Работа в малых группах, вопросы ведущему по ходу разбора.",
       specialties: ["Кардиология", "Терапия"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ expert: 0, role: "Ведущий" }],
+      speakers: [{ expert: 0, programRole: "speaker", role: "Ведущий" }],
     },
     {
       classification: { ...ACADEMY_FIXTURE, participationFormat: "offline" },
@@ -525,7 +528,7 @@ function specs(now: number): SeedSpec[] {
         "Практическая мастерская на фантомах: доступы к коленному, плечевому и тазобедренному суставам под УЗИ-контролем, типичные ошибки и профилактика осложнений. Группа ограничена числом рабочих мест у аппаратов.",
       specialties: ["Травматология и ортопедия", "Ревматология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ expert: 3, role: "Ведущий" }],
+      speakers: [{ expert: 3, programRole: "speaker", role: "Ведущий" }],
     },
     {
       classification: { ...ACADEMY_FIXTURE, participationFormat: "hybrid" },
@@ -542,8 +545,8 @@ function specs(now: number): SeedSpec[] {
       specialties: ["Эндокринология", "Терапия"],
       partnerRef: "Партнёр Фарма",
       speakers: [
-        { expert: 2, role: "Спикер" },
-        { expert: 1, role: "Модератор" },
+        { expert: 2, programRole: "speaker", role: "Спикер" },
+        { expert: 1, programRole: "moderator", role: null },
       ],
     },
     {
@@ -560,7 +563,7 @@ function specs(now: number): SeedSpec[] {
         "Мигрень, головная боль напряжения и «красные флаги» вторичной головной боли: алгоритм приёма, профилактическая терапия и когда направлять к неврологу. Очные места разобраны — участие онлайн открыто.",
       specialties: ["Неврология", "Терапия"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ expert: 3, role: "Спикер" }],
+      speakers: [{ expert: 3, programRole: "speaker", role: "Спикер" }],
     },
     // ── 014 both-cuts fixture (#1345) ────────────────────────────────────────
     // The ONE эфир that published BOTH cuts: the montage `recordings.projection`
@@ -589,7 +592,7 @@ function specs(now: number): SeedSpec[] {
         embedRef: "0f9e8d7c6b5a493827160f5e4d3c2b1a",
         durationSec: 124 * 60,
       },
-      speakers: [{ expert: 0, role: "Спикер" }],
+      speakers: [{ expert: 0, programRole: "speaker", role: "Спикер" }],
     },
     // ── wave-2 «Прошедшие» widening fixture (#2028, gate row 32) ─────────────
     // An ended эфир a month back with a published montage whose length the
@@ -611,8 +614,8 @@ function specs(now: number): SeedSpec[] {
         durationSec: 72 * 60,
       },
       speakers: [
-        { expert: 3, role: "Спикер" },
-        { expert: 2, role: "Спикер" },
+        { expert: 3, programRole: "speaker", role: "Спикер" },
+        { expert: 2, programRole: "speaker", role: "Спикер" },
       ],
     },
     // ── 014 legacy-archive fixture (#1741) ────────────────────────────────────
@@ -781,8 +784,9 @@ export async function seedEvents(): Promise<void> {
         await reconcileSpeakers(
           db,
           row.id,
-          spec.speakers.map(({ expert, role }, position) => ({
+          spec.speakers.map(({ expert, programRole, role }, position) => ({
             expertId: speakerIds[expert]!,
+            programRole,
             role,
             position,
           })),
@@ -937,9 +941,13 @@ export const SEED_SPEAKER_SLUGS: readonly string[] = Object.freeze(
 
 type SeedDb = ReturnType<typeof createDrizzle>["db"];
 
+type SpeakerProgramRole = (typeof eventExperts.$inferInsert)["programRole"] &
+  string;
+
 interface SpeakerLink {
   readonly expertId: string;
-  readonly role: string;
+  readonly programRole: SpeakerProgramRole;
+  readonly role: string | null;
   readonly position: number;
 }
 
@@ -960,6 +968,7 @@ async function reconcileSpeakers(
     .select({
       id: eventExperts.id,
       expertId: eventExperts.expertId,
+      programRole: eventExperts.programRole,
       role: eventExperts.role,
       position: eventExperts.position,
       status: eventExperts.status,
@@ -973,6 +982,7 @@ async function reconcileSpeakers(
   ): boolean =>
     want !== undefined &&
     link.status === "active" &&
+    link.programRole === want.programRole &&
     link.role === want.role &&
     link.position === want.position;
   const bump = () => ({
@@ -996,6 +1006,7 @@ async function reconcileSpeakers(
         .update(eventExperts)
         .set({
           ...bump(),
+          programRole: want.programRole,
           role: want.role,
           position: want.position,
           status: "active",

@@ -43,7 +43,7 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 //   - `eventId`/`expertId` are NOT patchable. Re-pointing a link would rewrite
 //     history the audit ledger already attributes to the original pair, so a
 //     re-point is `retire` + a new link, not an edit. The update DTO carries
-//     `role` and `position` only.
+//     `programRole`, the optional caption `role` and `position` only (EARS-31).
 //
 // `retire`/`restore` are plain join transitions: no `LifecycleImpact` preview
 // and no `Lifecycle-Impact-Token`. That mechanism belongs to ENTITY retire

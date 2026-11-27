@@ -76,7 +76,7 @@ export function programmeSessionCount(i: number): number {
  * twenty-minute blocks.
  */
 export function programmeSessionMinutes(i: number, k: number): number {
-  return 10 + (((i * 3 + k * 7) % 5) * 5);
+  return 10 + ((i * 3 + k * 7) % 5) * 5;
 }
 
 /**
@@ -116,8 +116,16 @@ export function hasProgramme(state: string, index: number): boolean {
 export interface ProgrammeSpeaker {
   /** «Фамилия Имя Отчество», exactly as the expert row spells it. */
   name: string;
-  /** The event-expert role: Спикер / Модератор / Эксперт. */
-  role: string;
+  /** The link's closed programme role (012 EARS-31). */
+  programRole: "speaker" | "moderator";
+  /** The link's per-event caption above the name; null when it has none. */
+  caption: string | null;
+}
+
+/** How the programme names a speaker's part: the moderator, else the caption. */
+function programmeRoleText(speaker: ProgrammeSpeaker): string {
+  if (speaker.programRole === "moderator") return "модератор";
+  return (speaker.caption ?? "докладчик").toLowerCase();
 }
 
 export interface ProgrammeSpec {
@@ -193,7 +201,8 @@ export interface ProgrammeSession {
 export function programmeSessions(spec: ProgrammeSpec): ProgrammeSession[] {
   const sessions: ProgrammeSession[] = [];
   const speakers = spec.speakers;
-  const moderator = speakers.find((s) => s.role === "Модератор") ?? speakers[0];
+  const moderator =
+    speakers.find((s) => s.programRole === "moderator") ?? speakers[0];
   let cursor = spec.startsAt.getTime();
 
   const count = programmeSessionCount(spec.index);
@@ -206,7 +215,7 @@ export function programmeSessions(spec: ProgrammeSpec): ProgrammeSession[] {
       title: SESSION_TITLE_SOURCE[
         (spec.index * 5 + k * 3) % SESSION_TITLE_SOURCE.length
       ] as string,
-      speaker: speaker ? `${speaker.name}, ${speaker.role.toLowerCase()}` : "",
+      speaker: speaker ? `${speaker.name}, ${programmeRoleText(speaker)}` : "",
     });
     cursor = end;
   }
@@ -243,7 +252,7 @@ export function programmeLines(spec: ProgrammeSpec): string[] {
   }
   lines.push("", "УЧАСТВУЮТ");
   for (const speaker of spec.speakers) {
-    lines.push(`${speaker.name} — ${speaker.role.toLowerCase()}`);
+    lines.push(`${speaker.name} — ${programmeRoleText(speaker)}`);
   }
   lines.push(
     "",

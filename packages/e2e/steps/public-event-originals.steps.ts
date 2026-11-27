@@ -200,6 +200,9 @@ async function createEvent(
   );
   await panel.getByRole("combobox").fill(state.expert!.name.split(" ")[0]!);
   await panel.getByText(state.expert!.name, { exact: true }).click();
+  await admin
+    .getByTestId("event-expert-add-program-role")
+    .selectOption("speaker");
   await admin.getByTestId("event-expert-add-role").fill("Докладчик");
   await admin.getByTestId("event-expert-add-position").fill("1");
   await admin.getByTestId("event-expert-add-submit").click();
@@ -433,7 +436,9 @@ async function requestDraft(world: StepWorld, host: HostConfig): Promise<void> {
     await expect(
       page.locator('meta[name="robots"][content*="noindex"]').first(),
     ).toHaveAttribute("content", /noindex/u);
-    notFound.push(maskNotFoundVariant(await page.getByRole("main").innerText()));
+    notFound.push(
+      maskNotFoundVariant(await page.getByRole("main").innerText()),
+    );
   }
   expect(notFound[0]).toMatch(/\S/u);
   expect(notFound[0]).toBe(notFound[1]);

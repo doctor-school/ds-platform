@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   AdminTaxonomyListQuerySchema,
+  CreateEventExpertRequestSchema,
+  EVENT_EXPERT_PROGRAM_ROLE_LABELS,
+  EVENT_EXPERT_PROGRAM_ROLES,
+  EventExpertAdminDetailSchema,
+  EventExpertAdminListItemSchema,
+  UpdateEventExpertRequestSchema,
   CreateExpertRequestSchema,
   CreateProjectRequestSchema,
   expertDisplayName,
@@ -44,6 +50,7 @@ import {
   PUBLIC_PAGE_SIZE_MAX,
   SLUG_MAX,
 } from "./index.js";
+import { PublicExpertSpeakerSchema } from "../events/events.schema.js";
 
 // 012 EARS-1 (#1283) — the wire-contract half. These are the bounds the Refine
 // form derives its client-side messages from, so a bound asserted here is a
@@ -1026,5 +1033,97 @@ describe("029 public expert count contract", () => {
     expect(
       PublicExpertCountSchema.safeParse({ count: 1, total: 1 }).success,
     ).toBe(false);
+  });
+});
+
+describe("012 EARS-31 — event_experts programme role and optional caption (#4306)", () => {
+  const base = {
+    eventId: "00000000-0000-4000-8000-000000000001",
+    expertId: "00000000-0000-4000-8000-000000000002",
+    position: 0,
+  };
+
+  it("012 EARS-31: a link create requires a programme role from the closed set and refuses any other value", () => {
+    expect(CreateEventExpertRequestSchema.safeParse(base).success).toBe(false);
+    expect(
+      CreateEventExpertRequestSchema.safeParse({ ...base, programRole: "host" })
+        .success,
+    ).toBe(false);
+    for (const programRole of EVENT_EXPERT_PROGRAM_ROLES) {
+      expect(
+        CreateEventExpertRequestSchema.parse({ ...base, programRole }),
+      ).toMatchObject({ programRole });
+    }
+    expect(
+      UpdateEventExpertRequestSchema.safeParse({ programRole: "speaker " })
+        .success,
+    ).toBe(false);
+    expect(
+      UpdateEventExpertRequestSchema.parse({ programRole: "moderator" }),
+    ).toEqual({ programRole: "moderator" });
+  });
+
+  it("012 EARS-31: the caption is optional — absent, null or blank stores none, a written one is trimmed and bounded to 80", () => {
+    const withRole = { ...base, programRole: "speaker" as const };
+    expect(CreateEventExpertRequestSchema.parse(withRole).role).toBeUndefined();
+    expect(
+      CreateEventExpertRequestSchema.parse({ ...withRole, role: null }).role,
+    ).toBeNull();
+    expect(
+      CreateEventExpertRequestSchema.parse({ ...withRole, role: "   " }).role,
+    ).toBeNull();
+    expect(
+      CreateEventExpertRequestSchema.parse({ ...withRole, role: "  к.м.н.  " })
+        .role,
+    ).toBe("к.м.н.");
+    expect(
+      CreateEventExpertRequestSchema.safeParse({
+        ...withRole,
+        role: "x".repeat(81),
+      }).success,
+    ).toBe(false);
+    expect(UpdateEventExpertRequestSchema.parse({ role: "" })).toEqual({
+      role: null,
+    });
+    expect(UpdateEventExpertRequestSchema.parse({})).toEqual({});
+  });
+
+  it("012 EARS-31: the admin projection carries the programme role, the public speaker item carries a nullable caption and no programme role", () => {
+    const detail = {
+      id: base.eventId,
+      eventId: base.eventId,
+      expertId: base.expertId,
+      programRole: "moderator",
+      role: null,
+      position: 0,
+      status: "active",
+      version: 1,
+      createdAt: "2026-11-26T00:00:00.000Z",
+      updatedAt: "2026-11-26T00:00:00.000Z",
+    };
+    expect(EventExpertAdminDetailSchema.parse(detail)).toMatchObject({
+      programRole: "moderator",
+      role: null,
+    });
+    expect(
+      EventExpertAdminDetailSchema.safeParse({ ...detail, programRole: null })
+        .success,
+    ).toBe(false);
+    expect(Object.keys(EventExpertAdminListItemSchema.shape)).toContain(
+      "programRole",
+    );
+    expect(PublicExpertSpeakerSchema.shape.role.safeParse(null).success).toBe(
+      true,
+    );
+    expect(Object.keys(PublicExpertSpeakerSchema.shape)).not.toContain(
+      "programRole",
+    );
+  });
+
+  it("012 EARS-31: each programme role has exactly one Russian name", () => {
+    expect(EVENT_EXPERT_PROGRAM_ROLE_LABELS).toEqual({
+      speaker: "Докладчик",
+      moderator: "Модератор",
+    });
   });
 });

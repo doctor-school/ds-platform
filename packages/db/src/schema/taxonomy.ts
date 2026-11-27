@@ -67,6 +67,16 @@ export const projectExpertRole = pgEnum("project_expert_role", [
 ]);
 
 /**
+ * The closed `event_experts.program_role` set (012-design §2.1, 012 EARS-31).
+ * A DB enum, like `project_expert_role`, so a writer outside the API contract
+ * still cannot store a third value; the free caption stays in `role`.
+ */
+export const eventExpertProgramRole = pgEnum("event_expert_program_role", [
+  "speaker",
+  "moderator",
+]);
+
+/**
  * The authored slug grammar (012-design §2.1): lowercase ASCII words joined by
  * single hyphens. Shared by every taxonomy table's slug CHECK and mirrored by
  * `SlugSchema` in `@ds/schemas` — the DB owns the column constraint, the Zod
@@ -755,10 +765,18 @@ export const eventExperts = pgTable(
       .notNull()
       .references(() => experts.id, { onDelete: "restrict" }),
     /**
-     * The event-specific role of this expert — ordinary trimmed editorial text,
-     * required on every link (EARS-7). `RemoveExpertContent` (#1306) clears it
-     * to null when the person is taken off the site, which is why the column is
-     * nullable at rest while the API contract requires it on write.
+     * The closed programme role of this expert in the event (EARS-31): required
+     * on every API create. The column default exists for the forward migration
+     * that gave every pre-existing link `speaker`.
+     */
+    programRole: eventExpertProgramRole("program_role")
+      .notNull()
+      .default("speaker"),
+    /**
+     * The optional per-event caption shown above the speaker's name — ordinary
+     * trimmed editorial text, 1–80 when present (EARS-7 as amended by
+     * EARS-31). Null when the operator wrote none, and cleared to null by
+     * `RemoveExpertContent` (#1306) when the person is taken off the site.
      */
     role: text("role"),
     /** Presentation order within the event's merged visible speaker projection. */

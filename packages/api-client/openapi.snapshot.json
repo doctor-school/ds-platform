@@ -4206,7 +4206,14 @@
                       ]
                     },
                     "role": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "source": {
                       "const": "expert",

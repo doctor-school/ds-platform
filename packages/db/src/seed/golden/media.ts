@@ -55,6 +55,7 @@ import {
   ordinalFromExpertPhotoKey,
   ordinalFromPartnerLogoKey,
   programmeLines,
+  type ProgrammeSpeaker,
   type ProgrammeSpec,
 } from "./programme.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
@@ -134,12 +135,19 @@ const portraitDir = new URL("./media/portraits/", import.meta.url);
 const feedImageDir = new URL("./media/feed/", import.meta.url);
 const fontDir = new URL("./media/fonts/", import.meta.url);
 
-let fontBytesCache: Promise<{ regular: Uint8Array; semiBold: Uint8Array }> | null =
-  null;
+let fontBytesCache: Promise<{
+  regular: Uint8Array;
+  semiBold: Uint8Array;
+}> | null = null;
 
-function loadFontBytes(): Promise<{ regular: Uint8Array; semiBold: Uint8Array }> {
+function loadFontBytes(): Promise<{
+  regular: Uint8Array;
+  semiBold: Uint8Array;
+}> {
   fontBytesCache ??= (async () => ({
-    regular: new Uint8Array(await readFile(new URL("Inter-Regular.ttf", fontDir))),
+    regular: new Uint8Array(
+      await readFile(new URL("Inter-Regular.ttf", fontDir)),
+    ),
     semiBold: new Uint8Array(
       await readFile(new URL("Inter-SemiBold.ttf", fontDir)),
     ),
@@ -161,12 +169,17 @@ function ordinalOf(id: string): number {
  * the slot function changes underneath it.
  */
 export function goldenProgrammeSpecs(dataset: GoldenDataset): ProgrammeSpec[] {
-  const expertById = new Map(dataset.experts.map((row) => [row.id as string, row]));
+  const expertById = new Map(
+    dataset.experts.map((row) => [row.id as string, row]),
+  );
   const projectTitleById = new Map(
     dataset.projects.map((row) => [row.id as string, row.title as string]),
   );
 
-  const speakersByEvent = new Map<string, { position: number; name: string; role: string }[]>();
+  const speakersByEvent = new Map<
+    string,
+    ({ position: number } & ProgrammeSpeaker)[]
+  >();
   for (const link of dataset.eventExperts) {
     const expert = expertById.get(link.expertId as string);
     if (!expert) continue;
@@ -174,7 +187,8 @@ export function goldenProgrammeSpecs(dataset: GoldenDataset): ProgrammeSpec[] {
     list.push({
       position: link.position as number,
       name: expertFullName(expert),
-      role: link.role as string,
+      programRole: link.programRole ?? "speaker",
+      caption: link.role ?? null,
     });
     speakersByEvent.set(link.eventId as string, list);
   }
@@ -199,7 +213,11 @@ export function goldenProgrammeSpecs(dataset: GoldenDataset): ProgrammeSpec[] {
     }
     const speakers = (speakersByEvent.get(event.id as string) ?? [])
       .sort((a, b) => a.position - b.position)
-      .map(({ name, role }) => ({ name, role }));
+      .map(({ name, programRole, caption }) => ({
+        name,
+        programRole,
+        caption,
+      }));
     specs.push({
       ordinal,
       index: ordinal - GOLDEN_VOLUME_ORDINAL_BASE,
@@ -401,7 +419,10 @@ const LOGO_STRAPLINE = "партнёр Doctor.School";
  * the title, and nothing here reads a clock. Two runs at two pins produce the
  * same bytes, which is what lets the object be planned `if-absent`.
  */
-export function renderPartnerLogoSvg(title: string, ordinal: number): Uint8Array {
+export function renderPartnerLogoSvg(
+  title: string,
+  ordinal: number,
+): Uint8Array {
   const brand = hueHex(ordinal);
   const accent = hueHex(ordinal + 4);
   const mark = initialsOf(title);
@@ -494,7 +515,9 @@ export async function renderProgrammePdf(
   const strong = await doc.embedFont(semiBold, { subset: false });
 
   doc.setTitle(`Программа: ${spec.title}`);
-  doc.setSubject(`${formatMskDate(spec.startsAt)}, ${formatMskTime(spec.startsAt)} МСК`);
+  doc.setSubject(
+    `${formatMskDate(spec.startsAt)}, ${formatMskTime(spec.startsAt)} МСК`,
+  );
   doc.setAuthor(spec.school);
   doc.setProducer(PDF_PRODUCER);
   doc.setCreator(PDF_CREATOR);
@@ -512,7 +535,12 @@ export async function renderProgrammePdf(
       continue;
     }
     const font = style.bold ? strong : body;
-    for (const piece of wrap(line.trimStart(), font, style.size, style.indent)) {
+    for (const piece of wrap(
+      line.trimStart(),
+      font,
+      style.size,
+      style.indent,
+    )) {
       if (y - style.size < MARGIN) {
         page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
         y = PAGE_HEIGHT - MARGIN;
@@ -553,18 +581,53 @@ interface LineStyle {
  */
 function styleOf(position: number, line: string): LineStyle {
   if (position === 0) {
-    return { size: 9, bold: false, muted: true, indent: 0, leading: 1.3, after: 4 };
+    return {
+      size: 9,
+      bold: false,
+      muted: true,
+      indent: 0,
+      leading: 1.3,
+      after: 4,
+    };
   }
   if (position === 1) {
-    return { size: 18, bold: true, muted: false, indent: 0, leading: 1.25, after: 6 };
+    return {
+      size: 18,
+      bold: true,
+      muted: false,
+      indent: 0,
+      leading: 1.25,
+      after: 6,
+    };
   }
   if (/^[А-ЯЁ ]+$/u.test(line)) {
-    return { size: 11, bold: true, muted: false, indent: 0, leading: 1.6, after: 4 };
+    return {
+      size: 11,
+      bold: true,
+      muted: false,
+      indent: 0,
+      leading: 1.6,
+      after: 4,
+    };
   }
   if (line.startsWith("    ")) {
-    return { size: 9, bold: false, muted: true, indent: 14, leading: 1.35, after: 1 };
+    return {
+      size: 9,
+      bold: false,
+      muted: true,
+      indent: 14,
+      leading: 1.35,
+      after: 1,
+    };
   }
-  return { size: 10, bold: false, muted: false, indent: 0, leading: 1.45, after: 2 };
+  return {
+    size: 10,
+    bold: false,
+    muted: false,
+    indent: 0,
+    leading: 1.45,
+    after: 2,
+  };
 }
 
 /** Greedy word wrap at the content width. */

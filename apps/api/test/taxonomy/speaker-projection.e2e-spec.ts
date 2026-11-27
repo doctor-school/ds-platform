@@ -93,19 +93,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       eventId: string;
       expertId: string;
       position: number;
-      role?: string;
+      /** The caption; `null` is a link without one (012 EARS-31). */
+      role?: string | null;
+      programRole?: "speaker" | "moderator";
       status?: "active" | "retired";
     }): Promise<string> {
       const retired = values.status === "retired";
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO event_experts
-           (event_id, expert_id, role, position, status, deleted_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (event_id, expert_id, program_role, role, position, status, deleted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [
           values.eventId,
           values.expertId,
-          values.role ?? "Спикер",
+          values.programRole ?? "speaker",
+          values.role === undefined ? "Спикер" : values.role,
           values.position,
           values.status ?? "active",
           retired ? new Date() : null,
@@ -123,7 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       name: string;
       credentials: string;
       photoUrl: string | null;
-      role: string;
+      role: string | null;
     }
 
     async function speakersEndpoint(key: string): Promise<SpeakerItem[]> {
@@ -433,6 +436,58 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `SELECT to_regclass('public.speaker_migration_cutover') AS n`,
       );
       expect(rows[0]!.n).toBeNull();
+    });
+
+    it("012 EARS-31: the public speaker read carries a link's caption, null for a link without one, and never the programme role", async () => {
+      const event = await insertEvent();
+      const captioned = await insertExpert({
+        family_name: "Подписанный",
+        given_name: "П. П.",
+      });
+      const bare = await insertExpert({
+        family_name: "Безподписи",
+        given_name: "Б. Б.",
+      });
+      await insertLink({
+        eventId: event.id,
+        expertId: captioned,
+        position: 0,
+        role: "к.м.н., доцент кафедры",
+      });
+      await insertLink({
+        eventId: event.id,
+        expertId: bare,
+        position: 1,
+        programRole: "moderator",
+        role: null,
+      });
+
+      for (const items of [
+        await speakersEndpoint(event.slug),
+        await pageSpeakers(event.slug),
+      ]) {
+        expect(items.map((i) => [i.expertId, i.role])).toEqual([
+          [captioned, "к.м.н., доцент кафедры"],
+          [bare, null],
+        ]);
+        for (const item of items) {
+          // Present and null, never absent — and the programme role stays an
+          // admin attribute (showing it publicly is a separate Stage-A change).
+          expect(Object.keys(item).sort()).toEqual([
+            "credentials",
+            "expertId",
+            "expertSlug",
+            "name",
+            "photoUrl",
+            "role",
+            "source",
+          ]);
+        }
+      }
+      expect((await cardSpeakers(event.id))?.map((s) => s.name)).toEqual([
+        "Подписанный П. П.",
+        "Безподписи Б. Б.",
+      ]);
     });
   },
 );

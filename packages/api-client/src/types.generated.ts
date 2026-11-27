@@ -4684,7 +4684,7 @@ export interface components {
                 expertSlug: string;
                 name: string;
                 photoUrl: string | null;
-                role: string;
+                role: string | null;
                 /** @constant */
                 source: "expert";
             }[];

@@ -180,8 +180,17 @@ const VOLUME_VERIFIED_DOCTORS = 8;
 const VOLUME_UNVERIFIED_DOCTORS = 3;
 /** The remaining doctors are soft-deleted (`retired` + `deleted_at`). */
 
-/** Event-expert roles, by presentation slot. */
-const VOLUME_EXPERT_ROLES = ["Спикер", "Модератор", "Эксперт"] as const;
+/**
+ * Event-expert links, by presentation slot: the closed programme role
+ * (012 EARS-31) plus the per-event caption above the name. The moderator slot
+ * carries no caption — «Модератор» is the role, never caption text; a speaker
+ * keeps a caption of its own.
+ */
+const VOLUME_EXPERT_SLOTS = [
+  { programRole: "speaker", role: "Спикер" },
+  { programRole: "moderator", role: null },
+  { programRole: "speaker", role: "Эксперт" },
+] as const;
 
 /**
  * How far the season reaches, in whole weeks around the pin's own Monday.
@@ -722,9 +731,10 @@ function buildProjects(at: At): NewProject[] {
  *
  * Two is the floor because one is not a panel: the owner's Stage-B verdict on
  * PR #2216 named single-speaker эфиры as part of what made the stand read as a
- * fixture. The first two strides always fire, so `VOLUME_EXPERT_ROLES` puts a
- * Модератор in position 1 on EVERY event; the third and fourth add an Эксперт
- * and a second Спикер on a schedule that is neither constant nor aligned.
+ * fixture. The first two strides always fire, so `VOLUME_EXPERT_SLOTS` puts a
+ * `moderator` in position 1 on EVERY event; the third and fourth add a speaker
+ * captioned «Эксперт» and a second «Спикер» on a schedule that is neither
+ * constant nor aligned.
  *
  * The strides are what make the distribution even without a random generator —
  * every expert ends up on dozens of events, so an expert page is never a
@@ -778,9 +788,7 @@ function buildEventExperts(
           GOLDEN_GROUP.experts,
           GOLDEN_VOLUME_ORDINAL_BASE + slot,
         ),
-        role: VOLUME_EXPERT_ROLES[
-          position % VOLUME_EXPERT_ROLES.length
-        ] as string,
+        ...VOLUME_EXPERT_SLOTS[position % VOLUME_EXPERT_SLOTS.length]!,
         position,
         status: "active",
         version: 1,

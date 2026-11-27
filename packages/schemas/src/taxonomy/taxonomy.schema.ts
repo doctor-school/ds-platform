@@ -741,16 +741,37 @@ export const EVENT_EXPERT_ROLE_MAX = 80;
 export const EVENT_EXPERT_POSITION_MIN = 0;
 export const EVENT_EXPERT_POSITION_MAX = 32767;
 
+/** The closed `event_experts.program_role` set (012-design §2.1, EARS-31). */
+export const EVENT_EXPERT_PROGRAM_ROLES = ["speaker", "moderator"] as const;
+export const EventExpertProgramRoleSchema = z.enum(EVENT_EXPERT_PROGRAM_ROLES);
+export type EventExpertProgramRole = z.infer<
+  typeof EventExpertProgramRoleSchema
+>;
+
 /**
- * The event-specific role — trimmed 1–80 (012-design §2.2). Trim happens BEFORE
- * the length check, so a whitespace-only role is a length failure rather than a
- * stored blank; the DB CHECK mirrors the same bounds.
+ * The Russian name of each programme role (012 EARS-31) — one map for every
+ * surface, so a role is never named two ways.
  */
-const EventExpertRoleSchema = z
+export const EVENT_EXPERT_PROGRAM_ROLE_LABELS: Record<
+  EventExpertProgramRole,
+  string
+> = {
+  speaker: "Докладчик",
+  moderator: "Модератор",
+};
+
+/**
+ * The optional per-event caption shown above the speaker's name, carried in
+ * the `role` field (012-design §2.2, EARS-31). Trimmed, at most 80 characters;
+ * an empty or whitespace-only caption is no caption and becomes `null`, so a
+ * stored caption is always 1–80 characters — the DB CHECK mirrors those bounds.
+ */
+const EventExpertCaptionSchema = z
   .string()
   .trim()
-  .min(EVENT_EXPERT_ROLE_MIN)
-  .max(EVENT_EXPERT_ROLE_MAX);
+  .max(EVENT_EXPERT_ROLE_MAX)
+  .transform((v) => (v.length < EVENT_EXPERT_ROLE_MIN ? null : v))
+  .nullable();
 
 /**
  * `position` is an integer step 1 from 0 through 32767 (012-design §2.2) — the
@@ -774,7 +795,10 @@ export const CreateEventExpertRequestSchema = z
   .object({
     eventId: TaxonomyIdSchema,
     expertId: TaxonomyIdSchema,
-    role: EventExpertRoleSchema,
+    /** EARS-31 — required; only `speaker` or `moderator`. */
+    programRole: EventExpertProgramRoleSchema,
+    /** EARS-31 — the optional caption; absent, null or blank stores none. */
+    role: EventExpertCaptionSchema.optional(),
     position: EventExpertPositionSchema,
   })
   .strict();
@@ -792,7 +816,9 @@ export type CreateEventExpertRequest = z.infer<
  */
 export const UpdateEventExpertRequestSchema = z
   .object({
-    role: EventExpertRoleSchema.optional(),
+    programRole: EventExpertProgramRoleSchema.optional(),
+    /** Omitted = unchanged; `null` or a blank caption clears it (EARS-31). */
+    role: EventExpertCaptionSchema.optional(),
     position: EventExpertPositionSchema.optional(),
   })
   .strict();
@@ -805,7 +831,12 @@ export const EventExpertAdminDetailSchema = z.object({
   id: TaxonomyIdSchema,
   eventId: TaxonomyIdSchema,
   expertId: TaxonomyIdSchema,
-  /** Null only after §2.4's editorial removal cleared it (#1306). */
+  /** The closed programme role (EARS-31). */
+  programRole: EventExpertProgramRoleSchema,
+  /**
+   * The optional caption (EARS-31): null when none was written, or after §2.4's
+   * editorial removal cleared it (#1306).
+   */
   role: z.string().nullable(),
   position: z.number().int(),
   status: RelationshipStatusSchema,
@@ -822,6 +853,7 @@ export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick(
     id: true,
     eventId: true,
     expertId: true,
+    programRole: true,
     role: true,
     position: true,
     status: true,
@@ -873,7 +905,8 @@ export type PublicExpertCount = z.infer<typeof PublicExpertCountSchema>;
  * item shape it must produce.
  */
 export const PublicEventExpertItemSchema = PublicExpertSummarySchema.extend({
-  role: z.string(),
+  /** The link's optional caption (EARS-31) — null when none was written. */
+  role: z.string().nullable(),
   position: z.number().int(),
 });
 export type PublicEventExpertItem = z.infer<typeof PublicEventExpertItemSchema>;

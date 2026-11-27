@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
@@ -23,6 +25,56 @@ import { selectRelationshipCombobox } from "./support/relationship-combobox";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
  *     e2e/taxonomy-event-experts.spec.ts --config=playwright.flows.config.ts
  */
+
+/**
+ * `E2E_SHOT_DIR` opts into the approved-non-canvas `responsive-web` evidence
+ * of 012 EARS-31 (`feature-012-event-expert-role-admin-v1`). An evidence run
+ * goes on a fresh branch database, so it authors production-shaped names
+ * without the uniqueness stamp an ordinary re-run needs.
+ */
+const SHOT_DIR = process.env.E2E_SHOT_DIR;
+
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(
+      /[\d.]+/g,
+    );
+    if (!channels || channels.length < 3) return false;
+    const [r, g, b] = channels.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
+/** The four renders of one state: desktop/mobile × light/dark. */
+async function shots(page: Page, name: string, both = true): Promise<void> {
+  if (!SHOT_DIR) return;
+  await mkdir(SHOT_DIR, { recursive: true });
+  const viewports = both
+    ? ([
+        ["desktop", { width: 1440, height: 900 }],
+        ["mobile", { width: 390, height: 844 }],
+      ] as const)
+    : ([["desktop", { width: 1440, height: 900 }]] as const);
+  for (const [device, size] of viewports) {
+    await page.setViewportSize(size);
+    for (const palette of ["light", "dark"] as const) {
+      await setPalette(page, palette);
+      await page.screenshot({
+        path: path.join(SHOT_DIR, `${name}-${device}-${palette}.png`),
+        fullPage: true,
+        // A field just cleared of its error is still easing out of the error
+        // tint; the capture records the settled state, not the transition.
+        animations: "disabled",
+      });
+    }
+  }
+  await setPalette(page, "light");
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
 
 /** A real event through the real 007 create form; returns its id. */
 async function createEvent(page: Page, title: string): Promise<string> {
@@ -107,6 +159,9 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
       eventTitle,
       eventTitle,
     );
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("speaker");
     await page.getByTestId("event-expert-add-role").fill("Докладчик");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
@@ -117,27 +172,36 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(page.getByTestId("event-experts-panel")).toContainText(
       eventTitle,
     );
+    await expect(
+      page.locator('[data-testid^="event-expert-program-role-"]'),
+    ).toHaveText("Докладчик");
   });
 
-  test("012 EARS-7: an operator links, corrects, retires and restores an expert on a real event", async ({
+  test("012 EARS-7: an operator links (EARS-31 role + caption), corrects, retires and restores an expert on a real event", async ({
     page,
   }) => {
     await signInAsAdmin(page);
 
     const stamp = Date.now();
+    const tag = SHOT_DIR ? "" : `-${stamp}`;
     const firstExpert = await createExpert(
       page,
-      `Петров-${stamp}`,
-      "Иван",
-      "Ильич",
+      `Смирнов${tag}`,
+      "Павел",
+      "Олегович",
     );
     const secondExpert = await createExpert(
       page,
-      `Орлова-${stamp}`,
-      "Мария",
-      "Игоревна",
+      `Волкова${tag}`,
+      "Ольга",
+      "Николаевна",
     );
-    const eventId = await createEvent(page, `Кардиофорум ${stamp}`);
+    const eventId = await createEvent(
+      page,
+      SHOT_DIR
+        ? "Острый коронарный синдром: разбор клинических случаев"
+        : `Кардиофорум ${stamp}`,
+    );
 
     // ── Reach the editor through the chrome, on the event it belongs to ────
     await page.goto(`/events/${eventId}`);
@@ -155,15 +219,29 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
       .getByTestId("event-expert-add-form")
       .waitFor({ state: "visible" });
     await page.getByTestId("event-expert-add-submit").click();
-    // Nothing chosen, no role, no slot — three RU sentences, three fixes.
+    // Nothing chosen, no role, no slot — three RU sentences, three fixes. The
+    // programme role starts EMPTY (EARS-31): the operator must choose, and the
+    // select offers exactly the closed pair — no free-text role exists.
+    await expect(page.getByTestId("event-expert-add-program-role")).toHaveValue(
+      "",
+    );
+    await expect(
+      page.getByTestId("event-expert-add-program-role").locator("option"),
+    ).toHaveText(["Выберите роль", "Докладчик", "Модератор"]);
     await expect(page.getByText("Выберите эксперта из списка.")).toBeVisible();
-    await expect(page.getByText("Обязательное поле.")).toBeVisible();
+    await expect(
+      page.getByText("Выберите роль: докладчик или модератор."),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("event-expert-add-program-role"),
+    ).toHaveAttribute("aria-invalid", "true");
+    await shots(page, "admin-link-dialog-refused", false);
     await expect(
       page.getByText("Место — целое число от 0 до 32767."),
     ).toBeVisible();
     await expect(page.getByTestId("event-expert-add-form")).toBeVisible();
 
-    // Role over the 80-character bound is its own sentence, not «обязательное».
+    // The optional caption over the 80-character bound is its own sentence.
     await page.getByTestId("event-expert-add-role").fill("х".repeat(81));
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
@@ -174,7 +252,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     // The slot box is TEXT holding an integer: a word, a blank and an exponent
     // are one fix; over the cap is another. `Number(" ")` is 0 and `Number("1e3")`
     // is 1000, so both would otherwise pass as a slot nobody typed.
-    await page.getByTestId("event-expert-add-role").fill("Модератор");
+    await page.getByTestId("event-expert-add-role").fill("");
     for (const bad of ["не число", "   ", "1e3", "-1"]) {
       await page.getByTestId("event-expert-add-position").fill(bad);
       await page.getByTestId("event-expert-add-submit").click();
@@ -189,19 +267,33 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     ).toBeVisible();
     await expect(page.getByTestId("event-expert-add-form")).toBeVisible();
     await page.keyboard.press("Escape");
+    // Nothing was created by any refused submit.
+    await expect(page.getByTestId("event-experts-empty")).toBeVisible();
 
     // ── Accept branch: the link is authored through the selector ───────────
+    // Модератор with a caption above the name (EARS-31).
     await openAddDialog(page, firstExpert.name);
-    await page.getByTestId("event-expert-add-role").fill("Модератор");
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("moderator");
+    await page
+      .getByTestId("event-expert-add-role")
+      .fill("Заведующий кафедрой кардиологии");
     await page.getByTestId("event-expert-add-position").fill("1");
+    await shots(page, "admin-link-dialog");
     await page.getByTestId("event-expert-add-submit").click();
     await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Эксперт привязан к мероприятию.",
     );
-    const row = page.getByTestId("event-experts-active").locator("section");
-    await expect(row).toHaveCount(1);
-    await expect(row).toContainText(firstExpert.name);
-    await expect(row).toContainText("Модератор");
+    const rows = page.getByTestId("event-experts-active").locator("section");
+    const row = rows.filter({ hasText: firstExpert.name });
+    await expect(rows).toHaveCount(1);
+    await expect(
+      row.locator('[data-testid^="event-expert-program-role-"]'),
+    ).toHaveText("Модератор");
+    await expect(row.locator('[data-testid^="event-expert-role-"]')).toHaveText(
+      "Заведующий кафедрой кардиологии",
+    );
     await expect(row).toContainText("Активна");
     // 012 EARS-24 (#1607): after the cutover `event_experts` IS the single
     // source of an эфир's speakers — there is no legacy free-text list left to
@@ -210,7 +302,9 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
 
     // ── Server refusal 1: the slot is taken (SPEAKER_POSITION_OCCUPIED) ────
     await openAddDialog(page, secondExpert.name);
-    await page.getByTestId("event-expert-add-role").fill("Докладчик");
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("speaker");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
     await expect(page.getByTestId("event-experts-command-error")).toContainText(
@@ -222,15 +316,38 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
 
     // ── Server refusal 2: the pair already exists (RELATIONSHIP_CONFLICT) ──
     await openAddDialog(page, firstExpert.name);
-    await page.getByTestId("event-expert-add-role").fill("Докладчик");
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("speaker");
     await page.getByTestId("event-expert-add-position").fill("2");
     await page.getByTestId("event-expert-add-submit").click();
     await expect(page.getByTestId("event-experts-command-error")).toContainText(
       "Этот эксперт уже привязан к мероприятию",
     );
 
-    // ── Edit: the expert is a FACT, only role and slot are authored ────────
-    await page.locator('[data-testid^="event-expert-edit-"]').first().click();
+    // Докладчик with NO caption: the caption is optional (EARS-31), and the
+    // card shows the role with the caption labelled as not set.
+    await openAddDialog(page, secondExpert.name);
+    await page
+      .getByTestId("event-expert-add-program-role")
+      .selectOption("speaker");
+    await page.getByTestId("event-expert-add-position").fill("2");
+    await page.getByTestId("event-expert-add-submit").click();
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
+      "Эксперт привязан к мероприятию.",
+    );
+    await expect(rows).toHaveCount(2);
+    const secondRow = rows.filter({ hasText: secondExpert.name });
+    await expect(
+      secondRow.locator('[data-testid^="event-expert-program-role-"]'),
+    ).toHaveText("Докладчик");
+    await expect(
+      secondRow.locator('[data-testid^="event-expert-role-"]'),
+    ).toHaveText("—");
+    await shots(page, "admin-link-list-roles");
+
+    // ── Edit: the expert is a FACT; role, caption and slot are authored ────
+    await row.locator('[data-testid^="event-expert-edit-"]').click();
     const editForm = page.locator('[data-testid$="-form"]').last();
     await editForm.waitFor({ state: "visible" });
     await expect(editForm).toContainText(firstExpert.name);
@@ -239,23 +356,29 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
         exact: false,
       }),
     ).toBeVisible();
-    await page
-      .locator('[data-testid^="event-expert-edit-"][data-testid$="-role"]')
-      .fill("Модератор секции");
-    await page
-      .locator('[data-testid^="event-expert-edit-"][data-testid$="-submit"]')
-      .click();
+    // The edit opens on what is stored: Модератор and the caption.
+    const editRole = editForm.locator('select[data-testid$="-program-role"]');
+    const editCaption = editForm.locator('input[data-testid$="-role"]');
+    await expect(editRole).toHaveValue("moderator");
+    await expect(editCaption).toHaveValue("Заведующий кафедрой кардиологии");
+    await shots(page, "admin-link-edit", false);
+    await editRole.selectOption("speaker");
+    await editCaption.fill("Профессор, д.м.н.");
+    await editForm.locator('[data-testid$="-submit"]').click();
     await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Изменения сохранены.",
     );
     await page.reload();
     await page.getByTestId("tab-experts").click();
     await expect(
-      page.getByTestId("event-experts-active").locator("section"),
-    ).toContainText("Модератор секции");
+      row.locator('[data-testid^="event-expert-program-role-"]'),
+    ).toHaveText("Докладчик");
+    await expect(row.locator('[data-testid^="event-expert-role-"]')).toHaveText(
+      "Профессор, д.м.н.",
+    );
 
     // ── Retire → restore round-trip, both behind an answered confirmation ──
-    await page
+    await row
       .locator('[data-testid^="event-expert-"][data-testid$="-retire"]')
       .click();
     await page.getByRole("alertdialog").waitFor({ state: "visible" });
@@ -266,7 +389,8 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
       "Связь отозвана.",
     );
     // The row leaves the active list but is NOT deleted — it is behind the toggle.
-    await expect(page.getByTestId("event-experts-empty")).toBeVisible();
+    await expect(rows).toHaveCount(1);
+    await expect(row).toHaveCount(0);
     // The DS Switch keeps its input `sr-only` under the label that carries the
     // visible track, so a user's click lands on the LABEL — `check()` would aim
     // at the hidden input and be intercepted by the track it draws.
@@ -289,12 +413,8 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Связь возвращена.",
     );
-    await expect(
-      page.getByTestId("event-experts-active").locator("section"),
-    ).toHaveCount(1);
-    await expect(
-      page.getByTestId("event-experts-active").locator("section"),
-    ).toContainText("Активна");
+    await expect(rows).toHaveCount(2);
+    await expect(row).toContainText("Активна");
   });
 
   test("012 EARS-7: a failed collection read shall render the RU error state, never a white screen (#1590)", async ({

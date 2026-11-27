@@ -162,8 +162,11 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // does not say what to do, while «выберите эксперта из списка» does. The place
   // box is a TEXT box holding an integer slot: empty / non-numeric / negative all
   // share one fix (type a whole number in range), while an over-cap value is its
-  // own sentence. The role box falls through to required/maxLength below.
+  // own sentence. The programme role (EARS-31) is a closed two-value SELECT, so
+  // «nothing chosen» names the two choices. The optional caption box can only be
+  // too long, and falls through to maxLength below.
   if (has("expertId")) return t("expert");
+  if (has("programRole")) return t("programRole");
   if (has("positionText")) {
     return issue.code === "too_big" ? t("positionMax") : t("position");
   }

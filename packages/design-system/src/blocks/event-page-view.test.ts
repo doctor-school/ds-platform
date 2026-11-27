@@ -393,6 +393,17 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(cards[1]?.photoUrl).toBeUndefined();
   });
 
+  it("012 EARS-31: a speaker whose link carries no caption maps to a card with no role kicker", () => {
+    const [first, second] = VIEW.speakers;
+    const cards = eventSpeakerCards({
+      ...VIEW,
+      speakers: [first!, { ...second!, role: null }],
+    });
+    expect(cards[0]?.roleKicker).toBe("Травматолог-ортопед");
+    expect(cards[1]?.roleKicker).toBeNull();
+    expect(cards[1]).toMatchObject({ name: "Анна Петрова", initials: "АП" });
+  });
+
   it("020 EARS-1: no speaker card links out to an expert page neither host owns yet", () => {
     for (const card of eventSpeakerCards(VIEW)) {
       expect(card.href).toBeUndefined();

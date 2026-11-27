@@ -110,6 +110,7 @@ erDiagram
     uuid id PK
     uuid event_id FK
     uuid expert_id FK
+    event_expert_program_role program_role
     text role
     int position
     relationship_status status
@@ -131,7 +132,7 @@ The omitted joins use the same envelope: UUID id, their two endpoint FKs, `activ
 
 ### 2.1 Database constraints
 
-- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_expert_role = curator | member`. A project's `stage` / `stage_note` and its results are 030's (030 EARS-1, EARS-2); `project_kind = school | media | program` types only the read-only `legacy_kind` hint (030 EARS-17) and no write sets it.
+- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_expert_role = curator | member`; `event_expert_program_role = speaker | moderator` is the required programme role of an `event_experts` link (requirements EARS-31), NOT NULL with the column default `speaker` its forward migration used to give every pre-existing link `speaker`. A project's `stage` / `stage_note` and its results are 030's (030 EARS-1, EARS-2); `project_kind = school | media | program` types only the read-only `legacy_kind` hint (030 EARS-17) and no write sets it.
 - CHECK constraints bind lifecycle to deletion timestamp: top rows `(status = 'retired') = (deleted_at IS NOT NULL)`; joins `(status = 'retired') = (deleted_at IS NOT NULL)`.
 - Every FK is the default `NO ACTION` or explicit `RESTRICT`; no cascade appears in generated migration SQL.
 - Unique `(project_id, expert_id)`, `(event_id, project_id)`, `(event_id, expert_id)`, `(project_id, partner_id)`, `(event_id, topic_id)` include retained rows while their endpoints are present. A partial unique index permits at most one active `project_experts(role='curator')` per project; another permits at most one active `project_partners(is_primary=true)` per project.
@@ -167,7 +168,7 @@ The cutover is one release, and the manual pass follows it:
 
    Those last two columns are the difference between a row that renders and one that does not, and neither has a server-side helper on this path. The collision-safe slug generator of §3 lives inside the create mutation, which a direct `INSERT` bypasses, so the Tech Lead authors each slug by hand in the canonical form that generator produces — lowercase kebab-case matching `^[a-z0-9]+(-[a-z0-9]+)*$`, never a bare UUID, unique across `experts`, disambiguated by a numeric suffix when two people would collide. That slug is the Expert's permanent public link and is never reused (§2.4), so it is carried in the mapping table and reviewed there before the pass, not improvised at the prompt. Rows also default to `draft` while the public projection is default-deny on non-published Experts, so each `experts` row is inserted `published` with a non-null `first_published_at`; the `experts_published_has_first_published_at` check refuses that state without the instant, and skipping it would leave sixteen draft Experts and empty event cards. The admin Expert form is not the mechanism, and no migration-specific route, table or admin screen is introduced. The feature-010 row-level audit trigger (`audit_row_change`, migration 0013) fires on these direct statements too: the session sets `app.actor_sub` to the Tech Lead and `app.source = 'manual-dba'`, so the audit trail names the actor, and the executed statements are additionally recorded in the deploy record. An Expert already linked to another event is reusable; only the retained duplicate pair `(event_id, expert_id)` is refused.
 
-   The mapping table also fixes the regalia split. `experts.credentials` takes the fullest legacy regalia variant recorded for that person. `event_experts.role` (required, ≤80 characters) takes the per-event legacy regalia verbatim when it fits, and its first comma-clause otherwise. A legacy row with empty regalia gets the role «Спикер».
+   The mapping table also fixes the regalia split. `experts.credentials` takes the fullest legacy regalia variant recorded for that person. `event_experts.role` (required, ≤80 characters) takes the per-event legacy regalia verbatim when it fits, and its first comma-clause otherwise. A legacy row with empty regalia gets the role «Спикер». _Read under requirements «Amendment — 2026-11-26»: `role` is now the link's optional caption, and `program_role` its required programme role (EARS-31)._
 
 3. **Owner look.** The Product Lead looks at the live event cards, exactly as after any other deploy. There is no confirmation gate between steps and no second release.
 
@@ -250,7 +251,7 @@ As defense in depth, public project reads repeat the eligibility predicate and f
 
 The Expert form owns one narrow selector read: `GET /v1/admin/experts/eligible-users?q&page&pageSize&currentExpertId`. It searches the active retained User mirror by operator-visible `display_name`, `email` or `phone`, returns stable offset pages ordered by nullable display name, a required identifier and User id, and projects exactly `{ id, displayName, identifier }`. `identifier` is `email` when present and otherwise `phone`; the `users_email_or_phone` invariant makes it non-null even for a phone-only User whose display name is null. A User linked to another retained Expert is absent; `currentExpertId` admits only that Expert's existing link so an edit does not erase its selected option. The read is advisory: the User-row lock plus `experts.user_id` uniqueness remains authoritative under a race. Separate contact fields, role, IdP subject and Expert-name matching never enter this read. EARS-23 still owns the shared combobox interaction behaviour; this section owns only EARS-19's data contract.
 
-`event_experts(event_id, expert_id, role, position)` is the sole current speaker model. The one-off manual migration and the code cutover are defined in §2.3; runtime projection never joins legacy rows or compares names.
+`event_experts(event_id, expert_id, program_role, role, position)` is the sole current speaker model. The one-off manual migration and the code cutover are defined in §2.3; runtime projection never joins legacy rows or compares names. _Read under requirements «Amendment — 2026-11-26»: `role` is the link's optional caption, and `program_role` its required programme role (EARS-31)._
 
 ### 4.1 Shared authoring composition
 

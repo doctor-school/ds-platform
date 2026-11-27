@@ -12,7 +12,8 @@ type Speaker = {
   name: string;
   credentials: string;
   photoUrl: string | null;
-  role: string;
+  // 012 EARS-31: the per-event caption is optional; a link without one reads null.
+  role: string | null;
 };
 type Recording = {
   state: string;
@@ -107,9 +108,9 @@ function expectCanonical(speakers: Speaker[]) {
       speaker.expertSlug,
       speaker.name,
       speaker.credentials,
-      speaker.role,
     ])
       expect(value).toMatch(/\S/u);
+    if (speaker.role !== null) expect(speaker.role).toMatch(/\S/u);
   }
 }
 async function projectedSpeakers(request: APIRequestContext, slug: string) {
@@ -130,7 +131,7 @@ async function expectSpeakerCards(page: Page, speakers: Speaker[]) {
     await expect(card).toBeVisible();
     await expect(card).toContainText(speaker.name);
     await expect(card).toContainText(speaker.credentials);
-    await expect(card).toContainText(speaker.role);
+    if (speaker.role !== null) await expect(card).toContainText(speaker.role);
   }
 }
 async function serverText(

@@ -68,31 +68,31 @@ Feature: 034 — Investors, slice 1: the «Как это работает» page
     Then the page shows «Запрос отправлен»
     And exactly one application of kind "investor" is stored
 
-  @EARS-6 @rule
+  @EARS-6 @rule @proof:api
   Scenario: A replayed intake creates nothing new
     Given an investor request was accepted with idempotency key "K"
     When the same body is posted again with key "K"
     Then the answer is the same "201" result
     And no second application is stored
 
-  @EARS-6 @rule
+  @EARS-6 @rule @proof:api
   Scenario: The same key with another body is refused
     Given an investor request was accepted with idempotency key "K"
     When a different body is posted with key "K"
     Then the intake answers "422 IDEMPOTENCY_KEY_REUSED"
 
-  @EARS-6 @rule
+  @EARS-6 @rule @proof:api
   Scenario: The intake refuses a request without a bot-protection proof
     When a body is posted to "POST /v1/public/applications/investor" without a bot-protection proof
     Then the intake answers "BOT_PROTECTION_REQUIRED"
     And no application is stored
 
-  @EARS-4 @rule
+  @EARS-4 @rule @proof:api
   Scenario: A stale consent version is refused
     When a body carrying a consent version tag other than the current one is posted to the investor intake
     Then the intake answers "400" with a field error on the consent
 
-  @EARS-9 @rule
+  @EARS-9 @rule @proof:api
   Scenario: A failed receipt never loses the request
     Given the mailer fails
     When a valid investor request is posted
@@ -109,7 +109,7 @@ Feature: 034 — Investors, slice 1: the «Как это работает» page
     When the administrator moves it to «На рассмотрении» and adds a note
     Then the status and the note are stored under the administrator
 
-  @EARS-12 @rule
+  @EARS-12 @rule @proof:api
   Scenario: An investor request is erased at term
     Given an investor request closed one year ago
     When the daily purge runs

@@ -104,10 +104,12 @@ idempotent conditional updates.
 mutations (the global admin guards, before validation); the 012 admin problem
 shape (`TaxonomyProblemFilter`, extended for the two queue codes).
 
-- `GET /v1/admin/applications?kind&status&cursor&limit` — `{ items, nextCursor }`,
+- `GET /v1/admin/applications?kind&status&cursor&limit` — `{ items, nextCursor, kinds }`,
   newest first by `(submitted_at, id)`; the cursor is opaque (microsecond
   keyset, `400 CURSOR_INVALID` otherwise). `teamNotified` is `false` for any
-  team notice that is not `sent` («Команда не уведомлена»).
+  team notice that is not `sent` («Команда не уведомлена»). `kinds` is the
+  kinds table's `{ kind, label, filterLabel }`: rows carry `label`
+  («Инвестор»), the «Вид» filter offers `filterLabel` («Инвесторы»).
 - `GET /v1/admin/applications/{id}` — the labelled fields, the consent, the
   notice outcomes, the applicant (an author's account read LIVE: current
   display name, email, phone — never copied), the notes oldest first, the
@@ -137,10 +139,11 @@ Both tables carry the 010 capture trigger; `payload`, `contact`,
 ## Adding a kind (the 034 seam)
 
 Extend `APPLICATION_KINDS` in `@ds/schemas`, add the kind's entry to
-`APPLICATION_KIND_TABLE`, widen `applications_kind_check` in a migration, and
-add the kind's entry to `APPLICATION_ADMIN_VIEWS` (its labelled fields and
-contact for the admin detail) and the kind's intake. Storage, retention,
-erasure and audit need no change.
+`APPLICATION_KIND_TABLE` (its admin `label` and «Вид» `filterLabel` too),
+widen `applications_kind_check` in a migration, and add the kind's entry to
+`APPLICATION_ADMIN_VIEWS` (its labelled fields and contact for the admin
+detail) and the kind's intake. Storage, retention, erasure and audit need no
+change.
 
 ## Notifications (EARS-11, EARS-12)
 

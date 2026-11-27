@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AdminApplicationKindOptionSchema,
   AdminApplicationListPageSchema,
   AdminApplicationListQuerySchema,
   AdminApplicationNoteCreateSchema,
@@ -38,9 +39,29 @@ describe("033 admin «Заявки» contract", () => {
     expect(
       AdminApplicationListPageSchema.parse({
         ...page,
-        kinds: [{ kind: "author", label: "Автор" }],
+        kinds: [{ kind: "author", label: "Автор", filterLabel: "Автор" }],
       }).kinds,
-    ).toEqual([{ kind: "author", label: "Автор" }]);
+    ).toEqual([{ kind: "author", label: "Автор", filterLabel: "Автор" }]);
+  });
+
+  it("034 EARS-10: a «Вид» option carries the filter text beside the row label — «Инвесторы» for the «Инвестор» kind", () => {
+    expect(
+      AdminApplicationKindOptionSchema.parse({
+        kind: "investor",
+        label: "Инвестор",
+        filterLabel: "Инвесторы",
+      }),
+    ).toEqual({
+      kind: "investor",
+      label: "Инвестор",
+      filterLabel: "Инвесторы",
+    });
+    expect(
+      AdminApplicationKindOptionSchema.safeParse({
+        kind: "investor",
+        label: "Инвестор",
+      }).success,
+    ).toBe(false);
   });
 
   it("EARS-15: the status move requires the outcome exactly when closing and never admits `expired`", () => {

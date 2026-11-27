@@ -3938,6 +3938,7 @@ export interface components {
                 teamNotified: boolean;
             }[];
             kinds: {
+                filterLabel: string;
                 /** @enum {string} */
                 kind: "author" | "partnership" | "investor";
                 label: string;

@@ -13,6 +13,8 @@ import {
   AdminApplicationNoteSchema,
   APPLICATION_NOTE_ERASED_SENTINEL,
   AUTHOR_APPLICATION_PERSONAL_DATA_PURPOSE,
+  INVESTOR_REQUEST_CONSENT_PURPOSE,
+  INVESTOR_REQUEST_CONSENT_VERSION_TAG,
   PARTNERSHIP_CONSENT_PURPOSE,
   PARTNERSHIP_CONSENT_VERSION_TAG,
 } from "@ds/schemas";
@@ -143,6 +145,53 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.id;
     }
 
+    /**
+     * 034 EARS-10 — an investor request as the public intake stores it
+     * (`investor-intake.e2e-spec.ts`): no applicant account, the contact as
+     * sent, the organisation as the subject line, the fixed consent tick.
+     */
+    const INVESTOR = {
+      organisation: "ООО «Партнёр А»",
+      fullName: "Анна Петрова",
+      role: "Директор по развитию",
+      phone: "+7 900 000-00-00",
+      task: "Хотим войти в проект школы кардиологов",
+    };
+    async function investorRequest(): Promise<{
+      id: string;
+      email: string;
+      submittedAt: Date;
+    }> {
+      clock += 1000;
+      const submittedAt = new Date(clock);
+      const email = `investor-${randomUUID().slice(0, 8)}@partner-a.test`;
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO applications
+           (kind, status, payload, contact, subject_line, consent_purpose,
+            consent_version_tag, idempotency_key, submitted_at, team_notice,
+            receipt_notice)
+         VALUES ('investor', 'new', $1, $2, $3, $4, $5, $6, $7, 'sent', 'failed')
+         RETURNING id`,
+        [
+          JSON.stringify({ task: INVESTOR.task }),
+          JSON.stringify({
+            organisation: INVESTOR.organisation,
+            fullName: INVESTOR.fullName,
+            role: INVESTOR.role,
+            email,
+            phone: INVESTOR.phone,
+          }),
+          INVESTOR.organisation,
+          INVESTOR_REQUEST_CONSENT_PURPOSE,
+          INVESTOR_REQUEST_CONSENT_VERSION_TAG,
+          randomUUID(),
+          submittedAt,
+        ],
+      );
+      createdApplications.push(rows[0]!.id);
+      return { id: rows[0]!.id, email, submittedAt };
+    }
+
     const admin = (extra: Record<string, string> = {}) => ({
       ...device,
       ...adminHeaders(adminSid),
@@ -213,6 +262,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: number;
         pd_erased_at: Date | null;
         payload: unknown;
+        contact: unknown;
+        subject_line: string | null;
         applicant_user_id: string | null;
       }>("SELECT * FROM applications WHERE id = $1", [id]);
       return rows[0]!;
@@ -288,9 +339,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The «Вид» filter reads its options and labels from the same kinds
       // table the rows' labels come from (033-design «Request kinds»).
       expect(page.kinds).toEqual([
-        { kind: "author", label: "Автор" },
-        { kind: "partnership", label: "Партнёрство" },
-        { kind: "investor", label: "Инвестор" },
+        { kind: "author", label: "Автор", filterLabel: "Автор" },
+        {
+          kind: "partnership",
+          label: "Партнёрство",
+          filterLabel: "Партнёрство",
+        },
+        { kind: "investor", label: "Инвестор", filterLabel: "Инвесторы" },
       ]);
       const ids = page.items.map((i) => i.id);
       expect(ids.indexOf(newer)).toBeLessThan(ids.indexOf(older));
@@ -785,6 +840,119 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(lateNote.statusCode).toBe(409);
       expect(errorCode(lateNote)).toBe("ALREADY_ERASED");
       expect((await erase(randomUUID())).statusCode).toBe(404);
+    });
+
+    // ------------------------------------------------------ 034 EARS-10
+
+    it("034 EARS-10: when an administrator filters «Инвесторы», system shall list the investor requests with the kind «Инвестор», the full name as applicant and the organisation as the subject line", async () => {
+      const inv = await investorRequest();
+      const author = await stored((await applicant()).id);
+
+      const res = await list("?kind=investor");
+      expect(res.statusCode, res.payload).toBe(200);
+      const page = AdminApplicationListPageSchema.parse(res.json());
+      // The «Вид» option reads «Инвесторы»; the rows keep the kind «Инвестор».
+      expect(page.kinds.find((k) => k.kind === "investor")).toEqual({
+        kind: "investor",
+        label: "Инвестор",
+        filterLabel: "Инвесторы",
+      });
+      expect(page.items.length).toBeGreaterThan(0);
+      expect(page.items.every((i) => i.kind === "investor")).toBe(true);
+      expect(page.items.map((i) => i.id)).not.toContain(author);
+      const listed = page.items.find((i) => i.id === inv.id);
+      expect(listed).toMatchObject({
+        kind: "investor",
+        kindLabel: "Инвестор",
+        submittedAt: inv.submittedAt.toISOString(),
+        applicant: INVESTOR.fullName,
+        subjectLine: INVESTOR.organisation,
+        status: "new",
+        outcome: null,
+        teamNotified: true,
+        erased: false,
+      });
+    });
+
+    it("034 EARS-10: when an administrator opens an investor request, system shall show the labelled contact and task, the consent purpose, version and time and the notification outcomes", async () => {
+      const inv = await investorRequest();
+
+      const res = await detail(inv.id);
+      expect(res.statusCode, res.payload).toBe(200);
+      const d = AdminApplicationDetailSchema.parse(res.json());
+      expect(d).toMatchObject({
+        kind: "investor",
+        kindLabel: "Инвестор",
+        subjectLine: INVESTOR.organisation,
+      });
+      expect(d.fields).toEqual([
+        { key: "task", label: "Задача", value: INVESTOR.task },
+      ]);
+      expect(d.applicant).toEqual({
+        type: "contact",
+        fields: [
+          {
+            key: "organisation",
+            label: "Организация",
+            value: INVESTOR.organisation,
+          },
+          { key: "fullName", label: "ФИО", value: INVESTOR.fullName },
+          { key: "role", label: "Роль в организации", value: INVESTOR.role },
+          { key: "email", label: "Рабочая почта", value: inv.email },
+          { key: "phone", label: "Телефон", value: INVESTOR.phone },
+        ],
+      });
+      // The consent tick is part of the single public submission, so the
+      // request's submission time is its consent time (as for partnership).
+      expect(d.consent).toEqual({
+        purpose: INVESTOR_REQUEST_CONSENT_PURPOSE,
+        versionTag: INVESTOR_REQUEST_CONSENT_VERSION_TAG,
+        capturedAt: inv.submittedAt.toISOString(),
+      });
+      expect(d.teamNotice).toBe("sent");
+      expect(d.receiptNotice).toBe("failed");
+    });
+
+    it("034 EARS-10: an administrator moves an investor request's status, adds a note and erases its personal data exactly as for every queue kind", async () => {
+      const inv = await investorRequest();
+
+      const toReview = await move(
+        inv.id,
+        { status: "in_review" },
+        await etagOf(inv.id),
+      );
+      expect(toReview.statusCode, toReview.payload).toBe(200);
+      expect(AdminApplicationDetailSchema.parse(toReview.json()).status).toBe(
+        "in_review",
+      );
+      let r = await row(inv.id);
+      expect(r.status).toBe("in_review");
+      expect(r.status_changed_by).toBe(adminUserId);
+
+      const noted = await addNote(inv.id, "  Созвониться в пятницу  ");
+      expect(noted.statusCode, noted.payload).toBe(201);
+      const note = AdminApplicationNoteSchema.parse(noted.json());
+      expect(note.body).toBe("Созвониться в пятницу");
+      expect(note.authorAdminId).toBe(adminUserId);
+
+      const erased = await erase(inv.id);
+      expect(erased.statusCode, erased.payload).toBe(200);
+      const d = AdminApplicationDetailSchema.parse(erased.json());
+      expect(d).toMatchObject({
+        erased: true,
+        fields: [],
+        applicant: null,
+        subjectLine: null,
+        status: "in_review",
+      });
+      expect(d.notes.map((n) => n.body)).toEqual([
+        APPLICATION_NOTE_ERASED_SENTINEL,
+      ]);
+      r = await row(inv.id);
+      expect(r.payload).toEqual({ erased: true });
+      expect(r.contact).toBeNull();
+      expect(r.subject_line).toBeNull();
+      expect(r.pd_erased_at).toBeInstanceOf(Date);
     });
   },
 );

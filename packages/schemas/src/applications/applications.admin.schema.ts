@@ -71,12 +71,15 @@ export type AdminApplicationListItem = z.infer<
 >;
 
 /**
- * EARS-13 — one kind the «Вид» filter offers, with the label the rows carry:
- * both come from the api's kinds table (033-design «Request kinds»).
+ * EARS-13 — one kind the «Вид» filter offers, with the label the rows carry
+ * and the text the filter shows it by (034 EARS-10: «Инвесторы» for the
+ * «Инвестор» kind; the label itself for a kind with no other filter text):
+ * all three come from the api's kinds table (033-design «Request kinds»).
  */
 export const AdminApplicationKindOptionSchema = z.strictObject({
   kind: ApplicationKindSchema,
   label: z.string(),
+  filterLabel: z.string(),
 });
 export type AdminApplicationKindOption = z.infer<
   typeof AdminApplicationKindOptionSchema

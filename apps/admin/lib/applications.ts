@@ -49,15 +49,27 @@ export const applicationsUrl = {
 };
 
 /**
- * «Вид» — the label of a kind as the api serves it with every page
- * (`kinds`), the same kinds-table label the rows carry (033-design «Request
- * kinds»); the bare kind until a page has come.
+ * 034 EARS-10 — the «Вид» filter's options: every kind the api serves, offered
+ * by its filter text (`filterLabel`, «Инвесторы»), while the rows keep the
+ * kind label (`kindLabel`, «Инвестор»).
+ */
+export function kindFilterOptions(
+  kinds: readonly AdminApplicationKindOption[],
+): { value: ApplicationKind; text: string }[] {
+  return kinds.map((k) => ({ value: k.kind, text: k.filterLabel }));
+}
+
+/**
+ * «Вид» — the applied filter's chip: the kind's filter text as the api serves
+ * it with every page (`kinds`, 033-design «Request kinds»), the same text the
+ * select shows (034 EARS-10: «Инвесторы»); the bare kind until a page has
+ * come. The rows carry the kind label (`kindLabel`, «Инвестор») themselves.
  */
 export function kindOptionLabel(
   kinds: readonly AdminApplicationKindOption[],
   kind: ApplicationKind,
 ): string {
-  return kinds.find((k) => k.kind === kind)?.label ?? kind;
+  return kinds.find((k) => k.kind === kind)?.filterLabel ?? kind;
 }
 
 /** «Статус» — «Новые» / «На рассмотрении» / «Закрытые». */

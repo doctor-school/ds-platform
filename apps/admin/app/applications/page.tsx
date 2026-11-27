@@ -25,6 +25,7 @@ import {
   applicationStatusLabelKey,
   applicationsCursorPager,
   applicationsUrl,
+  kindFilterOptions,
   kindOptionLabel,
   rememberNextCursor,
 } from "@/lib/applications";
@@ -100,7 +101,7 @@ export default function ApplicationsListPage() {
   useEffect(() => {
     if (servedKinds) setKinds(servedKinds);
   }, [servedKinds]);
-  const kindLabel = (kind: ApplicationKind) => kindOptionLabel(kinds, kind);
+  const kindChipText = (kind: ApplicationKind) => kindOptionLabel(kinds, kind);
   const statusFilterLabel = (status: ApplicationStatus) =>
     t(`applications.statusFilter.${status}`);
 
@@ -120,9 +121,9 @@ export default function ApplicationsListPage() {
           }
         >
           <option value="">{t("applications.filters.kindAny")}</option>
-          {kinds.map((option) => (
-            <option key={option.kind} value={option.kind}>
-              {option.label}
+          {kindFilterOptions(kinds).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.text}
             </option>
           ))}
         </NativeSelect>
@@ -157,7 +158,7 @@ export default function ApplicationsListPage() {
       ? [
           {
             id: "kind",
-            label: `${t("applications.filters.kind")}: ${kindLabel(filter.kind)}`,
+            label: `${t("applications.filters.kind")}: ${kindChipText(filter.kind)}`,
             onRemove: () => changeFilter({ kind: "" }),
           },
         ]

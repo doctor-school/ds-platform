@@ -94,7 +94,7 @@ export async function AcademyHero({
         <div className="grid gap-4 sm:grid-cols-2 layout:gap-7">
           <div
             data-hero-card="experts"
-            className="shadow-lg shadow-header-topbar dark:shadow-background"
+            className="shadow-lg"
           >
             <div className="light h-full border-2 border-card bg-card p-6 text-foreground layout:p-10">
               <p className={`mb-3 ${KICKER}`}>Экспертам</p>
@@ -269,7 +269,7 @@ function PersonaSection() {
           <div
             id="investors"
             data-persona="investors"
-            className="-mx-4 flex scroll-mt-24 flex-col bg-primary-surface px-4 py-6 layout:mx-0 layout:border-2 layout:border-border layout:p-8 layout:shadow-lg layout:shadow-border"
+            className="-mx-4 flex scroll-mt-24 flex-col bg-primary-surface px-4 py-6 layout:mx-0 layout:border-2 layout:border-border layout:p-8 layout:shadow-lg"
           >
             <p className="mb-3 text-pill font-extrabold uppercase tracking-eyebrow text-primary-surface-soft">
               Инвесторам

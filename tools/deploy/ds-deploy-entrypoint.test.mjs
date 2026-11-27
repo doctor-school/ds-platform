@@ -1509,6 +1509,28 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(r.stderr, /is served by the data box only/);
   });
 
+  it("4287: repo2-tunnel-key rebuilds a missing or empty public key from the private key the relay trusts — never a new pair", () => {
+    setRole("data");
+    const first = run("repo2-tunnel-key");
+    assert.equal(first.status, 0, first.stderr);
+    const key = join(root, "etc/ds-platform/repo2-tunnel/id_ed25519");
+    const private_ = readFileSync(key);
+    for (const lose of [() => rmSync(`${key}.pub`), () => writeFileSync(`${key}.pub`, "")]) {
+      lose();
+      chmodSync(key, 0o640);
+      const again = run("repo2-tunnel-key");
+      assert.equal(again.status, 0, again.stderr);
+      assert.equal(again.stdout, first.stdout, "the same public key and fingerprint");
+      assert.doesNotMatch(again.stderr, /generated/);
+      assert.match(again.stderr, /repo2 tunnel public key rebuilt from the private key/);
+      assert.deepEqual(readFileSync(key), private_, "the private key is byte-identical");
+      assert.equal(readFileSync(`${key}.pub`, "utf8"), first.stdout.split("\n")[0] + "\n");
+      assert.equal(statSync(key).mode & 0o777, 0o600);
+      assert.equal(statSync(`${key}.pub`).mode & 0o777, 0o644);
+      assert.equal(statSync(dirname(key)).mode & 0o777, 0o700);
+    }
+  });
+
   it("4068: secret-apply decrypts, stages only the allowlisted lines and starts the data-secret unit — no value printed", async () => {
     secretBox();
     const r = run(`secret-apply ${SHA}`, { input: await cipher(NEW) });

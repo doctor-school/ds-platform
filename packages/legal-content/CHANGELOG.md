@@ -1,5 +1,13 @@
 # @ds/legal-content
 
+## 0.2.0
+
+### Minor Changes
+
+- [#4235](https://github.com/doctor-school/ds-platform/pull/4235) [`2afbe91`](https://github.com/doctor-school/ds-platform/commit/2afbe9163a349ed897b2ff7071de6801f8528ad3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 033 queue core: the shared application queue — `POST /v1/me/applications/author` with consent, idempotency and bot protection; the daily expiry and erasure purge; the account-erasure step; the queue's PD columns masked in the audit ledger.
+
+- [#4261](https://github.com/doctor-school/ds-platform/pull/4261) [`4cbb0a6`](https://github.com/doctor-school/ds-platform/commit/4cbb0a6fe354186f588a3a24830fa1da41e592b1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 033 EARS-1…5, 8, 9, 10: the Academy page «Заявка автора» at `/apply` — a guest gets the account gate «Войти / Регистрация» that returns to the open form after sign-in or registration; a signed-in expert sends topic, specialty, format, about and consent once per tap (a server failure keeps the input and retries with the same key), sees «Заявка отправлена», and on a later visit «Ваша предыдущая заявка в работе» from `GET /v1/me/applications?kind=author`.
+
 ## 0.1.0
 
 ### Minor Changes

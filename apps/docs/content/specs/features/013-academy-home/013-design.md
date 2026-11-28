@@ -2,7 +2,7 @@
 title: "013 — Academy home page and partner lead capture (design)"
 description: "Design of the full public Academy home: the canvas-driven composition of the split-hero landing, the server-rendered эфиры feed over feature 004's public listing through feature 014's shared list unit, the 012-fed experts block, the leads write path with consent evidence and the dedicated «DS Лиды» notifier, and the post-login return-to-origin default change that amends feature 008."
 slug: 013-academy-home-design
-status: Draft
+status: Superseded
 lang: en
 ---
 
@@ -11,6 +11,8 @@ lang: en
 > Engineer-facing artifact, EN only (ADR-0006 §4).
 
 # 013 — Academy home page and partner lead capture (Design)
+
+> **Superseded at `/` by [029 — Academy home relaunch](../029-academy-home-relaunch/029-requirements-en.md) ([#4243](https://github.com/doctor-school/ds-platform/issues/4243)).** The 029 home replaces every section of this landing — the split hero, «Что такое Doctor.School», «Зачем», the ecosystem, people and podcast screens over fixtures, the partner value band, the participation formats and the closing partnership form (EARS-1…EARS-14, EARS-16…EARS-20; 029 EARS-1, design §4). The interim partnership form, its browser intake client and its schema leave the home with no replacement form: the partner entries lead to `/investors` (034), the expert entries to `/apply` (033), and the form's stored records are already in the 033 application queue (033 EARS-18 / EARS-19). **EARS-15 — the post-login landing on `/webinars` (the 008 EARS-7 amendment) — stays in force.**
 
 ## 1. Shape of the feature
 

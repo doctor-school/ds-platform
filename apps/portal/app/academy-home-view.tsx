@@ -1,491 +1,293 @@
 import Image from "next/image";
+import NextLink from "next/link";
 import { Button } from "@ds/design-system/button";
-import { Card } from "@ds/design-system/card";
 import { Container } from "@ds/design-system/container";
 import { Link } from "@ds/design-system/link";
-import { WebinarCard } from "@ds/design-system/webinar-card";
+import { EventsFeed } from "@ds/events-storefront/feed";
+import type { PublicProjectCatalog } from "@ds/schemas";
 
+import { ACADEMY_EVENTS_STOREFRONT } from "../lib/events-storefront.host-config";
 import {
-  CREATED_VALUES,
-  CURRENT_PROBLEMS,
-  EXPERTS,
-  FEATURED_PROJECTS,
-  PARTICIPATION_FORMATS,
-  PARTNER_VALUES,
-  PROJECTS,
-  WHAT_CARDS,
-} from "./fixtures";
-import { LeadDemoFields } from "./lead-demo-fields";
+  expertCountLine,
+  partnerCountLine,
+  readPublicExpertCount,
+  readPublicOrganisationCount,
+  readPublicProjects,
+  runningProjectCount,
+} from "./academy-home-counts";
 import { MaterialsFeedSection } from "./materials-feed-section";
+import { retryAcademyEventsBlock } from "./webinars/retry-block-action";
 import styles from "./academy-home.module.css";
 
-function SectionIntro({
-  eyebrow,
-  title,
-  linkLabel,
-  href,
-}: {
-  eyebrow: string;
-  title: string;
-  linkLabel?: string;
-  href?: string;
-}) {
-  return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-controls">
-      <div>
-        <p className="mb-2 text-eyebrow font-extrabold uppercase tracking-micro text-primary-action">
-          {eyebrow}
-        </p>
-        <h2 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-          {title}
-        </h2>
-      </div>
-      {linkLabel && href ? (
-        <Link href={href} variant="inline" className="whitespace-nowrap">
-          {linkLabel} →
-        </Link>
-      ) : null}
-    </div>
-  );
-}
+/**
+ * Feature 029 — the Academy home (`academy.doctor.school/`), built from the
+ * owner-approved canvas `design-source/academy-home.dc.html` at its switch
+ * defaults (goal «А»). A server composition of the host-only hero, «Кто мы»
+ * and persona entries plus the mounted owner blocks (029 design §1, §5).
+ */
 
-function AcademyHero() {
+/** 029 EARS-7 — the home's nearest-events cap. */
+export const ACADEMY_HOME_EVENTS_LIMIT = 3;
+
+/** The 033 «Подать заявку» page (033 EARS-2). */
+const APPLY_HREF = "/apply";
+/** The 034 «Как это работает» page (034 slice 1). */
+const INVESTORS_HREF = "/investors";
+
+const KICKER =
+  "text-pill font-extrabold uppercase tracking-eyebrow text-primary-action";
+
+/**
+ * The canvas plaque: full-bleed tinted on a phone; from `layout` up the
+ * bordered card with the 6px elevation cast (`solidPanel` + `plaque`).
+ */
+const SOLID_PANEL =
+  "-mx-4 bg-tint px-4 py-6 layout:mx-0 layout:border-2 layout:border-border layout:bg-card layout:p-8 layout:shadow-lg";
+/** The canvas tinted plaque (`tintPanel` + `plaque`). */
+const TINT_PANEL = "-mx-4 bg-tint px-4 py-6 layout:mx-0 layout:p-8";
+
+/** The hero card heading (canvas `h1` style, both cards). */
+const HERO_HEADING =
+  "text-title-xl font-extrabold leading-display tracking-display layout:text-3xl";
+/** The persona block heading. */
+const PERSONA_HEADING =
+  "text-xl font-extrabold leading-title tracking-display layout:text-2xl";
+/** The count line under a hero action. */
+const COUNT_LINE =
+  "mt-4 text-pill font-extrabold uppercase tracking-micro";
+
+/**
+ * 029 EARS-2 / EARS-3 / EARS-5 / EARS-8 — the split hero: «Экспертам» on the
+ * white card (light tokens in both themes) and «Партнёрам» on the hero band,
+ * each with its action and its count line computed from the platform.
+ */
+export async function AcademyHero({
+  projects,
+  experts,
+  partners,
+}: {
+  projects: Promise<PublicProjectCatalog | null>;
+  experts: Promise<number | null>;
+  partners: Promise<number | null>;
+}) {
+  // Each read is settled on its own (resolves to `null` on failure, never rejects).
+  const [catalog, expertCount, partnerCount] = await Promise.all([
+    projects,
+    experts,
+    partners,
+  ]);
+  const expertLine = expertCountLine({
+    running: runningProjectCount(catalog),
+    experts: expertCount,
+  });
+
   return (
-    <section className="bg-hero py-12 text-hero-foreground layout:py-20">
+    <section
+      data-academy-section="hero"
+      aria-label="Экспертам и партнёрам"
+      className="bg-hero pt-10 pb-12 layout:pt-16 layout:pb-16"
+    >
       <Container>
-        <p className="mb-7 text-xs font-extrabold uppercase tracking-micro text-hero-muted">
-          Doctor.School · Врачи учат врачей
+        <p className="mb-7 text-xs font-extrabold uppercase tracking-eyebrow text-hero-muted">
+          Академия Doctor.School · закулисье платформы
         </p>
-        <div className="flex flex-col border-2 border-header-hairline p-6 layout:p-10">
-          <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
-            Партнёрам
-          </p>
-          <h1 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-            Создаем будущее медицинского образования вместе
-          </h1>
-          <p className="mt-4 max-w-3xl text-body-compact leading-relaxed text-hero-muted">
-            Академия Doctor School объединяет экспертов, индустрию и
-            образовательные инициативы для совместного создания новых
-            специальностей, школ и стандартов медицины.
-          </p>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="mt-6 self-start"
+        <div className="grid gap-4 sm:grid-cols-2 layout:gap-7">
+          <div data-hero-card="experts" className="shadow-hero-card">
+            <div className="light h-full border-2 border-card bg-card p-6 text-foreground layout:p-10">
+              <p className={`mb-3 ${KICKER}`}>Экспертам</p>
+              <h1 className={`${HERO_HEADING} text-foreground`}>
+                Создавайте образование вместе с нами
+              </h1>
+              <p className="mt-4 text-body-compact leading-relaxed text-muted-foreground">
+                Участвуйте в подкасте, создайте курс или школу, выступите на
+                конгрессе — с командой производства, как автор или соавтор
+                проекта.
+              </p>
+              <Button asChild size="lg" className="mt-6">
+                <NextLink href={APPLY_HREF}>Подать заявку</NextLink>
+              </Button>
+              {expertLine === null ? null : (
+                <p
+                  data-testid="academy-expert-count-line"
+                  className={`${COUNT_LINE} text-faint`}
+                >
+                  {expertLine}
+                </p>
+              )}
+            </div>
+          </div>
+          <div
+            data-hero-card="partners"
+            className="flex flex-col border-2 border-header-hairline p-6 layout:p-10"
           >
-            <a href="#partner-form">Стать партнёром</a>
-          </Button>
-          <p className="mt-5 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
-            14 партнёров · прозрачная модель
-          </p>
+            <p className="mb-3 text-pill font-extrabold uppercase tracking-eyebrow text-hero-muted">
+              Партнёрам
+            </p>
+            <h2 className={`${HERO_HEADING} text-hero-foreground`}>
+              Постройте репутацию в экспертной среде
+            </h2>
+            <p className="mt-4 text-body-compact leading-relaxed text-hero-muted">
+              Участвуйте в проектах вместе с экспертами: соавторство
+              направлений, события и прямой доступ к профессиональной среде.
+            </p>
+            <Button
+              asChild
+              size="lg"
+              variant="on-primary"
+              className="mt-6 self-start"
+            >
+              <NextLink href={INVESTORS_HREF}>Как это работает</NextLink>
+            </Button>
+            <p
+              data-testid="academy-partner-count-line"
+              className={`${COUNT_LINE} text-hero-muted`}
+            >
+              {partnerCountLine(partnerCount)}
+            </p>
+          </div>
         </div>
       </Container>
     </section>
   );
 }
 
+/** 029 EARS-6 — «Кто мы» with the «Миссия | Эволюционная цель» row (goal «А»). */
+function WhoSection() {
+  return (
+    <section
+      data-academy-section="who"
+      aria-labelledby="academy-who-heading"
+      className="mt-section-sm layout:mt-section"
+    >
+      <Container>
+        <p className={`mb-2.5 ${KICKER}`}>Академия</p>
+        <h2
+          id="academy-who-heading"
+          className="mb-4 text-title-xl font-extrabold leading-display tracking-display text-foreground layout:text-3xl"
+        >
+          Кто мы
+        </h2>
+        <p className="max-w-3xl text-pretty text-body-compact leading-reading-list text-muted-foreground layout:text-lead">
+          Doctor.School создаёт децентрализованное образование для врачей —
+          образование, в развитии которого может участвовать каждый: и эксперт,
+          и компания.
+        </p>
+        <div className="mt-6 flex flex-col gap-4 layout:mt-10 layout:grid layout:grid-cols-2 layout:items-stretch layout:gap-7">
+          <div data-who-panel="mission" className={SOLID_PANEL}>
+            <p className={`mb-3 ${KICKER}`}>Миссия</p>
+            <p className="text-pretty text-base font-semibold leading-prose text-foreground layout:text-lg">
+              Создать равную свободную среду для самореализации врачей, где
+              талант важнее связей, а качественное образование доступно
+              каждому. Сделать медобразование децентрализованным и открытым и
+              минимизировать врачебные ошибки.
+            </p>
+          </div>
+          <div
+            data-who-panel="goal"
+            className={`flex flex-col justify-center ${TINT_PANEL}`}
+          >
+            <p className={`mb-3 ${KICKER}`}>Эволюционная цель</p>
+            <p className="text-balance text-xl font-extrabold leading-title tracking-display text-primary-action layout:text-2xl">
+              Создаём децентрализованное медицинское образование
+            </p>
+          </div>
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+/**
+ * 029 EARS-7 — «Ближайшие эфиры»: the shared 019 `EventsFeed` block with the
+ * Academy host config, the cap and the Academy events page's block retry; its
+ * cards, marks, empty/error/skeleton states and «Все события» are the block's.
+ */
 function EventsSection() {
   return (
     <section
       id="events"
       data-academy-section="events"
-      className="scroll-mt-24 pt-16 layout:pt-24"
+      aria-labelledby="academy-events-heading"
+      className="mt-section-sm scroll-mt-24 layout:mt-section"
     >
       <Container>
-        <SectionIntro
-          eyebrow="Эфиры"
-          title="Ближайшие и последние эфиры"
-          linkLabel="Все эфиры"
-          href="#events"
-        />
-        <div className="-mx-4 space-y-stack-sm border-t-2 border-border layout:mx-0 layout:space-y-stack layout:border-0">
-          {FEATURED_PROJECTS.map((project) => (
-            <div
-              key={project.href}
-              data-webinar-state={project.state}
-              className={project.state === "past" ? "opacity-95" : undefined}
-            >
-              <WebinarCard
-                href={project.href}
-                time={project.time}
-                tzLabel="МСК"
-                dateLabel={project.dateLabel}
-                school={project.school}
-                title={project.title}
-                speakers={project.speakers}
-              />
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function WhatSection() {
-  return (
-    <section data-academy-section="what" className="pt-16 layout:pt-24">
-      <Container>
-        <SectionIntro eyebrow="Платформа" title="Что такое Doctor.School" />
-        <div
-          data-testid="academy-platform-intro"
-          className="mb-8 max-w-3xl space-y-4 text-body-compact leading-relaxed text-muted-foreground"
-        >
-          <p>
-            Академия представляет собой масштабную идеологию, в центре которой
-            — врач и пациент. Участие в проектах Академии — это возможность для
-            корпораций реализовать важнейшую социальную миссию.
-          </p>
-          <p>
-            Инвестируя во врачей и открытую базу знаний, партнеры напрямую
-            повышают свой корпоративный ESG-рейтинг и укрепляют безупречную
-            репутацию среди медицинского сообщества.
-          </p>
-        </div>
-        <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-4">
-          {WHAT_CARDS.map(([number, title, copy]) => (
-            <Card key={number} className="p-6">
-              <p className="mb-3 text-eyebrow font-extrabold tracking-micro text-primary-action">
-                {number}
-              </p>
-              <h3 className="mb-2 text-lg font-extrabold tracking-heading">
-                {title}
-              </h3>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {copy}
-              </p>
-            </Card>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function WhySection() {
-  return (
-    <section data-academy-section="why" className="pt-16 layout:pt-24">
-      <Container>
-        <SectionIntro
-          eyebrow="Зачем"
-          title="Медицинскому образованию нужна другая среда"
-        />
-        <div className="grid gap-6 layout:grid-cols-2">
-          <div className="border-2 border-dashed border-muted-2 p-6 layout:p-8">
-            <h3 className="mb-5 text-eyebrow font-extrabold uppercase tracking-micro text-faint">
-              Сейчас
-            </h3>
-            <ul className="space-y-3.5 text-body-compact leading-relaxed text-muted-foreground">
-              {CURRENT_PROBLEMS.map((item) => (
-                <li key={item} className="flex gap-controls">
-                  <span
-                    aria-hidden="true"
-                    className="font-extrabold text-faint"
-                  >
-                    ✕
-                  </span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <Card className="p-6 layout:p-8">
-            <h3 className="mb-5 text-eyebrow font-extrabold uppercase tracking-micro text-primary-action">
-              Мы создаём
-            </h3>
-            <ul className="space-y-3.5 text-body-compact font-semibold leading-relaxed">
-              {CREATED_VALUES.map((item) => (
-                <li key={item} className="flex gap-controls">
-                  <span
-                    aria-hidden="true"
-                    className="font-extrabold text-success-text"
-                  >
-                    ✓
-                  </span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function ProjectsSection() {
-  return (
-    <section
-      id="projects"
-      data-academy-section="projects"
-      className="scroll-mt-24 pt-16 layout:pt-24"
-    >
-      <Container>
-        <SectionIntro
-          eyebrow="Проекты"
-          title="Что мы создаём"
-          linkLabel="Все проекты"
-          href="#projects"
-        />
-        <p className="mb-8 max-w-2xl text-body-compact leading-relaxed text-muted-foreground">
-          Не один продукт, а среда: школы по специальностям, сообщества,
-          дискуссии, длинные программы и стандарты качества контента.
-        </p>
-        <div className="grid gap-3.5 sm:grid-cols-2 layout:grid-cols-5">
-          {PROJECTS.map(([title, metric, copy]) => (
-            <div key={title} className="bg-tint p-5 text-tint-foreground">
-              <h3 className="text-lg font-extrabold tracking-heading">
-                {title}
-              </h3>
-              {metric ? (
-                <p className="my-2 text-xs font-extrabold uppercase tracking-wide text-primary-action">
-                  {metric}
-                </p>
-              ) : null}
-              <p className="text-caption leading-relaxed text-foreground">
-                {copy}
-              </p>
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
-  return (
-    <Card
-      data-testid="academy-expert-card"
-      className="flex h-full flex-col overflow-hidden"
-    >
-      <div className="relative flex aspect-3/4 items-center justify-center overflow-hidden border-b-2 border-border bg-tint">
-        <Image
-          src={expert.photo}
-          alt={expert.fullName}
-          fill
-          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover"
-        />
-      </div>
-      <div
-        data-testid="academy-expert-copy"
-        className="flex flex-1 flex-col gap-2 p-5 text-card-foreground"
-      >
-        <h3
-          lang="ru"
-          className="text-lg font-extrabold leading-tight tracking-heading"
-        >
-          {expert.fullName}
-        </h3>
-        {expert.signature.map((paragraph) => (
-          <p
-            key={paragraph}
-            className="text-caption font-normal leading-relaxed text-muted-foreground"
+        <div className="mb-4 border-t-2 border-border pt-4">
+          <p className={`mb-2 ${KICKER}`}>Эфиры</p>
+          <h3
+            id="academy-events-heading"
+            className="text-lg font-extrabold tracking-tight text-foreground layout:text-title-xl"
           >
-            {paragraph}
-          </p>
-        ))}
-      </div>
-    </Card>
+            Ближайшие эфиры
+          </h3>
+        </div>
+        <EventsFeed
+          config={ACADEMY_EVENTS_STOREFRONT}
+          limit={ACADEMY_HOME_EVENTS_LIMIT}
+          retry={retryAcademyEventsBlock}
+        />
+      </Container>
+    </section>
   );
 }
 
-function ExpertsSection() {
+/**
+ * 029 EARS-8 / EARS-9 — the persona entries: «Экспертам» → `/apply` and
+ * «Инвесторам» → `/investors`, side by side on a desktop, stacked on a phone.
+ */
+function PersonaSection() {
   return (
     <section
-      id="experts"
-      data-academy-section="experts"
-      className="scroll-mt-24 pt-16 layout:pt-24"
+      data-academy-section="personas"
+      aria-label="Экспертам и инвесторам"
+      className="mt-section-sm layout:mt-section"
     >
       <Container>
-        <SectionIntro
-          eyebrow="Люди"
-          title="Объединение лидеров и экспертов"
-        />
-        <p className="mb-8 max-w-2xl text-body-compact leading-relaxed text-muted-foreground">
-          Площадка объединяет фаундеров, приглашенных экспертов и лидеров
-          мнений.
-        </p>
-        <Card
-          data-testid="academy-expert-project"
-          className="grid overflow-hidden layout:grid-cols-2"
-        >
-          <div className="border-b-2 border-hairline p-6 layout:border-r-2 layout:border-b-0 layout:p-8">
-            <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-primary-action">
-              Проект
-            </p>
-            <h3 className="text-xl font-extrabold tracking-heading">
-              Кто стоит за брендом
+        <div className="flex flex-col gap-4 layout:grid layout:grid-cols-2 layout:items-stretch layout:gap-7">
+          <div
+            id="experts"
+            data-persona="experts"
+            className={`flex scroll-mt-24 flex-col ${SOLID_PANEL}`}
+          >
+            <p className={`mb-3 ${KICKER}`}>Экспертам</p>
+            <h3 className={`${PERSONA_HEADING} text-foreground`}>
+              Ваше имя — в проектах Академии
             </h3>
-            <p className="my-4 text-sm leading-relaxed text-muted-foreground">
-              Серия откровенных разговоров с лидерами рынка о будущем
-              медицинского образования. Участие в проекте дает экспертам
-              возможность публично транслировать свои ценности, давать живую
-              обратную связь и выстраивать прочную нейронную связь с брендом и
-              аудиторией.
+            <p className="mt-3 flex-1 text-body-compact leading-relaxed text-muted-foreground">
+              Участвуйте в подкасте, создайте курс или школу, выступите на
+              конгрессе. К проекту эксперт присоединяется как автор или
+              соавтор — с командой производства.
             </p>
+            <Button asChild size="lg" className="mt-6 self-start">
+              <NextLink href={APPLY_HREF}>
+                Подать заявку на участие в проекте
+              </NextLink>
+            </Button>
           </div>
           <div
-            data-testid="academy-project-list"
-            className="flex flex-col justify-center"
+            id="investors"
+            data-persona="investors"
+            className="-mx-4 flex scroll-mt-24 flex-col bg-primary-surface px-4 py-6 layout:mx-0 layout:border-2 layout:border-border layout:p-8 layout:shadow-panel"
           >
-            {FEATURED_PROJECTS.map((project) => (
-              <div
-                key={project.href}
-                className="border-b border-hairline last:border-b-0"
-              >
-                <Link
-                  href={project.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <span className="flex items-center gap-4 p-5">
-                    <span className="grid size-10 shrink-0 place-items-center bg-primary-action text-primary-foreground">
-                      <span aria-hidden="true">▶</span>
-                    </span>
-                    <span className="min-w-0 text-card-foreground">
-                      <span className="block text-body-compact font-bold leading-snug">
-                        {project.title}
-                      </span>
-                      <span className="mt-1 block text-xs text-faint">
-                        {project.meta}
-                      </span>
-                    </span>
-                  </span>
-                </Link>
-              </div>
-            ))}
+            <p className="mb-3 text-pill font-extrabold uppercase tracking-eyebrow text-primary-surface-soft">
+              Инвесторам
+            </p>
+            <h3 className={`${PERSONA_HEADING} text-primary-surface-foreground`}>
+              Внимание врачей для вашего бренда — этично и прозрачно
+            </h3>
+            <p className="mt-3 flex-1 text-body-compact leading-relaxed text-primary-surface-soft">
+              Организация участвует в проектах рядом с экспертами: партнёрский
+              материал всегда помечен, модель открыта.
+            </p>
+            <Button
+              asChild
+              size="lg"
+              variant="on-primary"
+              className="mt-6 self-start"
+            >
+              <NextLink href={INVESTORS_HREF}>Как это работает</NextLink>
+            </Button>
           </div>
-        </Card>
-        <div
-          data-testid="academy-expert-grid"
-          className="mt-9 grid gap-5 sm:grid-cols-2 layout:grid-cols-3"
-        >
-          {EXPERTS.map((expert) => (
-            <ExpertCard key={expert.fullName} expert={expert} />
-          ))}
         </div>
-      </Container>
-    </section>
-  );
-}
-
-function PartnerValueSection() {
-  return (
-    <section
-      id="partners"
-      data-academy-section="partner-value"
-      className="mt-16 scroll-mt-24 bg-primary-surface py-12 text-primary-surface-foreground layout:mt-24 layout:py-20"
-    >
-      <Container>
-        <p className="mb-2 text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
-          Партнёрам
-        </p>
-        <h2 className="mb-8 text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-          Что получает партнёр
-        </h2>
-        <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-4">
-          {PARTNER_VALUES.map(([title, copy]) => (
-            <div
-              key={title}
-              className="bg-primary-surface-foreground p-6 text-header-chip-foreground shadow-lg"
-            >
-              <h3 className="mb-2 text-lg font-extrabold tracking-heading">
-                {title}
-              </h3>
-              <p className="text-sm leading-relaxed text-header-chip-foreground">
-                {copy}
-              </p>
-            </div>
-          ))}
-        </div>
-        <Button
-          asChild
-          size="lg"
-          variant="outline"
-          className="mt-8"
-        >
-          <a href="#partner-form">Обсудить партнёрство</a>
-        </Button>
-      </Container>
-    </section>
-  );
-}
-
-function FormatsSection() {
-  return (
-    <section data-academy-section="formats" className="pt-16 layout:pt-24">
-      <Container>
-        <SectionIntro eyebrow="Форматы" title="Как присоединиться" />
-        <div className="grid gap-3.5 sm:grid-cols-2 layout:grid-cols-5">
-          {PARTICIPATION_FORMATS.map(([title, copy]) => (
-            <Card key={title} className="flex flex-col gap-2.5 p-5 shadow-none">
-              <h3 className="text-base font-extrabold tracking-heading">
-                {title}
-              </h3>
-              <p className="flex-1 text-caption leading-relaxed text-muted-foreground">
-                {copy}
-              </p>
-              <span className="text-caption">
-                <Link href="#partner-form" variant="inline">
-                  Обсудить →
-                </Link>
-              </span>
-            </Card>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function LeadDemoSection({
-  botProtectionSiteKey,
-}: {
-  botProtectionSiteKey?: string | undefined;
-}) {
-  return (
-    <section
-      id="partner-form"
-      data-academy-section="lead-demo"
-      className="mt-16 scroll-mt-24 bg-primary-surface py-12 text-primary-surface-foreground layout:mt-24 layout:py-20"
-    >
-      <Container className="grid items-start gap-9 layout:grid-cols-2 layout:gap-14">
-        <div>
-          <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
-            Партнёрство
-          </p>
-          <h2 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-            Обсудим партнёрство?
-          </h2>
-          <p className="mt-5 max-w-lg text-body-compact leading-relaxed text-primary-surface-muted">
-            Расскажите о себе — вернёмся с ответом в течение двух рабочих дней.
-            Без рассылок и «прогревов»: один разговор по делу.
-          </p>
-          <p className="mt-5 text-sm text-primary-surface-muted">
-            Или напишите напрямую:{" "}
-            <Link
-              href="mailto:partner@doctor.school"
-              variant="inline"
-              className="text-primary-surface-foreground"
-            >
-              partner@doctor.school
-            </Link>{" "}
-            ·{" "}
-            <Link
-              href="https://t.me/doctorschool"
-              variant="inline"
-              className="text-primary-surface-foreground"
-            >
-              t.me/doctorschool
-            </Link>
-          </p>
-        </div>
-
-        <LeadDemoFields botProtectionSiteKey={botProtectionSiteKey} />
       </Container>
     </section>
   );
@@ -500,6 +302,9 @@ function LeadDemoSection({
  * is the page's top-level `contentinfo` landmark (inside `<main>` a `<footer>`
  * is no landmark). Every other route's slot renders nothing; the shared
  * storefront footer stands down on `/` (`academyShellConfig`).
+ *
+ * The index names only sections the 029 home mounts; «Проекты» → `#projects`
+ * returns with the 030 projects block, which carries that id (#3506).
  */
 export function AcademyHomeFooter() {
   return (
@@ -525,9 +330,8 @@ export function AcademyHomeFooter() {
           className="flex flex-wrap gap-5 text-caption"
         >
           <Link href="#events">Эфиры</Link>
-          <Link href="#projects">Проекты</Link>
           <Link href="#experts">Эксперты</Link>
-          <Link href="#partner-form">Партнёрство</Link>
+          <Link href="#investors">Партнёрство</Link>
         </nav>
         <p className="text-caption font-semibold text-faint">
           Врачи учат врачей · 2026
@@ -545,27 +349,31 @@ export function AcademyHomeFooter() {
   );
 }
 
-export interface AcademyHomeViewProps {
-  /** The public SmartCaptcha site key for the partnership form (033 EARS-18). */
-  botProtectionSiteKey?: string | undefined;
-}
-
-export function AcademyHomeView({
-  botProtectionSiteKey,
-}: AcademyHomeViewProps = {}) {
+/**
+ * 029 EARS-1 — the home in its order: hero, «Кто мы», «Что мы делаем» (030
+ * EARS-12), «Ближайшие эфиры», «Новости, блог и видео», persona entries.
+ *
+ * The 030 catalog read is started ONCE here and shared: the hero counts its
+ * `running` items, and the 030 EARS-12 «Что мы делаем» block (#3506) mounts
+ * between `WhoSection` and `EventsSection` over the same `projects` promise.
+ */
+export function AcademyHomeView() {
+  const projects = readPublicProjects();
   return (
     <div lang="ru" className="min-h-screen bg-background text-foreground">
-      <div data-testid="academy-home-sections">
-        <AcademyHero />
-        <WhatSection />
-        <ExpertsSection />
+      <div
+        data-testid="academy-home-sections"
+        className="pb-section-sm layout:pb-section"
+      >
+        <AcademyHero
+          projects={projects}
+          experts={readPublicExpertCount()}
+          partners={readPublicOrganisationCount()}
+        />
+        <WhoSection />
         <EventsSection />
         <MaterialsFeedSection />
-        <WhySection />
-        <ProjectsSection />
-        <PartnerValueSection />
-        <FormatsSection />
-        <LeadDemoSection botProtectionSiteKey={botProtectionSiteKey} />
+        <PersonaSection />
       </div>
     </div>
   );

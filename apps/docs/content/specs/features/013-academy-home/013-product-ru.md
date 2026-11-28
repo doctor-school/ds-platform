@@ -3,7 +3,7 @@ title: "Фича 013 — Главная страница Академии и з�
 description: "Продуктовые требования к главной странице Академии на /: восьмиэкранный лендинг на две аудитории, который ведёт врача к контенту, а партнёра — к форме заявки; живая лента последних эфиров на переиспользуемом юните списка мероприятий; захват лида с сохранением в таблицу leads и постингом в Mattermost-канал «DS Лиды». Фича 013 эпика «Публичная поверхность Академии»; источник EARS-триплета 013 (ADR-0014)."
 slug: academy-public-013-academy-home-product-ru
 epic: ../../product/academy-public/brief-ru.md
-status: Draft
+status: Superseded
 surface: user-facing
 storefronts: academy-only
 storefronts_reason: "The Academy home at / only; the doctor storefront home is specified by feature 017. The Academy home is being rebuilt whole under #1799, which mounts the shared nearest-events block of #1485."
@@ -11,6 +11,8 @@ lang: ru
 ---
 
 > **RU (это)** · **EN:** [`013-product.md`](./013-product.md)
+
+> **На `/` заменена фичей [029 — перезапуск главной Академии](../029-academy-home-relaunch/029-requirements-ru.md) ([#4243](https://github.com/doctor-school/ds-platform/issues/4243)).** Главная 029 заменяет все секции этого лендинга — сплит-герой, «Что такое Doctor.School», «Зачем», экраны экосистемы, людей и подкаста на фикстурах, полосу ценности для партнёров, форматы участия и завершающую партнёрскую форму (EARS-1…EARS-14, EARS-16…EARS-20; 029 EARS-1, дизайн §4). Временная партнёрская форма, её браузерный клиент приёма и её схема уходят с главной без формы-замены: входы партнёров ведут на `/investors` (034), входы экспертов — на `/apply` (033), а сохранённые формой записи уже в очереди заявок 033 (033 EARS-18 / EARS-19). **EARS-15 — посадка после входа на `/webinars` (поправка 008 EARS-7) — остаётся в силе.**
 
 > Эпик: [«Публичная поверхность Академии» — продуктовый бриф](../../product/academy-public/brief-ru.md) · Приоритет владельца №1 на критическом пути (после 012 content-taxonomy).
 

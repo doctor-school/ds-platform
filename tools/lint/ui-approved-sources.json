@@ -703,19 +703,6 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/4030#issuecomment-7155996396"
       ]
-    },
-    "academy-home-partnership-form-v1": {
-      "evidenceProfiles": ["responsive-web"],
-      "surfacePaths": [
-        "apps/portal/app/lead-demo-fields.tsx",
-        "apps/portal/app/academy-home-view.tsx",
-        "apps/portal/app/page.tsx",
-        "packages/auth-flow/src/bot-protection/disclosure.tsx"
-      ],
-      "states": ["partnership-form"],
-      "approvalProvenance": [
-        "https://github.com/doctor-school/ds-platform/issues/4032#issuecomment-7185366549"
-      ]
     }
   }
 }

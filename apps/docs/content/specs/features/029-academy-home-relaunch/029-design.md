@@ -69,7 +69,7 @@ sequenceDiagram
 | `MaterialsFeedSection`                                                       | kept (048 EARS-14)                                                                                                           |
 | `LeadDemoSection` + `lead-demo-fields.tsx` + `academy-partnership-action.ts` | removed; the partner entries lead to `/investors` (EARS-8), and the stored records are in the queue by 033 EARS-18 / EARS-19 |
 | `fixtures.ts`                                                                | deleted; its host-allowlist row removed in the same PR                                                                       |
-| `AcademyHomeFooter`                                                          | unchanged (shell)                                                                                                            |
+| `AcademyHomeFooter`                                                          | unchanged (shell), except that its index drops «Проекты» → `#projects` until the #3506 block carries `id="projects"`         |
 
 ## 5. Reuse (ADR-0013 §A1, capability-ownership registry)
 

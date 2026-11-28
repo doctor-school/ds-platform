@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
  * Actions run leaves out.
  *
  * These scenarios read the stage box itself (a mirror count, a consent row, the IdP
- * password policy, a partnership record): over the CI key's `observe` verb on the
+ * password policy): over the CI key's `observe` verb on the
  * `main` slot run, over the operator's own ssh otherwise (`packages/e2e/lib/
  * stage-observe.ts`). A PR-slot Actions run holds neither — no ssh key ever reaches
  * PR code, and the box's `observe` verb serves the `main` slot only — so the run
@@ -29,13 +29,6 @@ export const BOX_OBSERVING = [
   { consumer: "packages/e2e/steps/registration-consent-preservation.steps.ts" },
   { consumer: "packages/e2e/steps/signin-sms-hint.steps.ts" },
   { consumer: "packages/e2e/steps/wrong-verification-code.steps.ts" },
-  {
-    consumer: "apps/portal/e2e/academy-home.e2e.spec.ts",
-    titles: [
-      "033 EARS-18: an accepted retry after a lost response shall store one queue row and then show success (013 EARS-6/7)",
-      "033 EARS-18: an unavailable intake shall preserve browser values and store no row (013 EARS-7)",
-    ],
-  },
 ];
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -87,7 +80,10 @@ export function featureScenarios(text) {
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (line.startsWith("#") || line.startsWith("@")) continue;
-    const keyword = /^(Feature|Rule|Background|Scenario Outline|Scenario Template|Scenario|Example|Examples|Scenarios):\s*(.*)$/.exec(line);
+    const keyword =
+      /^(Feature|Rule|Background|Scenario Outline|Scenario Template|Scenario|Example|Examples|Scenarios):\s*(.*)$/.exec(
+        line,
+      );
     if (keyword) {
       const [, kind, title] = keyword;
       if (kind === "Rule") {
@@ -128,7 +124,10 @@ function featureFiles(root) {
  * The excluded tests: `{ consumer, title }` per scenario or spec test, in list
  * order, each title once.
  */
-export function boxObservingTests({ root = REPO_ROOT, list = BOX_OBSERVING } = {}) {
+export function boxObservingTests({
+  root = REPO_ROOT,
+  list = BOX_OBSERVING,
+} = {}) {
   const features = featureFiles(root).flatMap((file) =>
     featureScenarios(readFileSync(file, "utf8")),
   );
@@ -141,7 +140,9 @@ export function boxObservingTests({ root = REPO_ROOT, list = BOX_OBSERVING } = {
         readFileSync(path.join(root, consumer), "utf8"),
       ).map(stepMatcher);
       found = features
-        .filter((s) => s.steps.some((step) => matchers.some((m) => m.test(step))))
+        .filter((s) =>
+          s.steps.some((step) => matchers.some((m) => m.test(step))),
+        )
         .map((s) => s.title);
     }
     for (const title of found) {

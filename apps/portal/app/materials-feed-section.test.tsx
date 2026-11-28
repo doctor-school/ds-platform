@@ -10,6 +10,11 @@ afterEach(() => {
 });
 
 function homeSections(): React.ReactElement[] {
+  // The view starts the hero's count reads (029 EARS-3); answer them offline.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
   const view = AcademyHomeView() as React.ReactElement<{
     children: React.ReactElement<{ children: React.ReactElement[] }>;
   }>;

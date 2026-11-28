@@ -30,6 +30,7 @@
     "header-hairline": { "$value": "rgba(255, 255, 255, 0.5)" },
     "footer-wordmark": { "$value": "rgba(174, 212, 251, 0.09)" },
     "hero": { "$value": "{color.blue.700}" },
+    "hero-card-cast": { "$value": "{color.neutral.950}" },
     "success": { "$value": "{color.green.400}" },
     "success-foreground": { "$value": "{color.neutral.950}" },
     "success-text": { "$value": "{color.green.400}" },

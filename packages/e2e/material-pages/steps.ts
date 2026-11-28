@@ -621,6 +621,6 @@ Then("the events block of the home is shown", async ({ page }) => {
   const events = page.locator('[data-academy-section="events"]');
   await expect(events).toBeVisible();
   await expect(
-    events.getByRole("heading", { name: "Ближайшие и последние эфиры" }),
+    events.getByRole("heading", { name: "Ближайшие эфиры" }),
   ).toBeVisible();
 });
